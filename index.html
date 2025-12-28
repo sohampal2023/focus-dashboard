@@ -31,39 +31,50 @@ body{
   padding:20px;
   display:flex;
   flex-direction:column;
-  gap:20px;
+  gap:22px;
   border-right:1px solid #1e293b;
 }
 
 .sidebar h2{
   text-align:center;
   margin:0;
-  font-size:20px;
+  font-size:22px;
+  letter-spacing:1px;
   color:#38bdf8;
 }
 
+/* ================= STATUS (ENHANCED) ================= */
 .status{
-  background:#020617;
-  border:1px solid #1e293b;
-  padding:12px;
-  border-radius:10px;
+  background:linear-gradient(180deg,#020617,#020617);
+  border:1px solid #334155;
+  padding:20px 16px;
+  border-radius:14px;
   text-align:center;
-  font-weight:600;
+  font-weight:700;
+  font-size:16px;
+  line-height:1.5;
+  box-shadow:
+    0 0 0 1px rgba(56,189,248,.15),
+    0 10px 25px rgba(0,0,0,.5);
+  word-break:break-word;
 }
 
+/* ================= NAV ================= */
 .nav button{
   width:100%;
-  margin-bottom:10px;
-  padding:12px;
+  margin-bottom:12px;
+  padding:14px;
   border:none;
-  border-radius:10px;
+  border-radius:12px;
   font-weight:600;
   cursor:pointer;
   background:#020617;
   color:#e5e7eb;
   border:1px solid #1e293b;
 }
-.nav button:hover{background:#020617}
+.nav button:hover{
+  border-color:#38bdf8;
+}
 
 /* ================= MAIN ================= */
 .main{
@@ -134,9 +145,14 @@ body{
 <body>
 <div class="app">
 
+<!-- ================= SIDEBAR ================= -->
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
-  <div id="status" class="status">Status: Logged out</div>
+
+  <!-- STATUS -->
+  <div id="status" class="status">
+    Status: Logged out
+  </div>
 
   <div class="nav">
     <button onclick="login()">Login</button>
@@ -146,13 +162,16 @@ body{
   </div>
 </div>
 
+<!-- ================= MAIN ================= -->
 <div class="main">
 
   <div id="motivationBox" class="card motivation hidden"></div>
+
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
     <div id="taskList"></div>
   </div>
+
   <div id="dayEndBox" class="card hidden"></div>
   <div id="reportBox" class="card hidden"></div>
   <div id="historyBox" class="card hidden"></div>
@@ -161,7 +180,7 @@ body{
 </div>
 
 <script>
-/* ================= ADD: DOM REFERENCES ================= */
+/* ================= DOM REFERENCES ================= */
 const status = document.getElementById("status");
 const tasksBox = document.getElementById("tasksBox");
 const motivationBox = document.getElementById("motivationBox");
@@ -170,7 +189,7 @@ const reportBox = document.getElementById("reportBox");
 const historyBox = document.getElementById("historyBox");
 const taskList = document.getElementById("taskList");
 
-/* ================= ADD: TIMESTAMP ================= */
+/* ================= TIMESTAMP ================= */
 function timeStamp(){
   return new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
 }
