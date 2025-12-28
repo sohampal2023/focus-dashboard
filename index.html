@@ -1,103 +1,202 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>Focus Dashboard</title>
+<title>Focus Dashboard</title>
 
-  <style>
-    body { font-family: Arial; background:#f4f4f4; }
+<style>
+/* ---------- GLOBAL ---------- */
+body{
+  margin:0;
+  font-family: "Segoe UI", Arial, sans-serif;
+  background: linear-gradient(135deg,#667eea,#764ba2);
+  min-height:100vh;
+}
 
-    .container {
-      max-width: 820px;
-      margin: 30px auto;
-      background: #fff;
-      padding: 20px;
-      border-radius: 8px;
-    }
+.container{
+  max-width:900px;
+  margin:30px auto;
+  padding:20px;
+}
 
-    .quote-box { text-align:center; margin-bottom:15px; }
-    .quote-box img { max-width:100%; max-height:220px; border-radius:8px; }
+/* ---------- GLASS CARD ---------- */
+.card{
+  background: rgba(255,255,255,0.92);
+  border-radius:16px;
+  padding:20px;
+  margin-bottom:20px;
+  box-shadow:0 12px 30px rgba(0,0,0,0.15);
+}
 
-    .progress {
-      width:100%; background:#ddd; border-radius:10px; overflow:hidden; margin:8px 0;
-    }
-    .bar {
-      height:20px; background:#4caf50; color:white;
-      text-align:center; font-size:12px; line-height:20px;
-    }
+/* ---------- HEADER ---------- */
+h1{
+  margin:0;
+  text-align:center;
+  color:#2c3e50;
+}
 
-    .report { background:#eef6ff; padding:15px; margin-top:20px; border-radius:6px; }
-    .compare { background:#fff3cd; padding:10px; margin-top:10px; border-radius:6px; }
+/* ---------- STATUS ---------- */
+.status{
+  text-align:center;
+  font-weight:600;
+  margin:10px 0;
+  color:#34495e;
+}
 
-    .history { background:#f1f1f1; padding:10px; margin-top:15px; border-radius:6px; }
-    .history-item { cursor:pointer; margin:6px 0; padding:6px; background:#fff; border-radius:4px; }
+/* ---------- BUTTONS ---------- */
+button{
+  padding:10px 18px;
+  border:none;
+  border-radius:30px;
+  font-size:14px;
+  cursor:pointer;
+  margin:5px;
+  background: linear-gradient(135deg,#43cea2,#185a9d);
+  color:white;
+  box-shadow:0 6px 14px rgba(0,0,0,0.2);
+}
+button:hover{ opacity:0.9 }
 
-    button { padding:6px 12px; margin-right:6px; }
-  </style>
+/* ---------- QUOTE ---------- */
+.quote-box{
+  text-align:center;
+}
+.quote-box img{
+  max-width:100%;
+  max-height:240px;
+  border-radius:14px;
+}
+.quote-text{
+  margin-top:10px;
+  font-size:15px;
+  color:#2c3e50;
+  font-style:italic;
+}
+
+/* ---------- TASKS ---------- */
+.task{
+  margin:8px 0;
+  font-size:15px;
+}
+
+/* ---------- PROGRESS ---------- */
+.progress{
+  width:100%;
+  height:18px;
+  background:#ddd;
+  border-radius:10px;
+  overflow:hidden;
+  margin:6px 0 14px;
+}
+.bar{
+  height:100%;
+  background: linear-gradient(90deg,#56ab2f,#a8e063);
+  text-align:center;
+  color:#fff;
+  font-size:11px;
+  line-height:18px;
+  transition:width 0.6s ease;
+}
+
+/* ---------- REPORT ---------- */
+.report{
+  background: linear-gradient(135deg,#fdfbfb,#ebedee);
+  border-radius:12px;
+  padding:15px;
+}
+.grade{
+  font-size:18px;
+  font-weight:bold;
+  margin-top:10px;
+}
+
+/* ---------- HISTORY ---------- */
+.history-item{
+  background:#fff;
+  padding:8px;
+  border-radius:8px;
+  margin:6px 0;
+  cursor:pointer;
+}
+.history-item:hover{ background:#f0f0f0 }
+</style>
 </head>
 
 <body onload="initPage()">
 
 <div class="container">
 
-  <!-- Quote -->
-  <div class="quote-box">
+  <!-- MOTIVATION -->
+  <div class="card quote-box">
     <img id="quoteImg" src="1.png">
+    <div class="quote-text" id="quoteText"></div>
   </div>
 
-  <h1>Focus Dashboard</h1>
+  <!-- HEADER -->
+  <div class="card">
+    <h1>Focus Dashboard</h1>
+    <div class="status" id="statusText">Status: Logged out</div>
 
-  <p id="statusText">Status: Logged out</p>
+    <div style="text-align:center">
+      <button onclick="login()">Login</button>
+      <button onclick="logout()">Bio Break</button>
+      <button onclick="toggleHistory()">History</button>
+    </div>
+  </div>
 
-  <button onclick="login()">Login</button>
-  <button onclick="logout()">Logout (Bio Break)</button>
-  <button onclick="toggleHistory()">View History</button>
+  <!-- TASKS -->
+  <div class="card">
+    <h3>Assigned Tasks</h3>
+    <div id="taskList">No tasks assigned.</div>
+  </div>
 
-  <hr>
+  <!-- DAY END -->
+  <div class="card">
+    <h3>Day End</h3>
+    <button onclick="startDayEnd()">Day End</button>
+    <div id="dayEndBox"></div>
+  </div>
 
-  <h3>Assigned Tasks</h3>
-  <div id="taskList">No tasks assigned.</div>
+  <!-- REPORT -->
+  <div class="card" id="reportBox"></div>
 
-  <hr>
-
-  <h3>Day End</h3>
-  <button onclick="startDayEnd()">Day End</button>
-  <div id="dayEndBox"></div>
-
-  <div id="reportBox"></div>
-  <div id="historyBox" style="display:none"></div>
+  <!-- HISTORY -->
+  <div class="card" id="historyBox" style="display:none"></div>
 
 </div>
 
 <script>
-/* ===== QUOTE ROTATION ===== */
-let qi=1;
+/* ===== MOTIVATION ===== */
+const quotesText=[
+ "Consistency beats intensity.",
+ "One focused day changes the week.",
+ "Discipline today. Freedom tomorrow.",
+ "Small progress is still progress.",
+ "Focus is your real superpower."
+];
+let qi=1, qt=0;
 setInterval(()=>{
-  qi = qi % 30 + 1;
-  document.getElementById("quoteImg").src = qi + ".png";
+  qi=qi%30+1;
+  document.getElementById("quoteImg").src=qi+".png";
+  document.getElementById("quoteText").innerText=quotesText[qt++%quotesText.length];
 },60000);
 
 /* ===== STORAGE ===== */
-const SESSIONS="SESSIONS", CURRENT="CURRENT_TASKS", NEXT="NEXT_TASKS";
-const DAY_ENDED="DAY_ENDED", LAST="LAST_REPORT", PREV="PREV_REPORT";
-const HISTORY="HISTORY_REPORTS";
+const SESSIONS="SESSIONS",CURRENT="CURRENT_TASKS",NEXT="NEXT_TASKS",
+DAY_ENDED="DAY_ENDED",LAST="LAST_REPORT",PREV="PREV_REPORT",HISTORY="HISTORY_REPORTS";
 
 /* ===== HELPERS ===== */
 function now(){return new Date();}
 function minutesBetween(a,b){return Math.round((b-a)/60000);}
+function grade(p){return p>=80?"EXCELLENT ⭐":p>=60?"GOOD 👍":p>=40?"AVERAGE ⚠":"POOR ❌";}
 
 /* ===== LOGIN ===== */
 function login(){
-  const id=prompt("Enter ID"), pass=prompt("Enter Password");
-  if(!id||!pass) return;
-
-  document.getElementById("reportBox").innerHTML="";
-  document.getElementById("historyBox").style.display="none";
-
+  if(!prompt("ID")||!prompt("Password")) return;
+  reportBox.innerHTML="";
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
-  s.push({start:now().toISOString(), end:null});
+  s.push({start:now().toISOString(),end:null});
   localStorage.setItem(SESSIONS,JSON.stringify(s));
-
-  document.getElementById("statusText").innerText="Status: Logged in";
+  statusText.innerText="Status: Logged in";
   activateNextDayIfNeeded();
   loadTasks();
 }
@@ -105,173 +204,107 @@ function login(){
 /* ===== LOGOUT ===== */
 function logout(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
-  for(let i=s.length-1;i>=0;i--){
-    if(s[i].end===null){ s[i].end=now().toISOString(); break; }
-  }
+  for(let i=s.length-1;i>=0;i--) if(!s[i].end){s[i].end=now().toISOString();break;}
   localStorage.setItem(SESSIONS,JSON.stringify(s));
-  document.getElementById("statusText").innerText="Status: Bio Break";
-  document.getElementById("taskList").innerText="Login to see tasks.";
+  statusText.innerText="Status: Bio Break";
+  taskList.innerText="Login to see tasks.";
 }
 
 /* ===== DAY END ===== */
 function startDayEnd(){
-  if(document.getElementById("statusText").innerText!=="Status: Logged in"){
-    alert("Login first"); return;
-  }
-
+  if(statusText.innerText!=="Status: Logged in"){alert("Login first");return;}
   const n=Number(prompt("How many subjects next day? (1–7)"));
   if(n<1||n>7) return;
-
-  let html="<h4>Next Day Subjects</h4>";
-  for(let i=0;i<n;i++)
-    html+=`<input id="s${i}" placeholder="Subject ${i+1}"><br><br>`;
-
-  html+=`
-    Distraction Time (minutes):
-    <input type="number" id="dist" min="0"><br><br>
-    <button onclick="confirmDayEnd(${n})">Confirm Day End</button>
-  `;
-  dayEndBox.innerHTML=html;
+  let h="";
+  for(let i=0;i<n;i++) h+=`<input id="s${i}" placeholder="Subject ${i+1}"><br><br>`;
+  h+=`Distraction (min): <input id="dist" type="number"><br><br>
+      <button onclick="confirmDayEnd(${n})">Confirm</button>`;
+  dayEndBox.innerHTML=h;
 }
 
 function confirmDayEnd(n){
-  let nextTasks=[];
+  let next=[];
   const cur=JSON.parse(localStorage.getItem(CURRENT)||"[]");
-  cur.filter(t=>!t.done).forEach(t=>nextTasks.push({name:t.name,done:false}));
-
+  cur.filter(t=>!t.done).forEach(t=>next.push({name:t.name,done:false}));
   for(let i=0;i<n;i++){
     const v=document.getElementById("s"+i).value.trim();
-    if(!v) return alert("Fill all subjects");
-    nextTasks.push({name:v,done:false});
+    if(!v) return alert("Fill all");
+    next.push({name:v,done:false});
   }
-
-  localStorage.setItem(NEXT,JSON.stringify(nextTasks));
+  localStorage.setItem(NEXT,JSON.stringify(next));
   localStorage.removeItem(CURRENT);
   localStorage.setItem(DAY_ENDED,"true");
-
   generateReport();
   showReport();
-  logout(); // status becomes Bio Break
-  document.getElementById("statusText").innerText="Status: Bio Break (Day Ended)";
+  logout();
+  statusText.innerText="Status: Bio Break (Day Ended)";
 }
 
 /* ===== TASK FLOW ===== */
 function activateNextDayIfNeeded(){
   if(localStorage.getItem(DAY_ENDED)==="true"){
     const n=localStorage.getItem(NEXT);
-    if(n){ localStorage.setItem(CURRENT,n); localStorage.removeItem(NEXT); }
+    if(n){localStorage.setItem(CURRENT,n);localStorage.removeItem(NEXT);}
     localStorage.removeItem(DAY_ENDED);
     localStorage.removeItem(SESSIONS);
   }
 }
 
 function loadTasks(){
-  const box=document.getElementById("taskList");
-  box.innerHTML="";
+  taskList.innerHTML="";
   const d=localStorage.getItem(CURRENT);
-  if(!d){ box.innerText="No tasks assigned."; return; }
-
+  if(!d){taskList.innerText="No tasks assigned.";return;}
   const t=JSON.parse(d);
   t.forEach(x=>{
     const cb=document.createElement("input");
-    cb.type="checkbox"; cb.checked=x.done;
-    cb.onchange=()=>{
-      if(confirm("Confirm task done?")){
-        x.done=true; localStorage.setItem(CURRENT,JSON.stringify(t)); loadTasks();
-      } else cb.checked=false;
-    };
-    box.appendChild(cb); box.append(" "+x.name); box.appendChild(document.createElement("br"));
+    cb.type="checkbox";cb.checked=x.done;
+    cb.onchange=()=>{x.done=true;localStorage.setItem(CURRENT,JSON.stringify(t));loadTasks();};
+    taskList.appendChild(cb);
+    taskList.append(" "+x.name);
+    taskList.appendChild(document.createElement("br"));
   });
 }
 
 /* ===== REPORT ===== */
-function getGrade(p){
-  if(p>=80) return "EXCELLENT";
-  if(p>=60) return "GOOD";
-  if(p>=40) return "AVERAGE";
-  return "POOR";
-}
-
 function generateReport(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   let total=0;
-  s.forEach(x=>{ if(x.start&&x.end) total+=minutesBetween(new Date(x.start),new Date(x.end)); });
-
+  s.forEach(x=>{if(x.start&&x.end)total+=minutesBetween(new Date(x.start),new Date(x.end));});
   const dist=Number(document.getElementById("dist").value||0);
   const prod=Math.max(total-dist,0);
   const pct=total?Math.round(prod/total*100):0;
-
-  const tasks=JSON.parse(localStorage.getItem(CURRENT)||"[]");
-  const done=tasks.filter(t=>t.done).length;
-  const taskPct=tasks.length?Math.round(done/tasks.length*100):100;
-
+  const t=JSON.parse(localStorage.getItem(CURRENT)||"[]");
+  const taskPct=t.length?Math.round(t.filter(x=>x.done).length/t.length*100):100;
+  const r={date:new Date().toLocaleString(),pct,taskPct,grade:grade(pct)};
   const last=JSON.parse(localStorage.getItem(LAST));
   if(last) localStorage.setItem(PREV,JSON.stringify(last));
-
-  const report={
-    date:new Date().toLocaleString(),
-    total, prod, dist, pct, taskPct, grade:getGrade(pct)
-  };
-
-  localStorage.setItem(LAST,JSON.stringify(report));
-
-  const hist=JSON.parse(localStorage.getItem(HISTORY)||"[]");
-  hist.push(report);
-  localStorage.setItem(HISTORY,JSON.stringify(hist));
+  localStorage.setItem(LAST,JSON.stringify(r));
+  const h=JSON.parse(localStorage.getItem(HISTORY)||"[]");h.push(r);
+  localStorage.setItem(HISTORY,JSON.stringify(h));
 }
 
 function showReport(){
   const r=JSON.parse(localStorage.getItem(LAST));
-  const p=JSON.parse(localStorage.getItem(PREV));
-
-  let cmp="No previous data";
-  if(p){
-    const d=r.pct-p.pct;
-    cmp=d>0?`Improved by ${d}%`:(d<0?`Dropped by ${-d}%`:"Same as yesterday");
-  }
-
+  if(!r) return;
   reportBox.innerHTML=`
     <div class="report">
       <h3>Daily Report</h3>
-      Date: ${r.date}<br>
-      Productivity: ${r.pct}% (${r.grade})
+      Productivity ${r.pct}% (${r.grade})
       <div class="progress"><div class="bar" style="width:${r.pct}%">${r.pct}%</div></div>
-      Task Completion: ${r.taskPct}%
+      Task Completion ${r.taskPct}%
       <div class="progress"><div class="bar" style="width:${r.taskPct}%">${r.taskPct}%</div></div>
-      <div class="compare"><b>Comparison:</b> ${cmp}</div>
     </div>`;
 }
 
-/* ===== HISTORY VIEWER ===== */
+/* ===== HISTORY ===== */
 function toggleHistory(){
-  const box=document.getElementById("historyBox");
-  if(box.style.display==="block"){ box.style.display="none"; return; }
-
+  const b=document.getElementById("historyBox");
+  if(b.style.display==="block"){b.style.display="none";return;}
   const h=JSON.parse(localStorage.getItem(HISTORY)||"[]");
-  if(!h.length){ box.innerHTML="<div class='history'>No history yet.</div>"; box.style.display="block"; return; }
-
-  let html="<div class='history'><b>History</b><br>";
-  h.forEach((r,i)=>{
-    html+=`<div class="history-item" onclick="viewHistory(${i})">
-      ${r.date} — ${r.grade} (${r.pct}%)
-    </div>`;
-  });
-  html+="</div>";
-  box.innerHTML=html;
-  box.style.display="block";
-}
-
-function viewHistory(i){
-  const h=JSON.parse(localStorage.getItem(HISTORY));
-  const r=h[i];
-  reportBox.innerHTML=`
-    <div class="report">
-      <h3>Report (${r.date})</h3>
-      Productivity: ${r.pct}% (${r.grade})
-      <div class="progress"><div class="bar" style="width:${r.pct}%">${r.pct}%</div></div>
-      Task Completion: ${r.taskPct}%
-      <div class="progress"><div class="bar" style="width:${r.taskPct}%">${r.taskPct}%</div></div>
-    </div>`;
+  if(!h.length){b.innerHTML="No history";b.style.display="block";return;}
+  let html="<h3>History</h3>";
+  h.forEach(r=>html+=`<div class="history-item">${r.date} – ${r.grade} (${r.pct}%)</div>`);
+  b.innerHTML=html;b.style.display="block";
 }
 
 function initPage(){ activateNextDayIfNeeded(); }
