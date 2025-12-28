@@ -13,6 +13,23 @@
 
     <button onclick="login()">Login</button>
     <button onclick="logout()">Logout</button>
+
+    <hr>
+
+    <h3>Daily Focus Report</h3>
+
+    <label>Productive Time (minutes)</label><br>
+    <input type="number" id="productive" placeholder="e.g. 240"><br><br>
+
+    <label>Distracting Time (minutes)</label><br>
+    <input type="number" id="distracting" placeholder="e.g. 60"><br><br>
+
+    <label>Total Time (minutes)</label><br>
+    <input type="number" id="total" placeholder="e.g. 300"><br><br>
+
+    <button onclick="submitReport()">Submit Report</button>
+
+    <p id="result"></p>
   </div>
 
   <script>
@@ -22,6 +39,22 @@
 
     function logout() {
       document.getElementById("statusText").innerText = "Status: Logged out";
+    }
+
+    function submitReport() {
+      const p = document.getElementById("productive").value;
+      const d = document.getElementById("distracting").value;
+      const t = document.getElementById("total").value;
+
+      if (!p || !d || !t) {
+        document.getElementById("result").innerText = "Please fill all fields.";
+        return;
+      }
+
+      const productivity = ((p / t) * 100).toFixed(1);
+
+      document.getElementById("result").innerText =
+        "Report submitted. Productivity: " + productivity + "%";
     }
   </script>
 </body>
