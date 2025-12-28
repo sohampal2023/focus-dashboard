@@ -5,7 +5,6 @@
 <title>Focus Dashboard</title>
 
 <style>
-/* ================= RESET & BASE ================= */
 *{box-sizing:border-box}
 html,body{
   margin:0;
@@ -18,110 +17,83 @@ body{
   color:#e5e7eb;
 }
 
-/* ================= LAYOUT ================= */
 .app{
   display:grid;
   grid-template-columns:280px 1fr;
   height:100vh;
 }
 
-/* ================= SIDEBAR ================= */
+/* SIDEBAR */
 .sidebar{
-  background:linear-gradient(180deg,#020617,#020617);
+  background:#020617;
   padding:20px;
   display:flex;
   flex-direction:column;
   gap:22px;
   border-right:1px solid #1e293b;
 }
-
 .sidebar h2{
   text-align:center;
   margin:0;
   font-size:22px;
-  letter-spacing:1px;
   color:#38bdf8;
 }
 
-/* ================= STATUS (ENHANCED) ================= */
 .status{
-  background:linear-gradient(180deg,#020617,#020617);
+  background:#020617;
   border:1px solid #334155;
-  padding:20px 16px;
+  padding:20px;
   border-radius:14px;
   text-align:center;
   font-weight:700;
   font-size:16px;
   line-height:1.5;
-  box-shadow:
-    0 0 0 1px rgba(56,189,248,.15),
-    0 10px 25px rgba(0,0,0,.5);
-  word-break:break-word;
 }
 
-/* ================= NAV ================= */
+/* NAV */
 .nav button{
   width:100%;
   margin-bottom:12px;
   padding:14px;
-  border:none;
   border-radius:12px;
-  font-weight:600;
-  cursor:pointer;
+  border:1px solid #1e293b;
   background:#020617;
   color:#e5e7eb;
-  border:1px solid #1e293b;
+  font-weight:600;
+  cursor:pointer;
 }
-.nav button:hover{
-  border-color:#38bdf8;
-}
+.nav button:hover{border-color:#38bdf8}
 
-/* ================= MAIN ================= */
+/* MAIN */
 .main{
   padding:25px;
   overflow-y:auto;
 }
 
-/* ================= CARDS ================= */
 .card{
-  background:linear-gradient(135deg,#020617,#020617);
+  background:#020617;
   border:1px solid #1e293b;
   border-radius:16px;
   padding:20px;
   margin-bottom:20px;
 }
-
 .hidden{display:none}
 
-/* ================= MOTIVATION ================= */
-.motivation img{
-  width:100%;
-  max-height:260px;
-  object-fit:cover;
-  border-radius:14px;
-}
-.motivation p{
-  margin-top:10px;
-  font-style:italic;
-  text-align:center;
-  color:#94a3b8;
-}
-
-/* ================= TASKS ================= */
+/* TASKS */
 .task{
   display:flex;
-  align-items:center;
   gap:10px;
   margin:8px 0;
 }
 
-/* ================= PROGRESS ================= */
+/* PROGRESS */
 .progress{
   background:#020617;
   border:1px solid #1e293b;
   height:18px;
   border-radius:10px;
   overflow:hidden;
+  margin:6px 0 12px;
 }
 .bar{
   height:100%;
@@ -130,7 +102,7 @@ body{
   font-size:11px;
 }
 
-/* ================= HISTORY ================= */
+/* HISTORY */
 .history-item{
   padding:12px;
   background:#020617;
@@ -145,14 +117,10 @@ body{
 <body>
 <div class="app">
 
-<!-- ================= SIDEBAR ================= -->
+<!-- SIDEBAR -->
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
-
-  <!-- STATUS -->
-  <div id="status" class="status">
-    Status: Logged out
-  </div>
+  <div id="status" class="status">Status: Logged out</div>
 
   <div class="nav">
     <button onclick="login()">Login</button>
@@ -162,10 +130,8 @@ body{
   </div>
 </div>
 
-<!-- ================= MAIN ================= -->
+<!-- MAIN -->
 <div class="main">
-
-  <div id="motivationBox" class="card motivation hidden"></div>
 
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
@@ -180,32 +146,29 @@ body{
 </div>
 
 <script>
-/* ================= DOM REFERENCES ================= */
+/* DOM */
 const status = document.getElementById("status");
 const tasksBox = document.getElementById("tasksBox");
-const motivationBox = document.getElementById("motivationBox");
 const dayEndBox = document.getElementById("dayEndBox");
 const reportBox = document.getElementById("reportBox");
 const historyBox = document.getElementById("historyBox");
 const taskList = document.getElementById("taskList");
 
-/* ================= TIMESTAMP ================= */
+/* TIME */
 function timeStamp(){
-  return new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+  return new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
 }
+function now(){return new Date()}
+function mins(a,b){return Math.round((b-a)/60000)}
 
-/* ================= STORAGE ================= */
+/* STORAGE */
 const DAY_STATUS="DAY_STATUS";
 const CURRENT_TASKS="CURRENT_TASKS";
 const NEXT_TASKS="NEXT_TASKS";
 const SESSIONS="SESSIONS";
 const REPORTS="REPORTS";
 
-/* ================= HELPERS ================= */
-function now(){return new Date()}
-function mins(a,b){return Math.round((b-a)/60000)}
-
-/* ================= LOGIN ================= */
+/* LOGIN */
 function login(){
   const id=prompt("Enter ID");
   const pw=prompt("Enter Password");
@@ -223,15 +186,12 @@ function login(){
   startSession();
   localStorage.setItem("LOGGED_IN","YES");
 
-  status.innerText="Status: Logged in";
-  status.innerText += " @ " + timeStamp();
-
+  status.innerText="Status: Logged in @ "+timeStamp();
   tasksBox.classList.remove("hidden");
-  motivationBox.classList.remove("hidden");
   loadTasks();
 }
 
-/* ================= BIO BREAK ================= */
+/* BIO BREAK */
 function bioBreak(){
   endSession();
   localStorage.removeItem("LOGGED_IN");
@@ -241,12 +201,11 @@ function bioBreak(){
   }else{
     status.innerText="Status: Bio Break";
   }
-
-  status.innerText += " @ " + timeStamp();
+  status.innerText+=" @ "+timeStamp();
   tasksBox.classList.add("hidden");
 }
 
-/* ================= SESSION ================= */
+/* SESSION */
 function startSession(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   s.push({start:now().toISOString(),end:null});
@@ -260,7 +219,7 @@ function endSession(){
   localStorage.setItem(SESSIONS,JSON.stringify(s));
 }
 
-/* ================= TASKS ================= */
+/* TASKS */
 function loadTasks(){
   taskList.innerHTML="";
   const data=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
@@ -287,7 +246,7 @@ function loadTasks(){
   });
 }
 
-/* ================= DAY END ================= */
+/* DAY END */
 function openDayEnd(){
   if(localStorage.getItem("LOGGED_IN")!=="YES") return;
   if(localStorage.getItem(DAY_STATUS)==="CLOSED") return;
@@ -306,7 +265,7 @@ function openDayEnd(){
   dayEndBox.classList.remove("hidden");
 }
 
-/* ================= CONFIRM DAY END ================= */
+/* CONFIRM DAY END */
 function confirmDayEnd(){
   let next=[];
   const cur=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
@@ -322,12 +281,12 @@ function confirmDayEnd(){
   localStorage.setItem(DAY_STATUS,"CLOSED");
 
   bioBreak();
-  status.innerText += " – Thank you";
+  status.innerText+=" – Thank you";
   dayEndBox.classList.add("hidden");
   reportBox.classList.remove("hidden");
 }
 
-/* ================= REPORT ================= */
+/* REPORT (TIME + TASK %) */
 function generateReport(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   let total=0;
@@ -337,27 +296,38 @@ function generateReport(){
   const prod=Math.max(total-dist,0);
   const pct=total?Math.round(prod/total*100):0;
 
+  /* TASK COMPLETION */
+  const tasks=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
+  let taskPct=0;
+  if(tasks.length){
+    const done=tasks.filter(t=>t.done).length;
+    taskPct=Math.round(done/tasks.length*100);
+  }
+
   let grade="POOR";
   if(pct>=80)grade="EXCELLENT";
   else if(pct>=60)grade="GOOD";
   else if(pct>=40)grade="AVERAGE";
 
-  const r={date:new Date().toLocaleDateString(),pct,grade};
+  const r={date:new Date().toLocaleDateString(),pct,taskPct,grade};
   const all=JSON.parse(localStorage.getItem(REPORTS)||"[]");
-  const prev=all.length?all[all.length-1]:null;
   all.push(r);
   localStorage.setItem(REPORTS,JSON.stringify(all));
 
   reportBox.innerHTML=`
     <h3>Report Card</h3>
-    Productivity: ${pct}%
+
+    Time Productivity: ${pct}%
     <div class="progress"><div class="bar" style="width:${pct}%">${pct}%</div></div>
-    Grade: <b>${grade}</b><br>
-    ${prev?`Compared to previous day: ${pct-prev.pct>=0?"+":""}${pct-prev.pct}%`:""}
+
+    Tasks Completed: ${taskPct}%
+    <div class="progress"><div class="bar" style="width:${taskPct}%">${taskPct}%</div></div>
+
+    Grade: <b>${grade}</b>
   `;
 }
 
-/* ================= HISTORY ================= */
+/* HISTORY */
 function toggleHistory(){
   historyBox.classList.toggle("hidden");
   historyBox.innerHTML="<h3>History</h3>";
@@ -365,21 +335,10 @@ function toggleHistory(){
   h.forEach(x=>{
     historyBox.innerHTML+=`
       <div class="history-item">
-        ${x.date} → ${x.pct}% (${x.grade})
+        ${x.date} → Time ${x.pct}% | Tasks ${x.taskPct}% (${x.grade})
       </div>`;
   });
 }
-
-/* ================= MOTIVATION ================= */
-let img=1;
-setInterval(()=>{
-  if(localStorage.getItem("LOGGED_IN")==="YES"){
-    motivationBox.innerHTML=`
-      <img src="${img}.png">
-      <p>Stay focused. One disciplined day builds your future.</p>`;
-    img++; if(img>30)img=1;
-  }
-},60000);
 </script>
 </body>
 </html>
