@@ -18,14 +18,27 @@
 
     <h3>Daily Focus Report</h3>
 
-    <label>Productive Time (minutes)</label><br>
-    <input type="number" id="productive" placeholder="e.g. 240"><br><br>
+    <label>Productive Time (HH : MM : SS)</label><br>
+    <input type="number" id="ph" placeholder="HH" min="0"> :
+    <input type="number" id="pm" placeholder="MM" min="0" max="59"> :
+    <input type="number" id="ps" placeholder="SS" min="0" max="59">
+    <br><br>
 
-    <label>Distracting Time (minutes)</label><br>
-    <input type="number" id="distracting" placeholder="e.g. 60"><br><br>
+    <label>Distracting Time (HH : MM : SS)</label><br>
+    <input type="number" id="dh" placeholder="HH" min="0"> :
+    <input type="number" id="dm" placeholder="MM" min="0" max="59"> :
+    <input type="number" id="ds" placeholder="SS" min="0" max="59">
+    <br><br>
 
-    <label>Total Time (minutes)</label><br>
-    <input type="number" id="total" placeholder="e.g. 300"><br><br>
+    <label>Total Time (HH : MM : SS)</label><br>
+    <input type="number" id="th" placeholder="HH" min="0"> :
+    <input type="number" id="tm" placeholder="MM" min="0" max="59"> :
+    <input type="number" id="ts" placeholder="SS" min="0" max="59">
+    <br><br>
+
+    <label>Upload Proof (2–4 screenshots)</label><br>
+    <input type="file" id="proof" accept="image/*" multiple>
+    <br><br>
 
     <button onclick="submitReport()">Submit Report</button>
 
@@ -41,20 +54,45 @@
       document.getElementById("statusText").innerText = "Status: Logged out";
     }
 
-    function submitReport() {
-      const p = document.getElementById("productive").value;
-      const d = document.getElementById("distracting").value;
-      const t = document.getElementById("total").value;
+    function toSeconds(h, m, s) {
+      return (h * 3600) + (m * 60) + s;
+    }
 
-      if (!p || !d || !t) {
-        document.getElementById("result").innerText = "Please fill all fields.";
+    function submitReport() {
+      const ph = +document.getElementById("ph").value;
+      const pm = +document.getElementById("pm").value;
+      const ps = +document.getElementById("ps").value;
+
+      const dh = +document.getElementById("dh").value;
+      const dm = +document.getElementById("dm").value;
+      const ds = +document.getElementById("ds").value;
+
+      const th = +document.getElementById("th").value;
+      const tm = +document.getElementById("tm").value;
+      const ts = +document.getElementById("ts").value;
+
+      const files = document.getElementById("proof").files;
+
+      if (!files || files.length < 2 || files.length > 4) {
+        document.getElementById("result").innerText =
+          "ABSENT: Upload 2 to 4 proof screenshots.";
         return;
       }
 
-      const productivity = ((p / t) * 100).toFixed(1);
+      const productive = toSeconds(ph, pm, ps);
+      const distracting = toSeconds(dh, dm, ds);
+      const total = toSeconds(th, tm, ts);
+
+      if (productive + distracting > total) {
+        document.getElementById("result").innerText =
+          "Invalid time values.";
+        return;
+      }
+
+      const productivity = ((productive / total) * 100).toFixed(1);
 
       document.getElementById("result").innerText =
-        "Report submitted. Productivity: " + productivity + "%";
+        "PRESENT ✔  | Productivity: " + productivity + "%";
     }
   </script>
 </body>
