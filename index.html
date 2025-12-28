@@ -4,6 +4,7 @@
   <title>Focus Dashboard</title>
   <link rel="stylesheet" href="style.css">
 </head>
+
 <body onload="loadRecord()">
   <div class="container">
     <h1>Focus Dashboard</h1>
@@ -19,21 +20,21 @@
     <h3>Daily Focus Report</h3>
 
     <label>Productive Time (HH : MM : SS)</label><br>
-    <input type="number" id="ph"> :
-    <input type="number" id="pm"> :
-    <input type="number" id="ps">
+    <input type="number" id="ph" min="0"> :
+    <input type="number" id="pm" min="0" max="59"> :
+    <input type="number" id="ps" min="0" max="59">
     <br><br>
 
     <label>Distracting Time (HH : MM : SS)</label><br>
-    <input type="number" id="dh"> :
-    <input type="number" id="dm"> :
-    <input type="number" id="ds">
+    <input type="number" id="dh" min="0"> :
+    <input type="number" id="dm" min="0" max="59"> :
+    <input type="number" id="ds" min="0" max="59">
     <br><br>
 
     <label>Total Time (HH : MM : SS)</label><br>
-    <input type="number" id="th"> :
-    <input type="number" id="tm"> :
-    <input type="number" id="ts">
+    <input type="number" id="th" min="0"> :
+    <input type="number" id="tm" min="0" max="59"> :
+    <input type="number" id="ts" min="0" max="59">
     <br><br>
 
     <label>Upload Proof (2–4 screenshots)</label><br>
@@ -46,14 +47,46 @@
     <p id="saved"></p>
   </div>
 
-  <script>
-    function login() {
-      document.getElementById("statusText").innerText = "Status: Logged in";
-    }
+  <!-- 🔥 FIREBASE + LOGIC -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+    import { getAuth, signInWithEmailAndPassword, signOut }
+      from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 
-    function logout() {
-      document.getElementById("statusText").innerText = "Status: Logged out";
-    }
+    const firebaseConfig = {
+      apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
+      authDomain: "focus-dashboard-5965a.firebaseapp.com",
+      projectId: "focus-dashboard-5965a",
+      storageBucket: "focus-dashboard-5965a.firebasestorage.app",
+      messagingSenderId: "337204334808",
+      appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+
+    /* ---------- AUTH ---------- */
+
+    window.login = function () {
+      const email = prompt("Enter email");
+      const password = prompt("Enter password");
+
+      signInWithEmailAndPassword(auth, email, password)
+        .then(() => {
+          document.getElementById("statusText").innerText =
+            "Status: Logged in (Firebase)";
+        })
+        .catch(err => alert(err.message));
+    };
+
+    window.logout = function () {
+      signOut(auth).then(() => {
+        document.getElementById("statusText").innerText =
+          "Status: Logged out";
+      });
+    };
+
+    /* ---------- ATTENDANCE LOGIC ---------- */
 
     function toSeconds(h, m, s) {
       return (h * 3600) + (m * 60) + s;
@@ -63,7 +96,7 @@
       return new Date().toISOString().slice(0, 10);
     }
 
-    function submitReport() {
+    window.submitReport = function () {
       const files = document.getElementById("proof").files;
 
       if (!files || files.length < 2 || files.length > 4) {
@@ -73,15 +106,9 @@
         return;
       }
 
-      const productive = toSeconds(
-        +ph.value, +pm.value, +ps.value
-      );
-      const distracting = toSeconds(
-        +dh.value, +dm.value, +ds.value
-      );
-      const total = toSeconds(
-        +th.value, +tm.value, +ts.value
-      );
+      const productive = toSeconds(+ph.value, +pm.value, +ps.value);
+      const distracting = toSeconds(+dh.value, +dm.value, +ds.value);
+      const total = toSeconds(+th.value, +tm.value, +ts.value);
 
       if (productive + distracting > total || total === 0) {
         document.getElementById("result").innerText =
@@ -90,12 +117,11 @@
       }
 
       const productivity = ((productive / total) * 100).toFixed(1);
-
       saveRecord("PRESENT", productivity);
 
       document.getElementById("result").innerText =
         "PRESENT ✔ | Productivity: " + productivity + "%";
-    }
+    };
 
     function saveRecord(status, productivity) {
       const record = {
@@ -107,12 +133,12 @@
       showSaved(record);
     }
 
-    function loadRecord() {
+    window.loadRecord = function () {
       const data = localStorage.getItem("focus-" + today());
       if (data) {
         showSaved(JSON.parse(data));
       }
-    }
+    };
 
     function showSaved(record) {
       document.getElementById("saved").innerText =
@@ -121,8 +147,7 @@
         " | " +
         record.status +
         " | Productivity: " +
-        record.productivity +
-        "%";
+        record.productivity + "%";
     }
   </script>
 </body>
