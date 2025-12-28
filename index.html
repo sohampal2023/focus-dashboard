@@ -7,60 +7,29 @@
     body { font-family: Arial; background:#f4f4f4; }
 
     .container {
-      max-width: 800px;
+      max-width: 820px;
       margin: 30px auto;
       background: #fff;
       padding: 20px;
       border-radius: 8px;
     }
 
-    .quote-box {
-      text-align: center;
-      margin-bottom: 15px;
-    }
-
-    .quote-box img {
-      max-width: 100%;
-      max-height: 220px;
-      border-radius: 8px;
-    }
+    .quote-box { text-align:center; margin-bottom:15px; }
+    .quote-box img { max-width:100%; max-height:220px; border-radius:8px; }
 
     .progress {
-      width: 100%;
-      background: #ddd;
-      border-radius: 10px;
-      overflow: hidden;
-      margin: 8px 0;
+      width:100%; background:#ddd; border-radius:10px; overflow:hidden; margin:8px 0;
     }
-
     .bar {
-      height: 20px;
-      background: #4caf50;
-      color: white;
-      text-align: center;
-      font-size: 12px;
-      line-height: 20px;
+      height:20px; background:#4caf50; color:white;
+      text-align:center; font-size:12px; line-height:20px;
     }
 
-    .report {
-      background:#eef6ff;
-      padding:15px;
-      margin-top:20px;
-      border-radius:6px;
-    }
+    .report { background:#eef6ff; padding:15px; margin-top:20px; border-radius:6px; }
+    .compare { background:#fff3cd; padding:10px; margin-top:10px; border-radius:6px; }
 
-    .compare {
-      background:#fff3cd;
-      padding:10px;
-      margin-top:10px;
-      border-radius:6px;
-    }
-
-    .grade {
-      font-size: 18px;
-      font-weight: bold;
-      margin-top: 10px;
-    }
+    .history { background:#f1f1f1; padding:10px; margin-top:15px; border-radius:6px; }
+    .history-item { cursor:pointer; margin:6px 0; padding:6px; background:#fff; border-radius:4px; }
 
     button { padding:6px 12px; margin-right:6px; }
   </style>
@@ -70,7 +39,7 @@
 
 <div class="container">
 
-  <!-- QUOTE -->
+  <!-- Quote -->
   <div class="quote-box">
     <img id="quoteImg" src="1.png">
   </div>
@@ -81,6 +50,7 @@
 
   <button onclick="login()">Login</button>
   <button onclick="logout()">Logout (Bio Break)</button>
+  <button onclick="toggleHistory()">View History</button>
 
   <hr>
 
@@ -94,75 +64,68 @@
   <div id="dayEndBox"></div>
 
   <div id="reportBox"></div>
+  <div id="historyBox" style="display:none"></div>
+
 </div>
 
 <script>
 /* ===== QUOTE ROTATION ===== */
-const TOTAL_QUOTES = 30;
-let qi = 1;
-setInterval(() => {
-  qi = qi % TOTAL_QUOTES + 1;
+let qi=1;
+setInterval(()=>{
+  qi = qi % 30 + 1;
   document.getElementById("quoteImg").src = qi + ".png";
-}, 60000);
+},60000);
 
 /* ===== STORAGE ===== */
-const SESSIONS = "SESSIONS";
-const CURRENT = "CURRENT_TASKS";
-const NEXT = "NEXT_TASKS";
-const DAY_ENDED = "DAY_ENDED";
-const LAST = "LAST_REPORT";
-const PREV = "PREV_REPORT";
+const SESSIONS="SESSIONS", CURRENT="CURRENT_TASKS", NEXT="NEXT_TASKS";
+const DAY_ENDED="DAY_ENDED", LAST="LAST_REPORT", PREV="PREV_REPORT";
+const HISTORY="HISTORY_REPORTS";
 
 /* ===== HELPERS ===== */
-function now(){ return new Date(); }
-function minutesBetween(a,b){ return Math.round((b-a)/60000); }
+function now(){return new Date();}
+function minutesBetween(a,b){return Math.round((b-a)/60000);}
 
 /* ===== LOGIN ===== */
-function login() {
-  const id = prompt("Enter ID");
-  const pass = prompt("Enter Password");
-  if (!id || !pass) return;
+function login(){
+  const id=prompt("Enter ID"), pass=prompt("Enter Password");
+  if(!id||!pass) return;
 
-  document.getElementById("reportBox").innerHTML = "";
+  document.getElementById("reportBox").innerHTML="";
+  document.getElementById("historyBox").style.display="none";
 
-  const sessions = JSON.parse(localStorage.getItem(SESSIONS) || "[]");
-  sessions.push({start: now().toISOString(), end:null});
-  localStorage.setItem(SESSIONS, JSON.stringify(sessions));
+  const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
+  s.push({start:now().toISOString(), end:null});
+  localStorage.setItem(SESSIONS,JSON.stringify(s));
 
-  document.getElementById("statusText").innerText = "Status: Logged in";
-
+  document.getElementById("statusText").innerText="Status: Logged in";
   activateNextDayIfNeeded();
   loadTasks();
 }
 
 /* ===== LOGOUT ===== */
-function logout() {
-  const sessions = JSON.parse(localStorage.getItem(SESSIONS) || "[]");
-  for (let i=sessions.length-1;i>=0;i--) {
-    if (sessions[i].end===null) {
-      sessions[i].end = now().toISOString();
-      break;
-    }
+function logout(){
+  const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
+  for(let i=s.length-1;i>=0;i--){
+    if(s[i].end===null){ s[i].end=now().toISOString(); break; }
   }
-  localStorage.setItem(SESSIONS, JSON.stringify(sessions));
-  document.getElementById("statusText").innerText = "Status: Bio Break";
-  document.getElementById("taskList").innerText = "Login to see tasks.";
+  localStorage.setItem(SESSIONS,JSON.stringify(s));
+  document.getElementById("statusText").innerText="Status: Bio Break";
+  document.getElementById("taskList").innerText="Login to see tasks.";
 }
 
 /* ===== DAY END ===== */
-function startDayEnd() {
-  if (document.getElementById("statusText").innerText !== "Status: Logged in") {
-    alert("Login first");
-    return;
+function startDayEnd(){
+  if(document.getElementById("statusText").innerText!=="Status: Logged in"){
+    alert("Login first"); return;
   }
 
-  const n = Number(prompt("How many subjects next day? (1–7)"));
-  if (n<1 || n>7) return;
+  const n=Number(prompt("How many subjects next day? (1–7)"));
+  if(n<1||n>7) return;
 
   let html="<h4>Next Day Subjects</h4>";
-  for(let i=0;i<n;i++){
+  for(let i=0;i<n;i++)
     html+=`<input id="s${i}" placeholder="Subject ${i+1}"><br><br>`;
-  }
+
   html+=`
     Distraction Time (minutes):
     <input type="number" id="dist" min="0"><br><br>
@@ -171,12 +134,10 @@ function startDayEnd() {
   dayEndBox.innerHTML=html;
 }
 
-function confirmDayEnd(n) {
+function confirmDayEnd(n){
   let nextTasks=[];
-
-  const current=JSON.parse(localStorage.getItem(CURRENT)||"[]");
-  current.filter(t=>!t.done)
-         .forEach(t=>nextTasks.push({name:t.name,done:false}));
+  const cur=JSON.parse(localStorage.getItem(CURRENT)||"[]");
+  cur.filter(t=>!t.done).forEach(t=>nextTasks.push({name:t.name,done:false}));
 
   for(let i=0;i<n;i++){
     const v=document.getElementById("s"+i).value.trim();
@@ -190,17 +151,15 @@ function confirmDayEnd(n) {
 
   generateReport();
   showReport();
-  logout();
+  logout(); // status becomes Bio Break
+  document.getElementById("statusText").innerText="Status: Bio Break (Day Ended)";
 }
 
 /* ===== TASK FLOW ===== */
 function activateNextDayIfNeeded(){
   if(localStorage.getItem(DAY_ENDED)==="true"){
-    const next=localStorage.getItem(NEXT);
-    if(next){
-      localStorage.setItem(CURRENT,next);
-      localStorage.removeItem(NEXT);
-    }
+    const n=localStorage.getItem(NEXT);
+    if(n){ localStorage.setItem(CURRENT,n); localStorage.removeItem(NEXT); }
     localStorage.removeItem(DAY_ENDED);
     localStorage.removeItem(SESSIONS);
   }
@@ -209,103 +168,113 @@ function activateNextDayIfNeeded(){
 function loadTasks(){
   const box=document.getElementById("taskList");
   box.innerHTML="";
-  const data=localStorage.getItem(CURRENT);
-  if(!data){ box.innerText="No tasks assigned."; return; }
+  const d=localStorage.getItem(CURRENT);
+  if(!d){ box.innerText="No tasks assigned."; return; }
 
-  const tasks=JSON.parse(data);
-  tasks.forEach(t=>{
+  const t=JSON.parse(d);
+  t.forEach(x=>{
     const cb=document.createElement("input");
-    cb.type="checkbox";
-    cb.checked=t.done;
+    cb.type="checkbox"; cb.checked=x.done;
     cb.onchange=()=>{
       if(confirm("Confirm task done?")){
-        t.done=true;
-        localStorage.setItem(CURRENT,JSON.stringify(tasks));
-        loadTasks();
+        x.done=true; localStorage.setItem(CURRENT,JSON.stringify(t)); loadTasks();
       } else cb.checked=false;
     };
-    box.appendChild(cb);
-    box.append(" "+t.name);
-    box.appendChild(document.createElement("br"));
+    box.appendChild(cb); box.append(" "+x.name); box.appendChild(document.createElement("br"));
   });
 }
 
 /* ===== REPORT ===== */
+function getGrade(p){
+  if(p>=80) return "EXCELLENT";
+  if(p>=60) return "GOOD";
+  if(p>=40) return "AVERAGE";
+  return "POOR";
+}
+
 function generateReport(){
-  const sessions=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
-  let totalMin=0;
-  sessions.forEach(s=>{
-    if(s.start&&s.end)
-      totalMin+=minutesBetween(new Date(s.start),new Date(s.end));
-  });
+  const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
+  let total=0;
+  s.forEach(x=>{ if(x.start&&x.end) total+=minutesBetween(new Date(x.start),new Date(x.end)); });
 
   const dist=Number(document.getElementById("dist").value||0);
-  const productive=Math.max(totalMin-dist,0);
-  const prodPct=totalMin?Math.round(productive/totalMin*100):0;
+  const prod=Math.max(total-dist,0);
+  const pct=total?Math.round(prod/total*100):0;
 
   const tasks=JSON.parse(localStorage.getItem(CURRENT)||"[]");
   const done=tasks.filter(t=>t.done).length;
   const taskPct=tasks.length?Math.round(done/tasks.length*100):100;
 
-  const last = JSON.parse(localStorage.getItem(LAST));
-  if (last) localStorage.setItem(PREV, JSON.stringify(last));
+  const last=JSON.parse(localStorage.getItem(LAST));
+  if(last) localStorage.setItem(PREV,JSON.stringify(last));
 
-  localStorage.setItem(LAST,JSON.stringify({
-    totalMin,productive,dist,prodPct,taskPct
-  }));
-}
+  const report={
+    date:new Date().toLocaleString(),
+    total, prod, dist, pct, taskPct, grade:getGrade(pct)
+  };
 
-function getGrade(p){
-  if (p>=80) return "EXCELLENT ⭐";
-  if (p>=60) return "GOOD 👍";
-  if (p>=40) return "AVERAGE ⚠";
-  return "POOR ❌";
+  localStorage.setItem(LAST,JSON.stringify(report));
+
+  const hist=JSON.parse(localStorage.getItem(HISTORY)||"[]");
+  hist.push(report);
+  localStorage.setItem(HISTORY,JSON.stringify(hist));
 }
 
 function showReport(){
   const r=JSON.parse(localStorage.getItem(LAST));
-  if(!r) return;
+  const p=JSON.parse(localStorage.getItem(PREV));
 
-  const prev = JSON.parse(localStorage.getItem(PREV));
-  let compareText = "No previous data";
-
-  if (prev) {
-    const diff = r.prodPct - prev.prodPct;
-    if (diff > 0) compareText = `Improved by ${diff}% 📈`;
-    else if (diff < 0) compareText = `Dropped by ${Math.abs(diff)}% 📉`;
-    else compareText = "Same as yesterday ➖";
+  let cmp="No previous data";
+  if(p){
+    const d=r.pct-p.pct;
+    cmp=d>0?`Improved by ${d}%`:(d<0?`Dropped by ${-d}%`:"Same as yesterday");
   }
 
-  document.getElementById("reportBox").innerHTML=`
+  reportBox.innerHTML=`
     <div class="report">
-      <h3>Daily Report Card</h3>
-
-      Total Time: ${r.totalMin} min<br>
-      Productive Time: ${r.productive} min<br>
-      Distraction Time: ${r.dist} min<br><br>
-
-      Productivity: ${r.prodPct}%
-      <div class="progress">
-        <div class="bar" style="width:${r.prodPct}%">${r.prodPct}%</div>
-      </div>
-
+      <h3>Daily Report</h3>
+      Date: ${r.date}<br>
+      Productivity: ${r.pct}% (${r.grade})
+      <div class="progress"><div class="bar" style="width:${r.pct}%">${r.pct}%</div></div>
       Task Completion: ${r.taskPct}%
-      <div class="progress">
-        <div class="bar" style="width:${r.taskPct}%">${r.taskPct}%</div>
-      </div>
-
-      <div class="grade">Grade: ${getGrade(r.prodPct)}</div>
-
-      <div class="compare">
-        <b>Comparison:</b> ${compareText}
-      </div>
-    </div>
-  `;
+      <div class="progress"><div class="bar" style="width:${r.taskPct}%">${r.taskPct}%</div></div>
+      <div class="compare"><b>Comparison:</b> ${cmp}</div>
+    </div>`;
 }
 
-function initPage(){
-  activateNextDayIfNeeded();
+/* ===== HISTORY VIEWER ===== */
+function toggleHistory(){
+  const box=document.getElementById("historyBox");
+  if(box.style.display==="block"){ box.style.display="none"; return; }
+
+  const h=JSON.parse(localStorage.getItem(HISTORY)||"[]");
+  if(!h.length){ box.innerHTML="<div class='history'>No history yet.</div>"; box.style.display="block"; return; }
+
+  let html="<div class='history'><b>History</b><br>";
+  h.forEach((r,i)=>{
+    html+=`<div class="history-item" onclick="viewHistory(${i})">
+      ${r.date} — ${r.grade} (${r.pct}%)
+    </div>`;
+  });
+  html+="</div>";
+  box.innerHTML=html;
+  box.style.display="block";
 }
+
+function viewHistory(i){
+  const h=JSON.parse(localStorage.getItem(HISTORY));
+  const r=h[i];
+  reportBox.innerHTML=`
+    <div class="report">
+      <h3>Report (${r.date})</h3>
+      Productivity: ${r.pct}% (${r.grade})
+      <div class="progress"><div class="bar" style="width:${r.pct}%">${r.pct}%</div></div>
+      Task Completion: ${r.taskPct}%
+      <div class="progress"><div class="bar" style="width:${r.taskPct}%">${r.taskPct}%</div></div>
+    </div>`;
+}
+
+function initPage(){ activateNextDayIfNeeded(); }
 </script>
 
 </body>
