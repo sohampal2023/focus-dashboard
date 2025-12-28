@@ -33,14 +33,20 @@ body{
   color:#38bdf8;
   margin:0;
 }
+
+/* BIG STATUS BOX */
 .status{
-  padding:18px;
-  border-radius:14px;
-  border:1px solid #334155;
+  padding:26px;
+  border-radius:16px;
+  border:2px solid #334155;
   text-align:center;
-  font-weight:700;
-  line-height:1.5;
+  font-weight:900;
+  font-size:18px;
+  line-height:1.6;
+  background:#020617;
+  box-shadow:0 12px 30px rgba(0,0,0,.7);
 }
+
 .nav button{
   width:100%;
   padding:14px;
@@ -86,21 +92,13 @@ body{
 .bar{
   height:100%;
   font-size:11px;
-  text-align:center;
-  color:#020617;
   font-weight:700;
+  text-align:center;
 }
-
-/* GRADE COLORS */
-.bar.EXCELLENT{background:linear-gradient(90deg,#22c55e,#4ade80)}
-.bar.GOOD{background:linear-gradient(90deg,#84cc16,#bef264)}
-.bar.AVERAGE{background:linear-gradient(90deg,#facc15,#fde047)}
-.bar.POOR{background:linear-gradient(90deg,#ef4444,#f87171)}
-
-.grade-EXCELLENT{color:#22c55e}
-.grade-GOOD{color:#84cc16}
-.grade-AVERAGE{color:#facc15}
-.grade-POOR{color:#ef4444}
+.bar.EXCELLENT{background:#22c55e}
+.bar.GOOD{background:#84cc16}
+.bar.AVERAGE{background:#facc15}
+.bar.POOR{background:#ef4444}
 
 /* HISTORY */
 .history-item{
@@ -169,6 +167,9 @@ const mins=(a,b)=>Math.round((b-a)/60000);
 /* LOGIN */
 function login(){
   if(!prompt("Enter ID")||!prompt("Enter Password"))return;
+
+  idleMarks=0;
+  lastActivity=Date.now();
 
   if(localStorage.getItem(DAY_STATUS)==="CLOSED"){
     const n=localStorage.getItem(NEXT_TASKS);
@@ -242,7 +243,7 @@ function openDayEnd(){
   if(localStorage.getItem("LOGGED_IN")!=="YES")return;
   if(localStorage.getItem(DAY_STATUS)==="CLOSED")return;
 
-  let h="<h3>Confirm Day End</h3><p>Next Day Subjects</p>";
+  let h="<h3>Confirm Day End</h3>";
   for(let i=0;i<7;i++)
     h+=`<input id="s${i}" placeholder="Subject ${i+1}"><br>`;
   h+=`<br>Distraction (min)<br>
@@ -254,6 +255,8 @@ function openDayEnd(){
 
 /* CONFIRM */
 function confirmDayEnd(){
+  idleMarks=0;
+
   let next=[];
   const cur=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
   cur.filter(t=>!t.done).forEach(t=>next.push({name:t.name,done:false}));
@@ -261,6 +264,7 @@ function confirmDayEnd(){
     const v=document.getElementById("s"+i).value.trim();
     if(v)next.push({name:v,done:false});
   }
+
   localStorage.setItem(NEXT_TASKS,JSON.stringify(next));
   generateReport();
   localStorage.setItem(DAY_STATUS,"CLOSED");
@@ -270,7 +274,7 @@ function confirmDayEnd(){
   reportBox.classList.remove("hidden");
 }
 
-/* REPORT (COMBINED + COLOR CODED) */
+/* REPORT */
 function generateReport(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   let total=0;
@@ -287,26 +291,18 @@ function generateReport(){
     finalScore>=60?"GOOD":
     finalScore>=40?"AVERAGE":"POOR";
 
-  const r={date:new Date().toLocaleDateString(),pct,taskPct,finalScore,grade};
+  const r={date:new Date().toLocaleDateString(),finalScore,grade};
   const all=JSON.parse(localStorage.getItem(REPORTS)||"[]");
   all.push(r);
   localStorage.setItem(REPORTS,JSON.stringify(all));
 
   reportBox.innerHTML=`
     <h3>Report Card</h3>
-
-    Time Productivity: ${pct}%
+    Final Score: ${finalScore}%
     <div class="progress">
-      <div class="bar ${grade}" style="width:${pct}%">${pct}%</div>
+      <div class="bar ${grade}" style="width:${finalScore}%">${finalScore}%</div>
     </div>
-
-    Tasks Completed: ${taskPct}%
-    <div class="progress">
-      <div class="bar ${grade}" style="width:${taskPct}%">${taskPct}%</div>
-    </div>
-
-    Final Score: ${finalScore}%<br>
-    Grade: <b class="grade-${grade}">${grade}</b>
+    Grade: <b>${grade}</b>
   `;
 }
 
@@ -318,13 +314,48 @@ function toggleHistory(){
   h.forEach(x=>{
     historyBox.innerHTML+=`
       <div class="history-item">
-        ${x.date} →
-        <b class="grade-${x.grade}">
-          ${x.finalScore}% (${x.grade})
-        </b>
+        ${x.date} → ${x.finalScore}% (${x.grade})
       </div>`;
   });
 }
+
+/* ===== STRICT IDLE MARK SYSTEM (20 MIN GAP) ===== */
+let lastActivity=Date.now();
+let idleMarks=0;
+let idlePopupShown=false;
+
+const IDLE_TIME=20*60*1000; // 20 minutes
+const MAX_MARKS=3;
+
+["click","keydown","mousemove","touchstart"].forEach(e=>{
+  document.addEventListener(e,()=>{
+    lastActivity=Date.now();
+    idlePopupShown=false;
+  });
+});
+
+setInterval(()=>{
+  if(localStorage.getItem("LOGGED_IN")!=="YES")return;
+
+  const idleFor=Date.now()-lastActivity;
+
+  if(idleFor>=IDLE_TIME && !idlePopupShown){
+    idlePopupShown=true;
+    idleMarks++;
+
+    alert(
+      "IDLE ALERT\n\n"+
+      "No activity for 20 minutes.\n"+
+      "Idle Mark: "+idleMarks+" / "+MAX_MARKS
+    );
+
+    if(idleMarks>=MAX_MARKS){
+      alert("Maximum idle limit reached. Logging out.");
+      idleMarks=0;
+      bioBreak();
+    }
+  }
+},60000);
 </script>
 </body>
 </html>
