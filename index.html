@@ -14,7 +14,6 @@
       border-radius: 8px;
     }
 
-    /* Quote */
     .quote-box {
       text-align: center;
       margin-bottom: 15px;
@@ -50,10 +49,7 @@
       border-radius:6px;
     }
 
-    button {
-      padding: 6px 12px;
-      margin-right: 6px;
-    }
+    button { padding:6px 12px; margin-right:6px; }
   </style>
 </head>
 
@@ -61,9 +57,9 @@
 
 <div class="container">
 
-  <!-- ✅ QUOTE IMAGE (NO FOLDER) -->
+  <!-- QUOTE -->
   <div class="quote-box">
-    <img id="quoteImg" src="1.png" alt="Motivational Quote">
+    <img id="quoteImg" src="1.png">
   </div>
 
   <h1>Focus Dashboard</h1>
@@ -84,73 +80,65 @@
   <button onclick="startDayEnd()">Day End</button>
   <div id="dayEndBox"></div>
 
+  <!-- ✅ REPORT CARD BOX (ADDED) -->
   <div id="reportBox"></div>
+
 </div>
 
 <script>
-/* =======================
-   QUOTE ROTATION (NO FOLDER)
-======================= */
+/* ================= QUOTE ROTATION ================= */
 const TOTAL_QUOTES = 30;
-let quoteIndex = 1;
-
+let qi = 1;
 setInterval(() => {
-  quoteIndex++;
-  if (quoteIndex > TOTAL_QUOTES) quoteIndex = 1;
-  document.getElementById("quoteImg").src = quoteIndex + ".png";
-}, 60000); // 1 minute
+  qi = qi % TOTAL_QUOTES + 1;
+  document.getElementById("quoteImg").src = qi + ".png";
+}, 60000);
 
-/* =======================
-   STORAGE KEYS
-======================= */
+/* ================= STORAGE ================= */
 const SESSIONS = "SESSIONS";
 const CURRENT = "CURRENT_TASKS";
 const NEXT = "NEXT_TASKS";
 const DAY_ENDED = "DAY_ENDED";
 const LAST = "LAST_REPORT";
 
-/* =======================
-   HELPERS
-======================= */
-function now() { return new Date(); }
+/* ================= HELPERS ================= */
+function now(){ return new Date(); }
 function minutesBetween(a,b){ return Math.round((b-a)/60000); }
 
-/* =======================
-   LOGIN / LOGOUT
-======================= */
+/* ================= LOGIN ================= */
 function login() {
   const id = prompt("Enter ID");
   const pass = prompt("Enter Password");
   if (!id || !pass) return;
 
+  // hide report on new day login
+  document.getElementById("reportBox").innerHTML = "";
+
   const sessions = JSON.parse(localStorage.getItem(SESSIONS) || "[]");
-  sessions.push({ start: now().toISOString(), end: null });
+  sessions.push({start: now().toISOString(), end:null});
   localStorage.setItem(SESSIONS, JSON.stringify(sessions));
 
   document.getElementById("statusText").innerText = "Status: Logged in";
 
   activateNextDayIfNeeded();
   loadTasks();
-  hideReport();
 }
 
+/* ================= LOGOUT ================= */
 function logout() {
   const sessions = JSON.parse(localStorage.getItem(SESSIONS) || "[]");
-  for (let i = sessions.length - 1; i >= 0; i--) {
-    if (sessions[i].end === null) {
+  for (let i=sessions.length-1;i>=0;i--) {
+    if (sessions[i].end===null) {
       sessions[i].end = now().toISOString();
       break;
     }
   }
   localStorage.setItem(SESSIONS, JSON.stringify(sessions));
-
   document.getElementById("statusText").innerText = "Status: Bio Break";
   document.getElementById("taskList").innerText = "Login to see tasks.";
 }
 
-/* =======================
-   DAY END (UNCHANGED LOGIC)
-======================= */
+/* ================= DAY END ================= */
 function startDayEnd() {
   if (document.getElementById("statusText").innerText !== "Status: Logged in") {
     alert("Login first");
@@ -158,51 +146,48 @@ function startDayEnd() {
   }
 
   const n = Number(prompt("How many subjects next day? (1–7)"));
-  if (n < 1 || n > 7) return;
+  if (n<1 || n>7) return;
 
-  let html = "<h4>Next Day Subjects</h4>";
-  for (let i = 0; i < n; i++) {
-    html += `<input id="s${i}" placeholder="Subject ${i+1}"><br><br>`;
+  let html="<h4>Next Day Subjects</h4>";
+  for(let i=0;i<n;i++){
+    html+=`<input id="s${i}" placeholder="Subject ${i+1}"><br><br>`;
   }
-
-  html += `
+  html+=`
     Distraction Time (minutes):
     <input type="number" id="dist" min="0"><br><br>
     <button onclick="confirmDayEnd(${n})">Confirm Day End</button>
   `;
-  dayEndBox.innerHTML = html;
+  dayEndBox.innerHTML=html;
 }
 
 function confirmDayEnd(n) {
-  let nextTasks = [];
+  let nextTasks=[];
 
-  const current = JSON.parse(localStorage.getItem(CURRENT) || "[]");
-  current.filter(t => !t.done)
-         .forEach(t => nextTasks.push({name:t.name,done:false}));
+  const current=JSON.parse(localStorage.getItem(CURRENT)||"[]");
+  current.filter(t=>!t.done)
+         .forEach(t=>nextTasks.push({name:t.name,done:false}));
 
-  for (let i = 0; i < n; i++) {
-    const v = document.getElementById("s"+i).value.trim();
-    if (!v) return alert("Fill all subjects");
+  for(let i=0;i<n;i++){
+    const v=document.getElementById("s"+i).value.trim();
+    if(!v) return alert("Fill all subjects");
     nextTasks.push({name:v,done:false});
   }
 
-  localStorage.setItem(NEXT, JSON.stringify(nextTasks));
+  localStorage.setItem(NEXT,JSON.stringify(nextTasks));
   localStorage.removeItem(CURRENT);
-  localStorage.setItem(DAY_ENDED, "true");
+  localStorage.setItem(DAY_ENDED,"true");
 
   generateReport();
+  showReport();   // ✅ SHOW REPORT (ADDED)
   logout();
-  location.reload();
 }
 
-/* =======================
-   TASK FLOW
-======================= */
-function activateNextDayIfNeeded() {
-  if (localStorage.getItem(DAY_ENDED) === "true") {
-    const next = localStorage.getItem(NEXT);
-    if (next) {
-      localStorage.setItem(CURRENT, next);
+/* ================= TASK FLOW ================= */
+function activateNextDayIfNeeded(){
+  if(localStorage.getItem(DAY_ENDED)==="true"){
+    const next=localStorage.getItem(NEXT);
+    if(next){
+      localStorage.setItem(CURRENT,next);
       localStorage.removeItem(NEXT);
     }
     localStorage.removeItem(DAY_ENDED);
@@ -210,18 +195,17 @@ function activateNextDayIfNeeded() {
   }
 }
 
-function loadTasks() {
-  const box = document.getElementById("taskList");
-  box.innerHTML = "";
-  const data = localStorage.getItem(CURRENT);
-  if (!data) { box.innerText = "No tasks assigned."; return; }
+function loadTasks(){
+  const box=document.getElementById("taskList");
+  box.innerHTML="";
+  const data=localStorage.getItem(CURRENT);
+  if(!data){ box.innerText="No tasks assigned."; return; }
 
-  const tasks = JSON.parse(data);
+  const tasks=JSON.parse(data);
   tasks.forEach(t=>{
     const cb=document.createElement("input");
     cb.type="checkbox";
     cb.checked=t.done;
-    cb.disabled=t.done;
     cb.onchange=()=>{
       if(confirm("Confirm task done?")){
         t.done=true;
@@ -235,34 +219,51 @@ function loadTasks() {
   });
 }
 
-/* =======================
-   REPORT
-======================= */
-function generateReport() {
-  const sessions = JSON.parse(localStorage.getItem(SESSIONS) || "[]");
-  let totalMin = 0;
-
+/* ================= REPORT ================= */
+function generateReport(){
+  const sessions=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
+  let totalMin=0;
   sessions.forEach(s=>{
-    if(s.start && s.end){
-      totalMin += minutesBetween(new Date(s.start), new Date(s.end));
-    }
+    if(s.start&&s.end)
+      totalMin+=minutesBetween(new Date(s.start),new Date(s.end));
   });
 
-  const dist = Number(document.getElementById("dist").value || 0);
-  const productive = Math.max(totalMin - dist, 0);
-  const prodPct = totalMin ? Math.round((productive/totalMin)*100) : 0;
+  const dist=Number(document.getElementById("dist").value||0);
+  const productive=Math.max(totalMin-dist,0);
+  const prodPct=totalMin?Math.round(productive/totalMin*100):0;
 
-  const tasks = JSON.parse(localStorage.getItem(CURRENT) || "[]");
-  const done = tasks.filter(t=>t.done).length;
-  const taskPct = tasks.length ? Math.round((done/tasks.length)*100) : 100;
+  const tasks=JSON.parse(localStorage.getItem(CURRENT)||"[]");
+  const done=tasks.filter(t=>t.done).length;
+  const taskPct=tasks.length?Math.round(done/tasks.length*100):100;
 
-  localStorage.setItem(LAST, JSON.stringify({
-    totalMin, productive, dist, prodPct, taskPct
+  localStorage.setItem(LAST,JSON.stringify({
+    totalMin,productive,dist,prodPct,taskPct
   }));
 }
 
-function hideReport() {
-  document.getElementById("reportBox").innerHTML = "";
+/* ✅ REPORT DISPLAY (ONLY ADDITION) */
+function showReport(){
+  const r=JSON.parse(localStorage.getItem(LAST));
+  if(!r) return;
+
+  document.getElementById("reportBox").innerHTML=`
+    <div class="report">
+      <h3>Daily Report Card</h3>
+      Total Time: ${r.totalMin} min<br>
+      Productive Time: ${r.productive} min<br>
+      Distraction Time: ${r.dist} min<br><br>
+
+      Productivity: ${r.prodPct}%
+      <div class="progress">
+        <div class="bar" style="width:${r.prodPct}%">${r.prodPct}%</div>
+      </div>
+
+      Task Completion: ${r.taskPct}%
+      <div class="progress">
+        <div class="bar" style="width:${r.taskPct}%">${r.taskPct}%</div>
+      </div>
+    </div>
+  `;
 }
 
 function initPage(){
