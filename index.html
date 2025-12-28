@@ -5,15 +5,17 @@
   <link rel="stylesheet" href="style.css">
 </head>
 
-<body onload="loadRecord()">
+<body onload="loadRecord(); showLoginTime();">
   <div class="container">
     <h1>Focus Dashboard</h1>
     <p>Your personal study focus system is running.</p>
 
     <p class="status" id="statusText">Status: Logged out</p>
+    <p id="loginTime"></p>
 
     <button onclick="login()">Login</button>
     <button onclick="logout()">Logout</button>
+    <button onclick="shiftOver()">Shift Over</button>
 
     <hr>
 
@@ -22,24 +24,20 @@
     <label>Productive Time (HH : MM : SS)</label><br>
     <input type="number" id="ph" min="0"> :
     <input type="number" id="pm" min="0" max="59"> :
-    <input type="number" id="ps" min="0" max="59">
-    <br><br>
+    <input type="number" id="ps" min="0" max="59"><br><br>
 
     <label>Distracting Time (HH : MM : SS)</label><br>
     <input type="number" id="dh" min="0"> :
     <input type="number" id="dm" min="0" max="59"> :
-    <input type="number" id="ds" min="0" max="59">
-    <br><br>
+    <input type="number" id="ds" min="0" max="59"><br><br>
 
     <label>Total Time (HH : MM : SS)</label><br>
     <input type="number" id="th" min="0"> :
     <input type="number" id="tm" min="0" max="59"> :
-    <input type="number" id="ts" min="0" max="59">
-    <br><br>
+    <input type="number" id="ts" min="0" max="59"><br><br>
 
     <label>Upload Proof (2–4 screenshots)</label><br>
-    <input type="file" id="proof" accept="image/*" multiple>
-    <br><br>
+    <input type="file" id="proof" accept="image/*" multiple><br><br>
 
     <button onclick="submitReport()">Submit Report</button>
 
@@ -47,108 +45,132 @@
     <p id="saved"></p>
   </div>
 
-  <!-- 🔥 FIREBASE + LOGIC -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-    import { getAuth, signInWithEmailAndPassword, signOut }
-      from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, signOut }
+    from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
-      authDomain: "focus-dashboard-5965a.firebaseapp.com",
-      projectId: "focus-dashboard-5965a",
-      storageBucket: "focus-dashboard-5965a.firebasestorage.app",
-      messagingSenderId: "337204334808",
-      appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
-    };
+  const firebaseConfig = {
+    apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
+    authDomain: "focus-dashboard-5965a.firebaseapp.com",
+    projectId: "focus-dashboard-5965a",
+    storageBucket: "focus-dashboard-5965a.firebasestorage.app",
+    messagingSenderId: "337204334808",
+    appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
+  };
 
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
 
-    /* ---------- AUTH ---------- */
+  let checkTimer = null;
+  let responseTimer = null;
 
-    window.login = function () {
-      const email = prompt("Enter email");
-      const password = prompt("Enter password");
+  function today() {
+    return new Date().toISOString().slice(0,10);
+  }
 
-      signInWithEmailAndPassword(auth, email, password)
-        .then(() => {
-          document.getElementById("statusText").innerText =
-            "Status: Logged in (Firebase)";
-        })
-        .catch(err => alert(err.message));
-    };
+  function toSeconds(h,m,s) {
+    return h*3600 + m*60 + s;
+  }
 
-    window.logout = function () {
-      signOut(auth).then(() => {
-        document.getElementById("statusText").innerText =
-          "Status: Logged out";
-      });
-    };
+  function startCheckCycle() {
+    clearInterval(checkTimer);
+    checkTimer = setInterval(checkPopup, 15*60*1000);
+  }
 
-    /* ---------- ATTENDANCE LOGIC ---------- */
+  function checkPopup() {
+    let responded = false;
 
-    function toSeconds(h, m, s) {
-      return (h * 3600) + (m * 60) + s;
+    responseTimer = setTimeout(() => {
+      if (!responded) startBioBreak();
+    }, 2*60*1000);
+
+    const ok = confirm("Are you still working?\n\nOK = Continue\nCancel = Bio Break");
+    responded = true;
+    clearTimeout(responseTimer);
+
+    if (ok) startCheckCycle();
+    else startBioBreak();
+  }
+
+  function startBioBreak() {
+    clearInterval(checkTimer);
+    const reason = prompt("Bio Break Reason:\nWashroom / Tea / Phone / Other");
+    localStorage.setItem("bio-break-reason", reason || "Not specified");
+    document.getElementById("statusText").innerText = "Status: Bio Break";
+  }
+
+  window.login = function () {
+    const email = prompt("Enter email");
+    const password = prompt("Enter password");
+
+    signInWithEmailAndPassword(auth, email, password)
+      .then(() => {
+        const now = new Date().toLocaleTimeString();
+        localStorage.setItem("login-time", now);
+        document.getElementById("statusText").innerText = "Status: Logged in (Firebase)";
+        document.getElementById("loginTime").innerText = "Login Time: " + now;
+        startCheckCycle();
+      })
+      .catch(err => alert(err.message));
+  };
+
+  window.logout = function () {
+    clearInterval(checkTimer);
+    document.getElementById("statusText").innerText = "Status: Logged out";
+  };
+
+  window.shiftOver = function () {
+    const planned = confirm("Next day task planned?");
+    if (!planned) {
+      alert("Please plan next day task before logout.");
+      return;
+    }
+    localStorage.setItem("next-day-task", "planned");
+    logout();
+  };
+
+  window.submitReport = function () {
+    const files = proof.files;
+    if (!files || files.length < 2 || files.length > 4) {
+      saveRecord("ABSENT","0");
+      result.innerText = "ABSENT: Proof invalid.";
+      return;
     }
 
-    function today() {
-      return new Date().toISOString().slice(0, 10);
+    const p = toSeconds(+ph.value,+pm.value,+ps.value);
+    const d = toSeconds(+dh.value,+dm.value,+ds.value);
+    const t = toSeconds(+th.value,+tm.value,+ts.value);
+
+    if (p+d > t || t===0) {
+      result.innerText = "Invalid time values.";
+      return;
     }
 
-    window.submitReport = function () {
-      const files = document.getElementById("proof").files;
+    const prod = ((p/t)*100).toFixed(1);
+    saveRecord("PRESENT",prod);
+    result.innerText = "PRESENT ✔ | Productivity: " + prod + "%";
+  };
 
-      if (!files || files.length < 2 || files.length > 4) {
-        saveRecord("ABSENT", "0");
-        document.getElementById("result").innerText =
-          "ABSENT: Proof not valid.";
-        return;
-      }
+  function saveRecord(status,prod) {
+    const rec = {date:today(),status,prod};
+    localStorage.setItem("focus-"+today(), JSON.stringify(rec));
+    showSaved(rec);
+  }
 
-      const productive = toSeconds(+ph.value, +pm.value, +ps.value);
-      const distracting = toSeconds(+dh.value, +dm.value, +ds.value);
-      const total = toSeconds(+th.value, +tm.value, +ts.value);
+  window.loadRecord = function () {
+    const d = localStorage.getItem("focus-"+today());
+    if (d) showSaved(JSON.parse(d));
+  };
 
-      if (productive + distracting > total || total === 0) {
-        document.getElementById("result").innerText =
-          "Invalid time values.";
-        return;
-      }
+  function showSaved(r) {
+    saved.innerText = "Saved → " + r.date + " | " + r.status + " | " + r.prod + "%";
+  }
 
-      const productivity = ((productive / total) * 100).toFixed(1);
-      saveRecord("PRESENT", productivity);
-
-      document.getElementById("result").innerText =
-        "PRESENT ✔ | Productivity: " + productivity + "%";
-    };
-
-    function saveRecord(status, productivity) {
-      const record = {
-        date: today(),
-        status: status,
-        productivity: productivity
-      };
-      localStorage.setItem("focus-" + today(), JSON.stringify(record));
-      showSaved(record);
-    }
-
-    window.loadRecord = function () {
-      const data = localStorage.getItem("focus-" + today());
-      if (data) {
-        showSaved(JSON.parse(data));
-      }
-    };
-
-    function showSaved(record) {
-      document.getElementById("saved").innerText =
-        "Saved Record → " +
-        record.date +
-        " | " +
-        record.status +
-        " | Productivity: " +
-        record.productivity + "%";
-    }
-  </script>
+  window.showLoginTime = function () {
+    const t = localStorage.getItem("login-time");
+    if (t) loginTime.innerText = "Login Time: " + t;
+  };
+</script>
 </body>
 </html>
