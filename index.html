@@ -1,314 +1,293 @@
 <!DOCTYPE html>
 <html>
 <head>
+<meta charset="UTF-8">
 <title>Focus Dashboard</title>
 
 <style>
-/* ---------- GLOBAL ---------- */
 body{
+  font-family: "Segoe UI", Arial;
+  background: linear-gradient(135deg,#e8f0ff,#f7faff);
   margin:0;
-  font-family: "Segoe UI", Arial, sans-serif;
-  background: linear-gradient(135deg,#667eea,#764ba2);
-  min-height:100vh;
 }
-
 .container{
   max-width:900px;
   margin:30px auto;
-  padding:20px;
-}
-
-/* ---------- GLASS CARD ---------- */
-.card{
-  background: rgba(255,255,255,0.92);
-  border-radius:16px;
-  padding:20px;
-  margin-bottom:20px;
-  box-shadow:0 12px 30px rgba(0,0,0,0.15);
-}
-
-/* ---------- HEADER ---------- */
-h1{
-  margin:0;
-  text-align:center;
-  color:#2c3e50;
-}
-
-/* ---------- STATUS ---------- */
-.status{
-  text-align:center;
-  font-weight:600;
-  margin:10px 0;
-  color:#34495e;
-}
-
-/* ---------- BUTTONS ---------- */
-button{
-  padding:10px 18px;
-  border:none;
-  border-radius:30px;
-  font-size:14px;
-  cursor:pointer;
-  margin:5px;
-  background: linear-gradient(135deg,#43cea2,#185a9d);
-  color:white;
-  box-shadow:0 6px 14px rgba(0,0,0,0.2);
-}
-button:hover{ opacity:0.9 }
-
-/* ---------- QUOTE ---------- */
-.quote-box{
-  text-align:center;
-}
-.quote-box img{
-  max-width:100%;
-  max-height:240px;
+  background:#ffffff;
+  padding:25px;
   border-radius:14px;
+  box-shadow:0 20px 40px rgba(0,0,0,0.08);
 }
-.quote-text{
-  margin-top:10px;
-  font-size:15px;
-  color:#2c3e50;
-  font-style:italic;
+h1{text-align:center;margin-bottom:10px;}
+.status{text-align:center;font-weight:bold;margin:10px 0;}
+button{
+  padding:8px 14px;
+  margin:4px;
+  border:none;
+  border-radius:6px;
+  background:#2563eb;
+  color:white;
+  cursor:pointer;
+}
+button:disabled{background:#9ca3af;}
+button.secondary{background:#059669;}
+button.warn{background:#dc2626;}
+
+.card{
+  background:#f1f5f9;
+  padding:15px;
+  border-radius:10px;
+  margin-top:15px;
 }
 
-/* ---------- TASKS ---------- */
-.task{
-  margin:8px 0;
-  font-size:15px;
-}
-
-/* ---------- PROGRESS ---------- */
 .progress{
-  width:100%;
-  height:18px;
-  background:#ddd;
+  background:#e5e7eb;
   border-radius:10px;
   overflow:hidden;
-  margin:6px 0 14px;
+  height:20px;
+  margin:6px 0;
 }
 .bar{
   height:100%;
-  background: linear-gradient(90deg,#56ab2f,#a8e063);
+  background:#22c55e;
   text-align:center;
-  color:#fff;
-  font-size:11px;
-  line-height:18px;
-  transition:width 0.6s ease;
+  color:white;
+  font-size:12px;
 }
 
-/* ---------- REPORT ---------- */
-.report{
-  background: linear-gradient(135deg,#fdfbfb,#ebedee);
-  border-radius:12px;
-  padding:15px;
-}
-.grade{
-  font-size:18px;
-  font-weight:bold;
-  margin-top:10px;
-}
+.hidden{display:none;}
 
-/* ---------- HISTORY ---------- */
-.history-item{
-  background:#fff;
-  padding:8px;
-  border-radius:8px;
+.task{
   margin:6px 0;
-  cursor:pointer;
 }
-.history-item:hover{ background:#f0f0f0 }
+
+img{
+  max-width:100%;
+  border-radius:12px;
+}
+
+.historyItem{
+  background:#fff;
+  padding:10px;
+  margin:8px 0;
+  border-radius:8px;
+  border-left:5px solid #2563eb;
+}
 </style>
 </head>
 
-<body onload="initPage()">
-
+<body>
 <div class="container">
 
-  <!-- MOTIVATION -->
-  <div class="card quote-box">
-    <img id="quoteImg" src="1.png">
-    <div class="quote-text" id="quoteText"></div>
-  </div>
+<h1>Focus Dashboard</h1>
 
-  <!-- HEADER -->
-  <div class="card">
-    <h1>Focus Dashboard</h1>
-    <div class="status" id="statusText">Status: Logged out</div>
+<div id="quoteBox" class="card hidden" style="text-align:center;"></div>
 
-    <div style="text-align:center">
-      <button onclick="login()">Login</button>
-      <button onclick="logout()">Bio Break</button>
-      <button onclick="toggleHistory()">History</button>
-    </div>
-  </div>
+<div class="status" id="statusText">Status: Logged out</div>
 
-  <!-- TASKS -->
-  <div class="card">
-    <h3>Assigned Tasks</h3>
-    <div id="taskList">No tasks assigned.</div>
-  </div>
+<div style="text-align:center;">
+  <button onclick="login()">Login</button>
+  <button onclick="logout()" class="secondary">Bio Break</button>
+  <button onclick="showHistory()">History</button>
+</div>
 
-  <!-- DAY END -->
-  <div class="card">
-    <h3>Day End</h3>
-    <button onclick="startDayEnd()">Day End</button>
-    <div id="dayEndBox"></div>
-  </div>
+<div id="tasksBox" class="card hidden">
+  <h3>Assigned Tasks</h3>
+  <div id="taskList"></div>
+</div>
 
-  <!-- REPORT -->
-  <div class="card" id="reportBox"></div>
+<div id="dayEndBox" class="card hidden"></div>
 
-  <!-- HISTORY -->
-  <div class="card" id="historyBox" style="display:none"></div>
+<div id="reportBox" class="card hidden"></div>
+
+<div id="historyBox" class="card hidden"></div>
 
 </div>
 
 <script>
-/* ===== MOTIVATION ===== */
-const quotesText=[
- "Consistency beats intensity.",
- "One focused day changes the week.",
- "Discipline today. Freedom tomorrow.",
- "Small progress is still progress.",
- "Focus is your real superpower."
-];
-let qi=1, qt=0;
-setInterval(()=>{
-  qi=qi%30+1;
-  document.getElementById("quoteImg").src=qi+".png";
-  document.getElementById("quoteText").innerText=quotesText[qt++%quotesText.length];
-},60000);
+/* ------------------ STORAGE ------------------ */
+const STATE="STATE"; // LOGGED_IN, BIO_BREAK, DAY_END_PENDING, DAY_ENDED
+const CURRENT="CURRENT_TASKS";
+const NEXT="NEXT_TASKS";
+const SESSIONS="SESSIONS";
+const REPORTS="REPORTS";
 
-/* ===== STORAGE ===== */
-const SESSIONS="SESSIONS",CURRENT="CURRENT_TASKS",NEXT="NEXT_TASKS",
-DAY_ENDED="DAY_ENDED",LAST="LAST_REPORT",PREV="PREV_REPORT",HISTORY="HISTORY_REPORTS";
-
-/* ===== HELPERS ===== */
+/* ------------------ TIME ------------------ */
 function now(){return new Date();}
-function minutesBetween(a,b){return Math.round((b-a)/60000);}
-function grade(p){return p>=80?"EXCELLENT ⭐":p>=60?"GOOD 👍":p>=40?"AVERAGE ⚠":"POOR ❌";}
+function mins(a,b){return Math.round((b-a)/60000);}
 
-/* ===== LOGIN ===== */
+/* ------------------ LOGIN ------------------ */
 function login(){
-  if(!prompt("ID")||!prompt("Password")) return;
-  reportBox.innerHTML="";
-  const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
-  s.push({start:now().toISOString(),end:null});
-  localStorage.setItem(SESSIONS,JSON.stringify(s));
+  const id=prompt("Enter ID");
+  const pw=prompt("Enter Password");
+  if(!id||!pw) return;
+
+  if(localStorage.getItem(STATE)==="DAY_ENDED"){
+    const next=localStorage.getItem(NEXT);
+    if(next){
+      localStorage.setItem(CURRENT,next);
+      localStorage.removeItem(NEXT);
+    }
+    localStorage.removeItem(STATE);
+  }
+
+  startSession();
+  localStorage.setItem(STATE,"LOGGED_IN");
   statusText.innerText="Status: Logged in";
-  activateNextDayIfNeeded();
+  tasksBox.classList.remove("hidden");
+  quoteBox.classList.remove("hidden");
   loadTasks();
 }
 
-/* ===== LOGOUT ===== */
+/* ------------------ LOGOUT (BIO BREAK) ------------------ */
 function logout(){
-  const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
-  for(let i=s.length-1;i>=0;i--) if(!s[i].end){s[i].end=now().toISOString();break;}
-  localStorage.setItem(SESSIONS,JSON.stringify(s));
+  endSession();
+  localStorage.setItem(STATE,"BIO_BREAK");
   statusText.innerText="Status: Bio Break";
-  taskList.innerText="Login to see tasks.";
+  tasksBox.classList.add("hidden");
+  dayEndBox.classList.add("hidden");
 }
 
-/* ===== DAY END ===== */
+/* ------------------ SESSION ------------------ */
+function startSession(){
+  const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
+  s.push({start:now().toISOString(),end:null});
+  localStorage.setItem(SESSIONS,JSON.stringify(s));
+}
+function endSession(){
+  const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
+  for(let i=s.length-1;i>=0;i--){
+    if(!s[i].end){s[i].end=now().toISOString();break;}
+  }
+  localStorage.setItem(SESSIONS,JSON.stringify(s));
+}
+
+/* ------------------ TASKS ------------------ */
+function loadTasks(){
+  const list=document.getElementById("taskList");
+  list.innerHTML="";
+  const data=JSON.parse(localStorage.getItem(CURRENT)||"[]");
+  if(!data.length){list.innerText="No tasks assigned.";return;}
+
+  data.forEach(t=>{
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=t.done;
+    cb.disabled=t.done;
+    cb.onchange=()=>{
+      if(confirm("Confirm task done?")){
+        t.done=true;
+        localStorage.setItem(CURRENT,JSON.stringify(data));
+      }else cb.checked=false;
+    };
+    const div=document.createElement("div");
+    div.className="task";
+    div.appendChild(cb);
+    div.append(" "+t.name);
+    list.appendChild(div);
+  });
+
+  const btn=document.createElement("button");
+  btn.textContent="Day End";
+  btn.onclick=startDayEnd;
+  list.appendChild(btn);
+}
+
+/* ------------------ DAY END ------------------ */
 function startDayEnd(){
-  if(statusText.innerText!=="Status: Logged in"){alert("Login first");return;}
-  const n=Number(prompt("How many subjects next day? (1–7)"));
-  if(n<1||n>7) return;
-  let h="";
-  for(let i=0;i<n;i++) h+=`<input id="s${i}" placeholder="Subject ${i+1}"><br><br>`;
-  h+=`Distraction (min): <input id="dist" type="number"><br><br>
-      <button onclick="confirmDayEnd(${n})">Confirm</button>`;
-  dayEndBox.innerHTML=h;
+  if(localStorage.getItem(STATE)!=="LOGGED_IN") return;
+  localStorage.setItem(STATE,"DAY_END_PENDING");
+
+  let html="<h3>Confirm Day End</h3>";
+  html+="Next day subjects (1–7):<br>";
+  for(let i=0;i<7;i++){
+    html+=`<input id="s${i}" placeholder="Subject ${i+1}"><br>`;
+  }
+  html+=`<br>Distraction time (minutes):<br>
+         <input id="dist" type="number" min="0"><br><br>
+         <button class="warn" onclick="confirmDayEnd()">Confirm Day End</button>`;
+  dayEndBox.innerHTML=html;
+  dayEndBox.classList.remove("hidden");
 }
 
-function confirmDayEnd(n){
+/* ------------------ CONFIRM DAY END ------------------ */
+function confirmDayEnd(){
+  if(localStorage.getItem(STATE)!=="DAY_END_PENDING") return;
+
   let next=[];
   const cur=JSON.parse(localStorage.getItem(CURRENT)||"[]");
   cur.filter(t=>!t.done).forEach(t=>next.push({name:t.name,done:false}));
-  for(let i=0;i<n;i++){
+
+  for(let i=0;i<7;i++){
     const v=document.getElementById("s"+i).value.trim();
-    if(!v) return alert("Fill all");
-    next.push({name:v,done:false});
+    if(v) next.push({name:v,done:false});
   }
+
   localStorage.setItem(NEXT,JSON.stringify(next));
-  localStorage.removeItem(CURRENT);
-  localStorage.setItem(DAY_ENDED,"true");
   generateReport();
-  showReport();
+  localStorage.setItem(STATE,"DAY_ENDED");
+  tasksBox.classList.add("hidden");
+  dayEndBox.classList.add("hidden");
+  reportBox.classList.remove("hidden");
   logout();
-  statusText.innerText="Status: Bio Break (Day Ended)";
 }
 
-/* ===== TASK FLOW ===== */
-function activateNextDayIfNeeded(){
-  if(localStorage.getItem(DAY_ENDED)==="true"){
-    const n=localStorage.getItem(NEXT);
-    if(n){localStorage.setItem(CURRENT,n);localStorage.removeItem(NEXT);}
-    localStorage.removeItem(DAY_ENDED);
-    localStorage.removeItem(SESSIONS);
-  }
-}
-
-function loadTasks(){
-  taskList.innerHTML="";
-  const d=localStorage.getItem(CURRENT);
-  if(!d){taskList.innerText="No tasks assigned.";return;}
-  const t=JSON.parse(d);
-  t.forEach(x=>{
-    const cb=document.createElement("input");
-    cb.type="checkbox";cb.checked=x.done;
-    cb.onchange=()=>{x.done=true;localStorage.setItem(CURRENT,JSON.stringify(t));loadTasks();};
-    taskList.appendChild(cb);
-    taskList.append(" "+x.name);
-    taskList.appendChild(document.createElement("br"));
-  });
-}
-
-/* ===== REPORT ===== */
+/* ------------------ REPORT ------------------ */
 function generateReport(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   let total=0;
-  s.forEach(x=>{if(x.start&&x.end)total+=minutesBetween(new Date(x.start),new Date(x.end));});
+  s.forEach(x=>{
+    if(x.start&&x.end) total+=mins(new Date(x.start),new Date(x.end));
+  });
+
   const dist=Number(document.getElementById("dist").value||0);
   const prod=Math.max(total-dist,0);
   const pct=total?Math.round(prod/total*100):0;
-  const t=JSON.parse(localStorage.getItem(CURRENT)||"[]");
-  const taskPct=t.length?Math.round(t.filter(x=>x.done).length/t.length*100):100;
-  const r={date:new Date().toLocaleString(),pct,taskPct,grade:grade(pct)};
-  const last=JSON.parse(localStorage.getItem(LAST));
-  if(last) localStorage.setItem(PREV,JSON.stringify(last));
-  localStorage.setItem(LAST,JSON.stringify(r));
-  const h=JSON.parse(localStorage.getItem(HISTORY)||"[]");h.push(r);
-  localStorage.setItem(HISTORY,JSON.stringify(h));
-}
 
-function showReport(){
-  const r=JSON.parse(localStorage.getItem(LAST));
-  if(!r) return;
+  let status="Poor";
+  if(pct>=80) status="Excellent";
+  else if(pct>=60) status="Good";
+  else if(pct>=40) status="Average";
+
+  const rep={date:new Date().toLocaleDateString(),total,prod,dist,pct,status};
+  const all=JSON.parse(localStorage.getItem(REPORTS)||"[]");
+  all.push(rep);
+  localStorage.setItem(REPORTS,JSON.stringify(all));
+
   reportBox.innerHTML=`
-    <div class="report">
-      <h3>Daily Report</h3>
-      Productivity ${r.pct}% (${r.grade})
-      <div class="progress"><div class="bar" style="width:${r.pct}%">${r.pct}%</div></div>
-      Task Completion ${r.taskPct}%
-      <div class="progress"><div class="bar" style="width:${r.taskPct}%">${r.taskPct}%</div></div>
-    </div>`;
+    <h3>Report Card</h3>
+    Total Time: ${total} min<br>
+    Productive: ${prod} min<br>
+    Distraction: ${dist} min<br>
+    Productivity: ${pct}%
+    <div class="progress"><div class="bar" style="width:${pct}%">${pct}%</div></div>
+    <b>Status: ${status}</b>
+  `;
 }
 
-/* ===== HISTORY ===== */
-function toggleHistory(){
-  const b=document.getElementById("historyBox");
-  if(b.style.display==="block"){b.style.display="none";return;}
-  const h=JSON.parse(localStorage.getItem(HISTORY)||"[]");
-  if(!h.length){b.innerHTML="No history";b.style.display="block";return;}
-  let html="<h3>History</h3>";
-  h.forEach(r=>html+=`<div class="history-item">${r.date} – ${r.grade} (${r.pct}%)</div>`);
-  b.innerHTML=html;b.style.display="block";
+/* ------------------ HISTORY ------------------ */
+function showHistory(){
+  const box=document.getElementById("historyBox");
+  box.innerHTML="<h3>History</h3>";
+  const data=JSON.parse(localStorage.getItem(REPORTS)||"[]");
+  data.forEach(r=>{
+    box.innerHTML+=`
+      <div class="historyItem">
+        <b>${r.date}</b><br>
+        Productivity: ${r.pct}% (${r.status})
+      </div>`;
+  });
+  box.classList.remove("hidden");
 }
 
-function initPage(){ activateNextDayIfNeeded(); }
+/* ------------------ MOTIVATION IMAGES ------------------ */
+let imgIndex=1;
+setInterval(()=>{
+  if(localStorage.getItem(STATE)==="LOGGED_IN"){
+    quoteBox.innerHTML=`<img src="${imgIndex}.png">`;
+    imgIndex++; if(imgIndex>30) imgIndex=1;
+  }
+},60000);
 </script>
-
 </body>
 </html>
