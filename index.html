@@ -5,7 +5,7 @@
   <style>
     body { font-family: Arial; background:#f4f4f4; }
     .container {
-      max-width: 720px;
+      max-width: 760px;
       margin: 30px auto;
       background: #fff;
       padding: 20px;
@@ -16,7 +16,7 @@
       background: #ddd;
       border-radius: 10px;
       overflow: hidden;
-      margin: 10px 0;
+      margin: 8px 0;
     }
     .bar {
       height: 20px;
@@ -31,6 +31,12 @@
       margin-top:20px;
       border-radius:6px;
     }
+    .compare {
+      background:#fff3cd;
+      padding:12px;
+      margin-top:10px;
+      border-radius:6px;
+    }
   </style>
 </head>
 
@@ -43,7 +49,7 @@
   <p id="logoutTime"></p>
 
   <button onclick="login()">Login</button>
-  <button onclick="logoutWithReason()">Logout</button>
+  <button onclick="logout()">Logout</button>
 
   <hr>
 
@@ -53,8 +59,10 @@
   <hr>
 
   <h3>Productivity</h3>
-  Productive (minutes): <input type="number" id="prod" min="0"><br><br>
-  Total (minutes): <input type="number" id="total" min="1"><br><br>
+  Productive (minutes):
+  <input type="number" id="prod" min="0"><br><br>
+  Total (minutes):
+  <input type="number" id="total" min="1"><br><br>
 
   <hr>
 
@@ -65,53 +73,76 @@
   <div id="reportBox"></div>
 </div>
 
-<script>
+<script type="module">
+/* ---------- FIREBASE AUTH ---------- */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut } 
+  from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
+  authDomain: "focus-dashboard-5965a.firebaseapp.com",
+  projectId: "focus-dashboard-5965a",
+  storageBucket: "focus-dashboard-5965a.firebasestorage.app",
+  messagingSenderId: "337204334808",
+  appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
 /* ---------- STATE KEYS ---------- */
 const CURRENT = "CURRENT_TASKS";
 const NEXT = "NEXT_TASKS";
 const DAY_ENDED = "DAY_ENDED";
+const LAST = "LAST_REPORT";
+const PREV = "PREV_REPORT";
 
-/* ---------- LOGIN ---------- */
-function login() {
-  document.getElementById("statusText").innerText = "Status: Logged in";
-  localStorage.setItem("loginTime", new Date().toLocaleTimeString());
-  showTimes();
-  activateNextDayIfNeeded();
-  loadTasks();
-  showReport();
-}
+/* ---------- LOGIN / LOGOUT ---------- */
+window.login = function () {
+  const email = prompt("Enter email");
+  const password = prompt("Enter password");
+  if (!email || !password) return;
 
-function logoutWithReason() {
-  const reason = prompt("Logout reason");
-  if (!reason) return alert("Reason required");
+  signInWithEmailAndPassword(auth, email, password)
+    .then(() => {
+      document.getElementById("statusText").innerText = "Status: Logged in";
+      localStorage.setItem("loginTime", new Date().toLocaleTimeString());
+      activateNextDayIfNeeded();
+      showTimes();
+      loadTasks();
+      showReport();
+    })
+    .catch(err => alert(err.message));
+};
 
-  localStorage.setItem("logoutTime", new Date().toLocaleTimeString());
-  localStorage.setItem("logoutReason", reason);
-  document.getElementById("statusText").innerText = "Status: Logged out";
-  showTimes();
-}
+window.logout = function () {
+  signOut(auth).finally(() => {
+    localStorage.setItem("logoutTime", new Date().toLocaleTimeString());
+    document.getElementById("statusText").innerText = "Status: Logged out";
+    showTimes();
+  });
+};
 
 /* ---------- DAY END ---------- */
-function startDayEnd() {
-  const n = Number(prompt("How many subjects next? (1–7)"));
-  if (n < 1 || n > 7) return alert("1–7 only");
+window.startDayEnd = function () {
+  const n = Number(prompt("How many subjects next day? (1–7)"));
+  if (n < 1 || n > 7) return alert("Only 1–7 allowed");
 
-  let html = "<h4>Next Tasks</h4>";
+  let html = "<h4>Next Day Subjects</h4>";
   for (let i = 0; i < n; i++) {
     html += `<input id="s${i}" placeholder="Subject ${i+1}"><br><br>`;
   }
   html += `<button onclick="confirmDayEnd(${n})">Confirm Day End</button>`;
   dayEndBox.innerHTML = html;
-}
+};
 
-function confirmDayEnd(n) {
+window.confirmDayEnd = function (n) {
   let nextTasks = [];
 
-  // move unfinished current tasks
   const current = JSON.parse(localStorage.getItem(CURRENT) || "[]");
-  current.filter(t => !t.done).forEach(t => nextTasks.push({ name: t.name, done:false }));
+  current.filter(t => !t.done).forEach(t => nextTasks.push({ name:t.name, done:false }));
 
-  // add new tasks
   for (let i = 0; i < n; i++) {
     const v = document.getElementById("s"+i).value.trim();
     if (!v) return alert("Fill all subjects");
@@ -123,13 +154,11 @@ function confirmDayEnd(n) {
   localStorage.setItem(DAY_ENDED, "true");
 
   generateReport();
-
-  localStorage.setItem("logoutTime", new Date().toLocaleTimeString());
-  logoutWithReason();
+  logout();
   location.reload();
-}
+};
 
-/* ---------- TASK ACTIVATION ---------- */
+/* ---------- TASK FLOW ---------- */
 function activateNextDayIfNeeded() {
   if (localStorage.getItem(DAY_ENDED) === "true") {
     const next = localStorage.getItem(NEXT);
@@ -141,12 +170,11 @@ function activateNextDayIfNeeded() {
   }
 }
 
-/* ---------- TASK UI ---------- */
 function loadTasks() {
   const box = document.getElementById("taskList");
-  const data = localStorage.getItem(CURRENT);
   box.innerHTML = "";
 
+  const data = localStorage.getItem(CURRENT);
   if (!data) {
     box.innerText = "No tasks assigned.";
     return;
@@ -160,7 +188,7 @@ function loadTasks() {
     cb.disabled = t.done;
 
     cb.onchange = () => {
-      if (confirm("Confirm task done?")) {
+      if (confirm("Confirm task completed?")) {
         t.done = true;
         localStorage.setItem(CURRENT, JSON.stringify(tasks));
         loadTasks();
@@ -173,36 +201,58 @@ function loadTasks() {
   });
 }
 
-/* ---------- REPORT CARD ---------- */
+/* ---------- REPORT & COMPARISON ---------- */
 function generateReport() {
-  const p = Number(document.getElementById("prod").value || 0);
-  const t = Number(document.getElementById("total").value || 1);
-  const prodPct = Math.round((p/t)*100);
+  const prod = Number(document.getElementById("prod").value || 0);
+  const total = Number(document.getElementById("total").value || 1);
+
+  const prodPct = Math.round((prod / total) * 100);
 
   const tasks = JSON.parse(localStorage.getItem(CURRENT) || "[]");
-  const done = tasks.filter(x=>x.done).length;
-  const taskPct = tasks.length ? Math.round((done/tasks.length)*100) : 100;
+  const done = tasks.filter(t=>t.done).length;
+  const taskPct = tasks.length ? Math.round((done / tasks.length) * 100) : 100;
 
-  const status = prodPct>=80 ? "EXCELLENT" : prodPct>=50 ? "AVERAGE" : "POOR";
+  const status =
+    prodPct >= 80 ? "EXCELLENT" :
+    prodPct >= 50 ? "AVERAGE" : "POOR";
 
-  const report = { prodPct, taskPct, status };
-  localStorage.setItem("LAST_REPORT", JSON.stringify(report));
+  const last = JSON.parse(localStorage.getItem(LAST));
+  if (last) localStorage.setItem(PREV, JSON.stringify(last));
+
+  localStorage.setItem(LAST, JSON.stringify({ prodPct, taskPct, status }));
 }
 
 function showReport() {
-  const r = localStorage.getItem("LAST_REPORT");
-  if (!r) return;
-  const d = JSON.parse(r);
+  const last = JSON.parse(localStorage.getItem(LAST));
+  if (!last) return;
 
-  reportBox.innerHTML = `
+  let html = `
     <div class="report">
-      <h3>Last Report Card</h3>
-      Productivity: ${d.prodPct}%
-      <div class="progress"><div class="bar" style="width:${d.prodPct}%">${d.prodPct}%</div></div>
-      Task Completion: ${d.taskPct}%
-      <div class="progress"><div class="bar" style="width:${d.taskPct}%">${d.taskPct}%</div></div>
-      <b>Status: ${d.status}</b>
-    </div>`;
+      <h3>Report Card</h3>
+      Productivity: ${last.prodPct}%
+      <div class="progress"><div class="bar" style="width:${last.prodPct}%">${last.prodPct}%</div></div>
+      Task Completion: ${last.taskPct}%
+      <div class="progress"><div class="bar" style="width:${last.taskPct}%">${last.taskPct}%</div></div>
+      <b>Status: ${last.status}</b>
+    </div>
+  `;
+
+  const prev = JSON.parse(localStorage.getItem(PREV));
+  if (prev) {
+    const dp = last.prodPct - prev.prodPct;
+    const dt = last.taskPct - prev.taskPct;
+
+    html += `
+      <div class="compare">
+        <h4>Comparison with Previous Day</h4>
+        Productivity: ${dp >= 0 ? "+" : ""}${dp}%<br>
+        Task Completion: ${dt >= 0 ? "+" : ""}${dt}%<br>
+        <b>${dp >= 0 && dt >= 0 ? "Improved" : "Needs Improvement"}</b>
+      </div>
+    `;
+  }
+
+  reportBox.innerHTML = html;
 }
 
 /* ---------- UI ---------- */
