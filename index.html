@@ -6,149 +6,162 @@
 
 <style>
 body{
-  font-family: "Segoe UI", Arial;
-  background: linear-gradient(135deg,#e8f0ff,#f7faff);
   margin:0;
+  font-family: "Segoe UI", sans-serif;
+  background: linear-gradient(120deg,#e0f2fe,#fefce8);
 }
-.container{
-  max-width:900px;
+.app{
+  max-width:960px;
   margin:30px auto;
-  background:#ffffff;
+  background:white;
+  border-radius:18px;
+  box-shadow:0 25px 50px rgba(0,0,0,0.12);
   padding:25px;
-  border-radius:14px;
-  box-shadow:0 20px 40px rgba(0,0,0,0.08);
 }
-h1{text-align:center;margin-bottom:10px;}
-.status{text-align:center;font-weight:bold;margin:10px 0;}
+h1{text-align:center;margin-bottom:5px;}
+.status{text-align:center;font-weight:600;margin-bottom:15px;}
+
+.top-bar{
+  display:flex;
+  justify-content:center;
+  gap:12px;
+  flex-wrap:wrap;
+}
 button{
-  padding:8px 14px;
-  margin:4px;
+  padding:8px 16px;
   border:none;
-  border-radius:6px;
-  background:#2563eb;
-  color:white;
+  border-radius:10px;
+  font-weight:600;
   cursor:pointer;
 }
-button:disabled{background:#9ca3af;}
-button.secondary{background:#059669;}
-button.warn{background:#dc2626;}
+.login{background:#2563eb;color:white;}
+.break{background:#059669;color:white;}
+.end{background:#dc2626;color:white;}
+.history{background:#7c3aed;color:white;}
 
-.card{
-  background:#f1f5f9;
-  padding:15px;
-  border-radius:10px;
-  margin-top:15px;
-}
-
-.progress{
-  background:#e5e7eb;
-  border-radius:10px;
-  overflow:hidden;
-  height:20px;
-  margin:6px 0;
-}
-.bar{
-  height:100%;
-  background:#22c55e;
-  text-align:center;
-  color:white;
-  font-size:12px;
+.section{
+  margin-top:20px;
+  padding:18px;
+  border-radius:14px;
+  background:#f8fafc;
 }
 
 .hidden{display:none;}
 
 .task{
-  margin:6px 0;
+  margin:8px 0;
+}
+
+.progress{
+  height:20px;
+  background:#e5e7eb;
+  border-radius:10px;
+  overflow:hidden;
+}
+.bar{
+  height:100%;
+  background:linear-gradient(90deg,#22c55e,#4ade80);
+  text-align:center;
+  color:white;
+  font-size:12px;
 }
 
 img{
-  max-width:100%;
+  width:100%;
+  border-radius:14px;
+  margin-bottom:12px;
+}
+
+.report-card{
+  background:#ecfeff;
+  border-left:6px solid #06b6d4;
+  padding:15px;
   border-radius:12px;
 }
 
-.historyItem{
+.history-item{
   background:#fff;
+  border-left:5px solid #6366f1;
   padding:10px;
+  border-radius:10px;
   margin:8px 0;
-  border-radius:8px;
-  border-left:5px solid #2563eb;
 }
 </style>
 </head>
 
 <body>
-<div class="container">
+<div class="app">
 
 <h1>Focus Dashboard</h1>
 
-<div id="quoteBox" class="card hidden" style="text-align:center;"></div>
+<div id="quoteBox" class="hidden"></div>
 
-<div class="status" id="statusText">Status: Logged out</div>
+<div id="status" class="status">Status: Logged out</div>
 
-<div style="text-align:center;">
-  <button onclick="login()">Login</button>
-  <button onclick="logout()" class="secondary">Bio Break</button>
-  <button onclick="showHistory()">History</button>
+<div class="top-bar">
+  <button class="login" onclick="login()">Login</button>
+  <button class="break" onclick="bioBreak()">Bio Break</button>
+  <button class="end" onclick="openDayEnd()">Day End</button>
+  <button class="history" onclick="toggleHistory()">History</button>
 </div>
 
-<div id="tasksBox" class="card hidden">
+<div id="tasksSection" class="section hidden">
   <h3>Assigned Tasks</h3>
   <div id="taskList"></div>
 </div>
 
-<div id="dayEndBox" class="card hidden"></div>
+<div id="dayEndSection" class="section hidden"></div>
 
-<div id="reportBox" class="card hidden"></div>
+<div id="reportSection" class="section hidden"></div>
 
-<div id="historyBox" class="card hidden"></div>
+<div id="historySection" class="section hidden"></div>
 
 </div>
 
 <script>
-/* ------------------ STORAGE ------------------ */
-const STATE="STATE"; // LOGGED_IN, BIO_BREAK, DAY_END_PENDING, DAY_ENDED
-const CURRENT="CURRENT_TASKS";
-const NEXT="NEXT_TASKS";
-const SESSIONS="SESSIONS";
-const REPORTS="REPORTS";
+/* ---------------- STORAGE ---------------- */
+const DAY_STATUS = "DAY_STATUS"; // ACTIVE | CLOSED
+const CURRENT_TASKS = "CURRENT_TASKS";
+const NEXT_TASKS = "NEXT_TASKS";
+const SESSIONS = "SESSIONS";
+const REPORTS = "REPORTS";
 
-/* ------------------ TIME ------------------ */
+/* ---------------- TIME ---------------- */
 function now(){return new Date();}
 function mins(a,b){return Math.round((b-a)/60000);}
 
-/* ------------------ LOGIN ------------------ */
+/* ---------------- LOGIN ---------------- */
 function login(){
   const id=prompt("Enter ID");
   const pw=prompt("Enter Password");
   if(!id||!pw) return;
 
-  if(localStorage.getItem(STATE)==="DAY_ENDED"){
-    const next=localStorage.getItem(NEXT);
+  if(localStorage.getItem(DAY_STATUS)==="CLOSED"){
+    const next=localStorage.getItem(NEXT_TASKS);
     if(next){
-      localStorage.setItem(CURRENT,next);
-      localStorage.removeItem(NEXT);
+      localStorage.setItem(CURRENT_TASKS,next);
+      localStorage.removeItem(NEXT_TASKS);
     }
-    localStorage.removeItem(STATE);
+    localStorage.setItem(DAY_STATUS,"ACTIVE");
   }
 
   startSession();
-  localStorage.setItem(STATE,"LOGGED_IN");
-  statusText.innerText="Status: Logged in";
-  tasksBox.classList.remove("hidden");
+  localStorage.setItem("LOGGED_IN","YES");
+  status.innerText="Status: Logged in";
+  tasksSection.classList.remove("hidden");
   quoteBox.classList.remove("hidden");
   loadTasks();
 }
 
-/* ------------------ LOGOUT (BIO BREAK) ------------------ */
-function logout(){
+/* ---------------- BIO BREAK ---------------- */
+function bioBreak(){
   endSession();
-  localStorage.setItem(STATE,"BIO_BREAK");
-  statusText.innerText="Status: Bio Break";
-  tasksBox.classList.add("hidden");
-  dayEndBox.classList.add("hidden");
+  localStorage.removeItem("LOGGED_IN");
+  status.innerText="Status: Bio Break";
+  tasksSection.classList.add("hidden");
 }
 
-/* ------------------ SESSION ------------------ */
+/* ---------------- SESSION ---------------- */
 function startSession(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   s.push({start:now().toISOString(),end:null});
@@ -162,22 +175,24 @@ function endSession(){
   localStorage.setItem(SESSIONS,JSON.stringify(s));
 }
 
-/* ------------------ TASKS ------------------ */
+/* ---------------- TASKS ---------------- */
 function loadTasks(){
-  const list=document.getElementById("taskList");
+  const list=taskList;
   list.innerHTML="";
-  const data=JSON.parse(localStorage.getItem(CURRENT)||"[]");
-  if(!data.length){list.innerText="No tasks assigned.";return;}
-
+  const data=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
+  if(!data.length){
+    list.innerText="No tasks assigned.";
+    return;
+  }
   data.forEach(t=>{
     const cb=document.createElement("input");
     cb.type="checkbox";
     cb.checked=t.done;
     cb.disabled=t.done;
     cb.onchange=()=>{
-      if(confirm("Confirm task done?")){
+      if(confirm("Mark task as completed?")){
         t.done=true;
-        localStorage.setItem(CURRENT,JSON.stringify(data));
+        localStorage.setItem(CURRENT_TASKS,JSON.stringify(data));
       }else cb.checked=false;
     };
     const div=document.createElement("div");
@@ -186,36 +201,31 @@ function loadTasks(){
     div.append(" "+t.name);
     list.appendChild(div);
   });
-
-  const btn=document.createElement("button");
-  btn.textContent="Day End";
-  btn.onclick=startDayEnd;
-  list.appendChild(btn);
 }
 
-/* ------------------ DAY END ------------------ */
-function startDayEnd(){
-  if(localStorage.getItem(STATE)!=="LOGGED_IN") return;
-  localStorage.setItem(STATE,"DAY_END_PENDING");
+/* ---------------- DAY END ---------------- */
+function openDayEnd(){
+  if(localStorage.getItem("LOGGED_IN")!=="YES") return;
+  if(localStorage.getItem(DAY_STATUS)==="CLOSED") return;
 
   let html="<h3>Confirm Day End</h3>";
-  html+="Next day subjects (1–7):<br>";
+  html+="<p>Next Day Subjects (max 7)</p>";
   for(let i=0;i<7;i++){
     html+=`<input id="s${i}" placeholder="Subject ${i+1}"><br>`;
   }
-  html+=`<br>Distraction time (minutes):<br>
-         <input id="dist" type="number" min="0"><br><br>
-         <button class="warn" onclick="confirmDayEnd()">Confirm Day End</button>`;
-  dayEndBox.innerHTML=html;
-  dayEndBox.classList.remove("hidden");
+  html+=`
+    <br>Distraction Time (minutes):<br>
+    <input id="dist" type="number" min="0"><br><br>
+    <button class="end" onclick="confirmDayEnd()">Confirm Day End</button>
+  `;
+  dayEndSection.innerHTML=html;
+  dayEndSection.classList.remove("hidden");
 }
 
-/* ------------------ CONFIRM DAY END ------------------ */
+/* ---------------- CONFIRM DAY END ---------------- */
 function confirmDayEnd(){
-  if(localStorage.getItem(STATE)!=="DAY_END_PENDING") return;
-
   let next=[];
-  const cur=JSON.parse(localStorage.getItem(CURRENT)||"[]");
+  const cur=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
   cur.filter(t=>!t.done).forEach(t=>next.push({name:t.name,done:false}));
 
   for(let i=0;i<7;i++){
@@ -223,16 +233,16 @@ function confirmDayEnd(){
     if(v) next.push({name:v,done:false});
   }
 
-  localStorage.setItem(NEXT,JSON.stringify(next));
+  localStorage.setItem(NEXT_TASKS,JSON.stringify(next));
   generateReport();
-  localStorage.setItem(STATE,"DAY_ENDED");
-  tasksBox.classList.add("hidden");
-  dayEndBox.classList.add("hidden");
-  reportBox.classList.remove("hidden");
-  logout();
+
+  localStorage.setItem(DAY_STATUS,"CLOSED");
+  bioBreak();
+  dayEndSection.classList.add("hidden");
+  reportSection.classList.remove("hidden");
 }
 
-/* ------------------ REPORT ------------------ */
+/* ---------------- REPORT ---------------- */
 function generateReport(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   let total=0;
@@ -244,48 +254,47 @@ function generateReport(){
   const prod=Math.max(total-dist,0);
   const pct=total?Math.round(prod/total*100):0;
 
-  let status="Poor";
-  if(pct>=80) status="Excellent";
-  else if(pct>=60) status="Good";
-  else if(pct>=40) status="Average";
+  let grade="Poor";
+  if(pct>=80) grade="Excellent";
+  else if(pct>=60) grade="Good";
+  else if(pct>=40) grade="Average";
 
-  const rep={date:new Date().toLocaleDateString(),total,prod,dist,pct,status};
+  const r={date:new Date().toLocaleDateString(),pct,grade};
   const all=JSON.parse(localStorage.getItem(REPORTS)||"[]");
-  all.push(rep);
+  const prev=all.length?all[all.length-1]:null;
+  all.push(r);
   localStorage.setItem(REPORTS,JSON.stringify(all));
 
-  reportBox.innerHTML=`
-    <h3>Report Card</h3>
-    Total Time: ${total} min<br>
-    Productive: ${prod} min<br>
-    Distraction: ${dist} min<br>
-    Productivity: ${pct}%
-    <div class="progress"><div class="bar" style="width:${pct}%">${pct}%</div></div>
-    <b>Status: ${status}</b>
+  reportSection.innerHTML=`
+    <div class="report-card">
+      <h3>Report Card</h3>
+      Productivity: ${pct}%
+      <div class="progress"><div class="bar" style="width:${pct}%">${pct}%</div></div>
+      Status: <b>${grade}</b><br>
+      ${prev?`Compared to previous day: ${pct-prev.pct>=0?"+":""}${pct-prev.pct}%`:""}
+    </div>
   `;
 }
 
-/* ------------------ HISTORY ------------------ */
-function showHistory(){
-  const box=document.getElementById("historyBox");
-  box.innerHTML="<h3>History</h3>";
-  const data=JSON.parse(localStorage.getItem(REPORTS)||"[]");
-  data.forEach(r=>{
-    box.innerHTML+=`
-      <div class="historyItem">
-        <b>${r.date}</b><br>
-        Productivity: ${r.pct}% (${r.status})
+/* ---------------- HISTORY ---------------- */
+function toggleHistory(){
+  historySection.classList.toggle("hidden");
+  historySection.innerHTML="<h3>History</h3>";
+  const h=JSON.parse(localStorage.getItem(REPORTS)||"[]");
+  h.forEach(x=>{
+    historySection.innerHTML+=`
+      <div class="history-item">
+        ${x.date} → ${x.pct}% (${x.grade})
       </div>`;
   });
-  box.classList.remove("hidden");
 }
 
-/* ------------------ MOTIVATION IMAGES ------------------ */
-let imgIndex=1;
+/* ---------------- MOTIVATION IMAGES ---------------- */
+let img=1;
 setInterval(()=>{
-  if(localStorage.getItem(STATE)==="LOGGED_IN"){
-    quoteBox.innerHTML=`<img src="${imgIndex}.png">`;
-    imgIndex++; if(imgIndex>30) imgIndex=1;
+  if(localStorage.getItem("LOGGED_IN")==="YES"){
+    quoteBox.innerHTML=`<img src="${img}.png">`;
+    img++; if(img>30) img=1;
   }
 },60000);
 </script>
