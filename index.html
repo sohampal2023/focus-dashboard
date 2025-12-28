@@ -5,214 +5,191 @@
   <link rel="stylesheet" href="style.css">
 </head>
 
-<body onload="loadRecord(); showLoginTime(); showLogoutTime();">
-  <div class="container">
-    <h1>Focus Dashboard</h1>
-    <p>Your personal study focus system is running.</p>
+<body onload="initPage()">
+<div class="container">
+  <h1>Focus Dashboard</h1>
 
-    <p class="status" id="statusText">Status: Logged out</p>
-    <p id="loginTime"></p>
-    <p id="logoutTime"></p>
+  <p id="statusText">Status: Logged out</p>
+  <p id="loginTime"></p>
+  <p id="logoutTime"></p>
 
-    <button onclick="login()">Login</button>
-    <button onclick="logoutWithReason()">Logout</button>
+  <button onclick="login()">Login</button>
+  <button onclick="logoutWithReason()">Logout</button>
 
-    <hr>
+  <hr>
 
-    <h3>Daily Focus Report</h3>
+  <h3>Assigned Tasks for Today</h3>
+  <div id="taskList"></div>
 
-    <label>Productive Time (HH : MM : SS)</label><br>
-    <input type="number" id="ph"> :
-    <input type="number" id="pm"> :
-    <input type="number" id="ps"><br><br>
+  <hr>
 
-    <label>Distracting Time (HH : MM : SS)</label><br>
-    <input type="number" id="dh"> :
-    <input type="number" id="dm"> :
-    <input type="number" id="ds"><br><br>
+  <h3>Day End</h3>
+  <button onclick="startDayEnd()">Day End</button>
 
-    <label>Total Time (HH : MM : SS)</label><br>
-    <input type="number" id="th"> :
-    <input type="number" id="tm"> :
-    <input type="number" id="ts"><br><br>
-
-    <label>Upload Proof (2–4 screenshots)</label><br>
-    <input type="file" id="proof" accept="image/*" multiple><br><br>
-
-    <button onclick="submitReport()">Submit Report</button>
-
-    <p id="result"></p>
-    <p id="saved"></p>
-
-    <hr>
-
-    <h3>Day End</h3>
-
-    <label>Next Day Task</label><br>
-    <input type="text" id="nextTask" placeholder="Example: Power Systems + Mock Test"><br><br>
-
-    <input type="checkbox" id="taskConfirm">
-    <label for="taskConfirm">I have planned my next day</label><br><br>
-
-    <button onclick="dayEnd()">Day End</button>
-  </div>
+  <div id="dayEndBox"></div>
+</div>
 
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-  import { getAuth, signInWithEmailAndPassword, signOut }
-    from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut }
+  from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 
-  const firebaseConfig = {
-    apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
-    authDomain: "focus-dashboard-5965a.firebaseapp.com",
-    projectId: "focus-dashboard-5965a",
-    storageBucket: "focus-dashboard-5965a.firebasestorage.app",
-    messagingSenderId: "337204334808",
-    appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
-  };
+/* ---------- FIREBASE ---------- */
+const firebaseConfig = {
+  apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
+  authDomain: "focus-dashboard-5965a.firebaseapp.com",
+  projectId: "focus-dashboard-5965a",
+  storageBucket: "focus-dashboard-5965a.firebasestorage.app",
+  messagingSenderId: "337204334808",
+  appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 
-  const app = initializeApp(firebaseConfig);
-  const auth = getAuth(app);
+/* ---------- HELPERS ---------- */
+function today() {
+  return new Date().toISOString().slice(0,10);
+}
+function nowTime() {
+  return new Date().toLocaleTimeString();
+}
 
-  let checkTimer = null;
+/* ---------- LOGIN ---------- */
+window.login = function () {
+  const email = prompt("Enter email");
+  const password = prompt("Enter password");
 
-  function today() {
-    return new Date().toISOString().slice(0,10);
+  signInWithEmailAndPassword(auth, email, password)
+    .then(() => {
+      localStorage.setItem("login-time", nowTime());
+      document.getElementById("statusText").innerText =
+        "Status: Logged in";
+      showLoginTime();
+      loadTasks();
+    })
+    .catch(err => alert(err.message));
+};
+
+window.logoutWithReason = function () {
+  const reason = prompt("Logout reason");
+  if (!reason) return alert("Reason required");
+
+  localStorage.setItem("logout-time", nowTime());
+  localStorage.setItem("logout-reason", reason);
+  showLogoutTime();
+  signOut(auth);
+  document.getElementById("statusText").innerText =
+    "Status: Logged out";
+};
+
+/* ---------- DAY END TASK CREATION ---------- */
+window.startDayEnd = function () {
+  const count = prompt("How many subjects tomorrow? (1–7)");
+  const n = Number(count);
+
+  if (!n || n < 1 || n > 7) {
+    alert("Enter number between 1 and 7");
+    return;
   }
 
-  function nowTime() {
-    return new Date().toLocaleTimeString();
+  let html = "<h4>Enter Subject Names</h4>";
+  for (let i = 0; i < n; i++) {
+    html += `<input type="text" id="sub${i}" placeholder="Subject ${i+1}"><br><br>`;
+  }
+  html += `<button onclick="confirmDayEnd(${n})">Confirm Day End</button>`;
+
+  document.getElementById("dayEndBox").innerHTML = html;
+};
+
+window.confirmDayEnd = function (n) {
+  let tasks = [];
+  for (let i = 0; i < n; i++) {
+    const val = document.getElementById("sub"+i).value.trim();
+    if (!val) {
+      alert("All subject names required");
+      return;
+    }
+    tasks.push({ name: val, done: false });
   }
 
-  function toSeconds(h,m,s) {
-    return h*3600 + m*60 + s;
-  }
+  localStorage.setItem("tasks-" + tomorrow(), JSON.stringify(tasks));
+  localStorage.setItem("logout-time", nowTime());
+  showLogoutTime();
+  alert("Day End successful");
+  signOut(auth);
+  location.reload();
+};
 
-  function startCheckCycle() {
-    clearInterval(checkTimer);
-    checkTimer = setInterval(() => {
-      if (!confirm("Are you still working?\n\nOK = Continue\nCancel = Take a break")) {
-        startBioBreak();
+function tomorrow() {
+  const d = new Date();
+  d.setDate(d.getDate()+1);
+  return d.toISOString().slice(0,10);
+}
+
+/* ---------- TASK HANDLING ---------- */
+function loadTasks() {
+  const data = localStorage.getItem("tasks-" + today());
+  if (!data) return;
+
+  const tasks = JSON.parse(data);
+  const box = document.getElementById("taskList");
+  box.innerHTML = "";
+
+  tasks.forEach((t, i) => {
+    const div = document.createElement("div");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.disabled = t.done;
+    cb.checked = t.done;
+
+    cb.onchange = () => {
+      if (confirm("Confirm this task is done?")) {
+        t.done = true;
+        saveTasks(tasks);
+        loadTasks();
+      } else {
+        cb.checked = false;
       }
-    }, 15*60*1000);
+    };
+
+    div.appendChild(cb);
+    div.append(" " + t.name);
+    box.appendChild(div);
+  });
+}
+
+function saveTasks(tasks) {
+  localStorage.setItem("tasks-" + today(), JSON.stringify(tasks));
+}
+
+/* ---------- AUTO MOVE INCOMPLETE TASKS ---------- */
+window.addEventListener("beforeunload", () => {
+  const data = localStorage.getItem("tasks-" + today());
+  if (!data) return;
+
+  const tasks = JSON.parse(data);
+  const pending = tasks.filter(t => !t.done);
+  if (pending.length > 0) {
+    localStorage.setItem("tasks-" + tomorrow(), JSON.stringify(pending));
   }
+});
 
-  function startBioBreak() {
-    clearInterval(checkTimer);
-    const reason = prompt("Bio Break Reason");
-    localStorage.setItem("logout-reason", reason || "Bio Break");
-    document.getElementById("statusText").innerText = "Status: Bio Break";
-  }
-
-  window.login = function () {
-    const email = prompt("Enter email");
-    const password = prompt("Enter password");
-
-    signInWithEmailAndPassword(auth, email, password)
-      .then(() => {
-        const t = nowTime();
-        localStorage.setItem("login-time", t);
-        document.getElementById("statusText").innerText =
-          "Status: Logged in (Firebase)";
-        document.getElementById("loginTime").innerText =
-          "Login Time: " + t;
-        startCheckCycle();
-      })
-      .catch(err => alert(err.message));
-  };
-
-  window.logoutWithReason = function () {
-    const reason = prompt("Logout reason");
-    if (!reason) {
-      alert("Logout reason required.");
-      return;
-    }
-
-    const t = nowTime();
-    localStorage.setItem("logout-time", t);
-    localStorage.setItem("logout-reason", reason);
-
-    document.getElementById("logoutTime").innerText =
-      "Logout Time: " + t;
-
-    logout();
-  };
-
-  window.logout = function () {
-    clearInterval(checkTimer);
-    document.getElementById("statusText").innerText =
-      "Status: Logged out";
-  };
-
-  window.dayEnd = function () {
-    const task = nextTask.value.trim();
-    const confirmed = taskConfirm.checked;
-
-    if (!task) {
-      alert("Please write your next day task.");
-      return;
-    }
-
-    if (!confirmed) {
-      alert("Please confirm next day planning.");
-      return;
-    }
-
-    localStorage.setItem("next-day-task", task);
-    localStorage.setItem("day-end-date", today());
-
-    alert("Day ended successfully.\nNext day task saved.");
-
-    logout();
-  };
-
-  window.submitReport = function () {
-    const files = proof.files;
-    if (!files || files.length < 2 || files.length > 4) {
-      saveRecord("ABSENT","0");
-      result.innerText = "ABSENT: Proof invalid.";
-      return;
-    }
-
-    const p = toSeconds(+ph.value,+pm.value,+ps.value);
-    const d = toSeconds(+dh.value,+dm.value,+ds.value);
-    const t = toSeconds(+th.value,+tm.value,+ts.value);
-
-    if (p+d > t || t===0) {
-      result.innerText = "Invalid time values.";
-      return;
-    }
-
-    const prod = ((p/t)*100).toFixed(1);
-    saveRecord("PRESENT",prod);
-    result.innerText = "PRESENT ✔ | Productivity: " + prod + "%";
-  };
-
-  function saveRecord(status,prod) {
-    const rec = {date:today(),status,prod};
-    localStorage.setItem("focus-"+today(), JSON.stringify(rec));
-    showSaved(rec);
-  }
-
-  window.loadRecord = function () {
-    const d = localStorage.getItem("focus-"+today());
-    if (d) showSaved(JSON.parse(d));
-  };
-
-  function showSaved(r) {
-    saved.innerText =
-      "Saved → " + r.date + " | " + r.status + " | " + r.prod + "%";
-  }
-
-  window.showLoginTime = function () {
-    const t = localStorage.getItem("login-time");
-    if (t) loginTime.innerText = "Login Time: " + t;
-  };
-
-  window.showLogoutTime = function () {
-    const t = localStorage.getItem("logout-time");
-    if (t) logoutTime.innerText = "Logout Time: " + t;
-  };
+/* ---------- UI ---------- */
+function showLoginTime() {
+  const t = localStorage.getItem("login-time");
+  if (t) document.getElementById("loginTime").innerText =
+    "Login Time: " + t;
+}
+function showLogoutTime() {
+  const t = localStorage.getItem("logout-time");
+  if (t) document.getElementById("logoutTime").innerText =
+    "Logout Time: " + t;
+}
+function initPage() {
+  showLoginTime();
+  showLogoutTime();
+  loadTasks();
+}
 </script>
 </body>
 </html>
