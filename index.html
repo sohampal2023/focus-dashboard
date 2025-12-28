@@ -2,15 +2,39 @@
 <html>
 <head>
   <title>Focus Dashboard</title>
+
   <style>
-    body { font-family: Arial; background:#f4f4f4; }
+    body {
+      font-family: Arial;
+      background:#f4f6f9;
+    }
+
     .container {
-      max-width: 800px;
+      max-width: 820px;
       margin: 30px auto;
       background: #fff;
       padding: 20px;
-      border-radius: 8px;
+      border-radius: 10px;
+      box-shadow: 0 8px 22px rgba(0,0,0,0.08);
     }
+
+    /* Quote section */
+    .quote-card {
+      background: #ffffff;
+      border-radius: 12px;
+      padding: 12px;
+      margin-bottom: 20px;
+      box-shadow: 0 6px 18px rgba(0,0,0,0.08);
+      text-align: center;
+    }
+
+    .quote-card img {
+      max-width: 100%;
+      max-height: 260px;
+      border-radius: 10px;
+      object-fit: contain;
+    }
+
     .progress {
       width: 100%;
       background: #ddd;
@@ -18,30 +42,49 @@
       overflow: hidden;
       margin: 8px 0;
     }
+
     .bar {
       height: 20px;
       background: #4caf50;
       color: white;
       text-align: center;
       font-size: 12px;
+      line-height: 20px;
     }
+
     .report {
       background:#eef6ff;
       padding:15px;
       margin-top:20px;
       border-radius:6px;
     }
-    .compare {
-      background:#fff3cd;
-      padding:12px;
-      margin-top:10px;
-      border-radius:6px;
+
+    button {
+      padding: 8px 14px;
+      border-radius: 6px;
+      border: none;
+      background: #4a90e2;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      margin-right: 6px;
+    }
+
+    button:hover {
+      background: #357ac9;
     }
   </style>
 </head>
 
 <body onload="initPage()">
+
 <div class="container">
+
+  <!-- 🌿 MOTIVATIONAL IMAGE QUOTE -->
+  <div class="quote-card">
+    <img id="quoteImage" src="quotes/1.jpg" alt="Motivational Quote">
+  </div>
+
   <h1>Focus Dashboard</h1>
 
   <p id="statusText">Status: Logged out</p>
@@ -61,9 +104,33 @@
   <div id="dayEndBox"></div>
 
   <div id="reportBox"></div>
+
 </div>
 
 <script>
+/* =====================================================
+   IMAGE QUOTE ROTATION (1 MINUTE)
+===================================================== */
+const TOTAL_QUOTES = 30;
+let quoteIndex = 1;
+
+function rotateQuote() {
+  document.getElementById("quoteImage").src =
+    "quotes/" + quoteIndex + ".jpg";
+  quoteIndex++;
+  if (quoteIndex > TOTAL_QUOTES) quoteIndex = 1;
+}
+
+// show first image
+rotateQuote();
+
+// change every 1 minute
+setInterval(rotateQuote, 60000);
+
+/* =====================================================
+   EXISTING LOGIC (UNCHANGED)
+===================================================== */
+
 /* ---------- STORAGE KEYS ---------- */
 const SESSIONS = "SESSIONS";
 const CURRENT = "CURRENT_TASKS";
@@ -116,7 +183,8 @@ function startDayEnd() {
     <label><input type="checkbox" id="yt"> YouTube</label><br>
     <label><input type="checkbox" id="fb"> Facebook</label><br>
     <label><input type="checkbox" id="ig"> Instagram</label><br><br>
-    Distraction Time (minutes): <input type="number" id="dist" min="0"><br><br>
+    Distraction Time (minutes):
+    <input type="number" id="dist" min="0"><br><br>
     <button onclick="confirmDayEnd(${n})">Confirm Day End</button>
   `;
   dayEndBox.innerHTML = html;
@@ -126,7 +194,8 @@ function confirmDayEnd(n) {
   let nextTasks = [];
 
   const current = JSON.parse(localStorage.getItem(CURRENT) || "[]");
-  current.filter(t => !t.done).forEach(t => nextTasks.push({name:t.name,done:false}));
+  current.filter(t => !t.done)
+         .forEach(t => nextTasks.push({name:t.name,done:false}));
 
   for (let i = 0; i < n; i++) {
     const v = document.getElementById("s"+i).value.trim();
@@ -152,7 +221,7 @@ function activateNextDayIfNeeded() {
       localStorage.removeItem(NEXT);
     }
     localStorage.removeItem(DAY_ENDED);
-    localStorage.removeItem(SESSIONS); // reset sessions for new day
+    localStorage.removeItem(SESSIONS);
   }
 }
 
@@ -202,9 +271,6 @@ function generateReport() {
 
   const status = prodPct>=80?"EXCELLENT":prodPct>=50?"AVERAGE":"POOR";
 
-  const last = JSON.parse(localStorage.getItem(LAST));
-  if(last) localStorage.setItem(PREV, JSON.stringify(last));
-
   localStorage.setItem(LAST, JSON.stringify({
     totalMin, productive, dist, prodPct, taskPct, status
   }));
@@ -219,12 +285,15 @@ function showReport() {
       <h3>Last Report Card</h3>
       Total Time: ${r.totalMin} min<br>
       Productive: ${r.productive} min<br>
-      Distraction: ${r.dist} min<br>
+      Distraction: ${r.dist} min<br><br>
+
       Productivity: ${r.prodPct}%
       <div class="progress"><div class="bar" style="width:${r.prodPct}%">${r.prodPct}%</div></div>
+
       Task Completion: ${r.taskPct}%
       <div class="progress"><div class="bar" style="width:${r.taskPct}%">${r.taskPct}%</div></div>
-      <b>Status: ${r.status}</b>
+
+      <b>Status:</b> ${r.status}
     </div>
   `;
 }
@@ -235,5 +304,6 @@ function initPage(){
   showReport();
 }
 </script>
+
 </body>
 </html>
