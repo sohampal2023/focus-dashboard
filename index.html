@@ -8,7 +8,21 @@
   <div class="container">
     <h1>Focus Dashboard</h1>
     <p>Your personal study focus system is running.</p>
-    <p class="status">Status: Logged out</p>
+
+    <p class="status" id="statusText">Status: Logged out</p>
+
+    <button onclick="login()">Login</button>
+    <button onclick="logout()">Logout</button>
   </div>
+
+  <script>
+    function login() {
+      document.getElementById("statusText").innerText = "Status: Logged in";
+    }
+
+    function logout() {
+      document.getElementById("statusText").innerText = "Status: Logged out";
+    }
+  </script>
 </body>
 </html>
