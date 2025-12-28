@@ -5,36 +5,36 @@
   <link rel="stylesheet" href="style.css">
 </head>
 
-<body onload="loadRecord(); showLoginTime();">
+<body onload="loadRecord(); showLoginTime(); showLogoutTime();">
   <div class="container">
     <h1>Focus Dashboard</h1>
     <p>Your personal study focus system is running.</p>
 
     <p class="status" id="statusText">Status: Logged out</p>
     <p id="loginTime"></p>
+    <p id="logoutTime"></p>
 
     <button onclick="login()">Login</button>
-    <button onclick="logout()">Logout</button>
-    <button onclick="shiftOver()">Shift Over</button>
+    <button onclick="logoutWithReason()">Logout</button>
 
     <hr>
 
     <h3>Daily Focus Report</h3>
 
     <label>Productive Time (HH : MM : SS)</label><br>
-    <input type="number" id="ph" min="0"> :
-    <input type="number" id="pm" min="0" max="59"> :
-    <input type="number" id="ps" min="0" max="59"><br><br>
+    <input type="number" id="ph"> :
+    <input type="number" id="pm"> :
+    <input type="number" id="ps"><br><br>
 
     <label>Distracting Time (HH : MM : SS)</label><br>
-    <input type="number" id="dh" min="0"> :
-    <input type="number" id="dm" min="0" max="59"> :
-    <input type="number" id="ds" min="0" max="59"><br><br>
+    <input type="number" id="dh"> :
+    <input type="number" id="dm"> :
+    <input type="number" id="ds"><br><br>
 
     <label>Total Time (HH : MM : SS)</label><br>
-    <input type="number" id="th" min="0"> :
-    <input type="number" id="tm" min="0" max="59"> :
-    <input type="number" id="ts" min="0" max="59"><br><br>
+    <input type="number" id="th"> :
+    <input type="number" id="tm"> :
+    <input type="number" id="ts"><br><br>
 
     <label>Upload Proof (2–4 screenshots)</label><br>
     <input type="file" id="proof" accept="image/*" multiple><br><br>
@@ -43,6 +43,18 @@
 
     <p id="result"></p>
     <p id="saved"></p>
+
+    <hr>
+
+    <h3>Day End</h3>
+
+    <label>Next Day Task</label><br>
+    <input type="text" id="nextTask" placeholder="Example: Power Systems + Mock Test"><br><br>
+
+    <input type="checkbox" id="taskConfirm">
+    <label for="taskConfirm">I have planned my next day</label><br><br>
+
+    <button onclick="dayEnd()">Day End</button>
   </div>
 
 <script type="module">
@@ -63,10 +75,13 @@
   const auth = getAuth(app);
 
   let checkTimer = null;
-  let responseTimer = null;
 
   function today() {
     return new Date().toISOString().slice(0,10);
+  }
+
+  function nowTime() {
+    return new Date().toLocaleTimeString();
   }
 
   function toSeconds(h,m,s) {
@@ -75,28 +90,17 @@
 
   function startCheckCycle() {
     clearInterval(checkTimer);
-    checkTimer = setInterval(checkPopup, 15*60*1000);
-  }
-
-  function checkPopup() {
-    let responded = false;
-
-    responseTimer = setTimeout(() => {
-      if (!responded) startBioBreak();
-    }, 2*60*1000);
-
-    const ok = confirm("Are you still working?\n\nOK = Continue\nCancel = Bio Break");
-    responded = true;
-    clearTimeout(responseTimer);
-
-    if (ok) startCheckCycle();
-    else startBioBreak();
+    checkTimer = setInterval(() => {
+      if (!confirm("Are you still working?\n\nOK = Continue\nCancel = Take a break")) {
+        startBioBreak();
+      }
+    }, 15*60*1000);
   }
 
   function startBioBreak() {
     clearInterval(checkTimer);
-    const reason = prompt("Bio Break Reason:\nWashroom / Tea / Phone / Other");
-    localStorage.setItem("bio-break-reason", reason || "Not specified");
+    const reason = prompt("Bio Break Reason");
+    localStorage.setItem("logout-reason", reason || "Bio Break");
     document.getElementById("statusText").innerText = "Status: Bio Break";
   }
 
@@ -106,27 +110,59 @@
 
     signInWithEmailAndPassword(auth, email, password)
       .then(() => {
-        const now = new Date().toLocaleTimeString();
-        localStorage.setItem("login-time", now);
-        document.getElementById("statusText").innerText = "Status: Logged in (Firebase)";
-        document.getElementById("loginTime").innerText = "Login Time: " + now;
+        const t = nowTime();
+        localStorage.setItem("login-time", t);
+        document.getElementById("statusText").innerText =
+          "Status: Logged in (Firebase)";
+        document.getElementById("loginTime").innerText =
+          "Login Time: " + t;
         startCheckCycle();
       })
       .catch(err => alert(err.message));
   };
 
-  window.logout = function () {
-    clearInterval(checkTimer);
-    document.getElementById("statusText").innerText = "Status: Logged out";
-  };
-
-  window.shiftOver = function () {
-    const planned = confirm("Next day task planned?");
-    if (!planned) {
-      alert("Please plan next day task before logout.");
+  window.logoutWithReason = function () {
+    const reason = prompt("Logout reason");
+    if (!reason) {
+      alert("Logout reason required.");
       return;
     }
-    localStorage.setItem("next-day-task", "planned");
+
+    const t = nowTime();
+    localStorage.setItem("logout-time", t);
+    localStorage.setItem("logout-reason", reason);
+
+    document.getElementById("logoutTime").innerText =
+      "Logout Time: " + t;
+
+    logout();
+  };
+
+  window.logout = function () {
+    clearInterval(checkTimer);
+    document.getElementById("statusText").innerText =
+      "Status: Logged out";
+  };
+
+  window.dayEnd = function () {
+    const task = nextTask.value.trim();
+    const confirmed = taskConfirm.checked;
+
+    if (!task) {
+      alert("Please write your next day task.");
+      return;
+    }
+
+    if (!confirmed) {
+      alert("Please confirm next day planning.");
+      return;
+    }
+
+    localStorage.setItem("next-day-task", task);
+    localStorage.setItem("day-end-date", today());
+
+    alert("Day ended successfully.\nNext day task saved.");
+
     logout();
   };
 
@@ -164,12 +200,18 @@
   };
 
   function showSaved(r) {
-    saved.innerText = "Saved → " + r.date + " | " + r.status + " | " + r.prod + "%";
+    saved.innerText =
+      "Saved → " + r.date + " | " + r.status + " | " + r.prod + "%";
   }
 
   window.showLoginTime = function () {
     const t = localStorage.getItem("login-time");
     if (t) loginTime.innerText = "Login Time: " + t;
+  };
+
+  window.showLogoutTime = function () {
+    const t = localStorage.getItem("logout-time");
+    if (t) logoutTime.innerText = "Logout Time: " + t;
   };
 </script>
 </body>
