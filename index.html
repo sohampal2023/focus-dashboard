@@ -3,11 +3,11 @@
 <head>
   <title>Focus Dashboard</title>
   <style>
-    body { font-family: Arial; background:#f5f5f5; }
+    body { font-family: Arial; background:#f4f4f4; }
     .container {
-      max-width: 700px;
+      max-width: 720px;
       margin: 30px auto;
-      background: white;
+      background: #fff;
       padding: 20px;
       border-radius: 8px;
     }
@@ -21,13 +21,12 @@
     .bar {
       height: 20px;
       background: #4caf50;
-      width: 0%;
-      text-align: center;
       color: white;
+      text-align: center;
       font-size: 12px;
     }
     .report {
-      background:#f0f8ff;
+      background:#eef6ff;
       padding:15px;
       margin-top:20px;
       border-radius:6px;
@@ -48,14 +47,14 @@
 
   <hr>
 
-  <h3>Assigned Tasks for Today</h3>
+  <h3>Assigned Tasks</h3>
   <div id="taskList">No tasks assigned.</div>
 
   <hr>
 
-  <h3>Productivity Input</h3>
-  Productive (min): <input type="number" id="prod" min="0"><br><br>
-  Total (min): <input type="number" id="total" min="1"><br><br>
+  <h3>Productivity</h3>
+  Productive (minutes): <input type="number" id="prod" min="0"><br><br>
+  Total (minutes): <input type="number" id="total" min="1"><br><br>
 
   <hr>
 
@@ -66,168 +65,157 @@
   <div id="reportBox"></div>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut }
-  from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-
-initializeApp({
-  apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
-  authDomain: "focus-dashboard-5965a.firebaseapp.com",
-  projectId: "focus-dashboard-5965a"
-});
-
-const auth = getAuth();
-
-/* ---------- DATE HELPERS ---------- */
-function today(){ return new Date().toISOString().slice(0,10); }
-function tomorrow(){
-  const d=new Date(); d.setDate(d.getDate()+1);
-  return d.toISOString().slice(0,10);
-}
-function yesterday(){
-  const d=new Date(); d.setDate(d.getDate()-1);
-  return d.toISOString().slice(0,10);
-}
-function nowTime(){ return new Date().toLocaleTimeString(); }
+<script>
+/* ---------- STATE KEYS ---------- */
+const CURRENT = "CURRENT_TASKS";
+const NEXT = "NEXT_TASKS";
+const DAY_ENDED = "DAY_ENDED";
 
 /* ---------- LOGIN ---------- */
-window.login = function(){
-  const e=prompt("Email"), p=prompt("Password");
-  signInWithEmailAndPassword(auth,e,p).then(()=>{
-    localStorage.setItem("login-"+today(), nowTime());
-    document.getElementById("statusText").innerText="Status: Logged in";
-    showTimes();
-    loadTasks();
-    showReport();
-  }).catch(err=>alert(err.message));
-};
-
-window.logoutWithReason = function(){
-  const r=prompt("Logout reason");
-  if(!r) return;
-  localStorage.setItem("logout-"+today(), nowTime());
-  signOut(auth);
-  document.getElementById("statusText").innerText="Status: Logged out";
+function login() {
+  document.getElementById("statusText").innerText = "Status: Logged in";
+  localStorage.setItem("loginTime", new Date().toLocaleTimeString());
   showTimes();
-};
+  activateNextDayIfNeeded();
+  loadTasks();
+  showReport();
+}
 
-/* ---------- TASKS ---------- */
-function loadTasks(){
-  let data=localStorage.getItem("tasks-"+today());
-  if(!data){
-    const y=localStorage.getItem("tasks-"+yesterday());
-    if(y){
-      const p=JSON.parse(y).filter(t=>!t.done);
-      if(p.length){
-        localStorage.setItem("tasks-"+today(), JSON.stringify(p));
-        data=JSON.stringify(p);
-      }
-    }
+function logoutWithReason() {
+  const reason = prompt("Logout reason");
+  if (!reason) return alert("Reason required");
+
+  localStorage.setItem("logoutTime", new Date().toLocaleTimeString());
+  localStorage.setItem("logoutReason", reason);
+  document.getElementById("statusText").innerText = "Status: Logged out";
+  showTimes();
+}
+
+/* ---------- DAY END ---------- */
+function startDayEnd() {
+  const n = Number(prompt("How many subjects next? (1–7)"));
+  if (n < 1 || n > 7) return alert("1–7 only");
+
+  let html = "<h4>Next Tasks</h4>";
+  for (let i = 0; i < n; i++) {
+    html += `<input id="s${i}" placeholder="Subject ${i+1}"><br><br>`;
+  }
+  html += `<button onclick="confirmDayEnd(${n})">Confirm Day End</button>`;
+  dayEndBox.innerHTML = html;
+}
+
+function confirmDayEnd(n) {
+  let nextTasks = [];
+
+  // move unfinished current tasks
+  const current = JSON.parse(localStorage.getItem(CURRENT) || "[]");
+  current.filter(t => !t.done).forEach(t => nextTasks.push({ name: t.name, done:false }));
+
+  // add new tasks
+  for (let i = 0; i < n; i++) {
+    const v = document.getElementById("s"+i).value.trim();
+    if (!v) return alert("Fill all subjects");
+    nextTasks.push({ name:v, done:false });
   }
 
-  const box=document.getElementById("taskList");
-  box.innerHTML="";
-  if(!data){ box.innerText="No tasks assigned."; return; }
+  localStorage.setItem(NEXT, JSON.stringify(nextTasks));
+  localStorage.removeItem(CURRENT);
+  localStorage.setItem(DAY_ENDED, "true");
 
-  const tasks=JSON.parse(data);
+  generateReport();
+
+  localStorage.setItem("logoutTime", new Date().toLocaleTimeString());
+  logoutWithReason();
+  location.reload();
+}
+
+/* ---------- TASK ACTIVATION ---------- */
+function activateNextDayIfNeeded() {
+  if (localStorage.getItem(DAY_ENDED) === "true") {
+    const next = localStorage.getItem(NEXT);
+    if (next) {
+      localStorage.setItem(CURRENT, next);
+      localStorage.removeItem(NEXT);
+    }
+    localStorage.removeItem(DAY_ENDED);
+  }
+}
+
+/* ---------- TASK UI ---------- */
+function loadTasks() {
+  const box = document.getElementById("taskList");
+  const data = localStorage.getItem(CURRENT);
+  box.innerHTML = "";
+
+  if (!data) {
+    box.innerText = "No tasks assigned.";
+    return;
+  }
+
+  const tasks = JSON.parse(data);
   tasks.forEach((t,i)=>{
-    const cb=document.createElement("input");
-    cb.type="checkbox"; cb.checked=t.done; cb.disabled=t.done;
-    cb.onchange=()=>{
-      if(confirm("Confirm task done?")){
-        t.done=true;
-        localStorage.setItem("tasks-"+today(),JSON.stringify(tasks));
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = t.done;
+    cb.disabled = t.done;
+
+    cb.onchange = () => {
+      if (confirm("Confirm task done?")) {
+        t.done = true;
+        localStorage.setItem(CURRENT, JSON.stringify(tasks));
         loadTasks();
-      } else cb.checked=false;
+      } else cb.checked = false;
     };
+
     box.appendChild(cb);
-    box.append(" "+t.name);
+    box.append(" " + t.name);
     box.appendChild(document.createElement("br"));
   });
 }
 
-/* ---------- DAY END ---------- */
-window.startDayEnd = function(){
-  const n=Number(prompt("How many subjects tomorrow? (1–7)"));
-  if(n<1||n>7) return alert("1–7 only");
-
-  let html="<h4>Tomorrow Subjects</h4>";
-  for(let i=0;i<n;i++)
-    html+=`<input id="s${i}" placeholder="Subject ${i+1}"><br><br>`;
-  html+=`<button onclick="confirmDayEnd(${n})">Confirm Day End</button>`;
-  dayEndBox.innerHTML=html;
-};
-
-window.confirmDayEnd = function(n){
-  let tasks=[];
-  for(let i=0;i<n;i++){
-    const v=document.getElementById("s"+i).value.trim();
-    if(!v) return alert("Fill all");
-    tasks.push({name:v,done:false});
-  }
-
-  localStorage.setItem("tasks-"+tomorrow(),JSON.stringify(tasks));
-  localStorage.setItem("logout-"+today(), nowTime());
-  generateReport();
-  signOut(auth);
-  location.reload();
-};
-
 /* ---------- REPORT CARD ---------- */
-function generateReport(){
-  const prod=Number(prodInput());
-  const tot=Number(totalInput());
-  const prodPct=Math.round((prod/tot)*100);
+function generateReport() {
+  const p = Number(document.getElementById("prod").value || 0);
+  const t = Number(document.getElementById("total").value || 1);
+  const prodPct = Math.round((p/t)*100);
 
-  const tasks=JSON.parse(localStorage.getItem("tasks-"+today())||"[]");
-  const done=tasks.filter(t=>t.done).length;
-  const taskPct=tasks.length?Math.round((done/tasks.length)*100):100;
+  const tasks = JSON.parse(localStorage.getItem(CURRENT) || "[]");
+  const done = tasks.filter(x=>x.done).length;
+  const taskPct = tasks.length ? Math.round((done/tasks.length)*100) : 100;
 
-  const status =
-    prodPct>=80?"EXCELLENT":
-    prodPct>=50?"AVERAGE":"POOR";
+  const status = prodPct>=80 ? "EXCELLENT" : prodPct>=50 ? "AVERAGE" : "POOR";
 
-  const report={
-    date:today(),
-    login:localStorage.getItem("login-"+today()),
-    logout:localStorage.getItem("logout-"+today()),
-    prodPct, taskPct, status
-  };
-
-  localStorage.setItem("report-"+today(),JSON.stringify(report));
+  const report = { prodPct, taskPct, status };
+  localStorage.setItem("LAST_REPORT", JSON.stringify(report));
 }
 
-/* ---------- SHOW REPORT ---------- */
-function showReport(){
-  const r=localStorage.getItem("report-"+yesterday());
-  if(!r) return;
-  const d=JSON.parse(r);
+function showReport() {
+  const r = localStorage.getItem("LAST_REPORT");
+  if (!r) return;
+  const d = JSON.parse(r);
 
-  reportBox.innerHTML=`
+  reportBox.innerHTML = `
     <div class="report">
-      <h3>Report Card (${d.date})</h3>
-      Login: ${d.login}<br>
-      Logout: ${d.logout}<br>
-      Productivity: ${d.prodPct}%<br>
-      Task Completion: ${d.taskPct}%
+      <h3>Last Report Card</h3>
+      Productivity: ${d.prodPct}%
       <div class="progress"><div class="bar" style="width:${d.prodPct}%">${d.prodPct}%</div></div>
+      Task Completion: ${d.taskPct}%
+      <div class="progress"><div class="bar" style="width:${d.taskPct}%">${d.taskPct}%</div></div>
       <b>Status: ${d.status}</b>
     </div>`;
 }
 
-/* ---------- HELPERS ---------- */
-function prodInput(){ return document.getElementById("prod").value||0; }
-function totalInput(){ return document.getElementById("total").value||1; }
-function showTimes(){
-  loginTime.innerText="Login: "+(localStorage.getItem("login-"+today())||"");
-  logoutTime.innerText="Logout: "+(localStorage.getItem("logout-"+today())||"");
+/* ---------- UI ---------- */
+function showTimes() {
+  loginTime.innerText = "Login: " + (localStorage.getItem("loginTime") || "");
+  logoutTime.innerText = "Logout: " + (localStorage.getItem("logoutTime") || "");
 }
-window.initPage=function(){
+
+function initPage() {
   showTimes();
   loadTasks();
   showReport();
-};
+}
 </script>
 </body>
 </html>
