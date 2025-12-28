@@ -85,10 +85,22 @@ body{
 }
 .bar{
   height:100%;
-  background:linear-gradient(90deg,#22c55e,#4ade80);
   font-size:11px;
   text-align:center;
+  color:#020617;
+  font-weight:700;
 }
+
+/* GRADE COLORS */
+.bar.EXCELLENT{background:linear-gradient(90deg,#22c55e,#4ade80)}
+.bar.GOOD{background:linear-gradient(90deg,#84cc16,#bef264)}
+.bar.AVERAGE{background:linear-gradient(90deg,#facc15,#fde047)}
+.bar.POOR{background:linear-gradient(90deg,#ef4444,#f87171)}
+
+.grade-EXCELLENT{color:#22c55e}
+.grade-GOOD{color:#84cc16}
+.grade-AVERAGE{color:#facc15}
+.grade-POOR{color:#ef4444}
 
 /* HISTORY */
 .history-item{
@@ -108,6 +120,7 @@ body{
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
   <div id="status" class="status">Status: Logged out</div>
+
   <div class="nav">
     <button onclick="login()">Login</button>
     <button onclick="bioBreak()">Bio Break</button>
@@ -122,6 +135,7 @@ body{
     <h3>Assigned Tasks</h3>
     <div id="taskList"></div>
   </div>
+
   <div id="dayEndBox" class="card hidden"></div>
   <div id="reportBox" class="card hidden"></div>
   <div id="historyBox" class="card hidden"></div>
@@ -131,12 +145,12 @@ body{
 
 <script>
 /* DOM */
-const status = document.getElementById("status");
-const tasksBox = document.getElementById("tasksBox");
-const taskList = document.getElementById("taskList");
-const dayEndBox = document.getElementById("dayEndBox");
-const reportBox = document.getElementById("reportBox");
-const historyBox = document.getElementById("historyBox");
+const status=document.getElementById("status");
+const tasksBox=document.getElementById("tasksBox");
+const taskList=document.getElementById("taskList");
+const dayEndBox=document.getElementById("dayEndBox");
+const reportBox=document.getElementById("reportBox");
+const historyBox=document.getElementById("historyBox");
 
 /* STORAGE */
 const DAY_STATUS="DAY_STATUS";
@@ -148,7 +162,7 @@ const REPORTS="REPORTS";
 /* TIME */
 const now=()=>new Date();
 const stamp=()=>new Date().toLocaleTimeString([],{
-  hour:'2-digit',minute:'2-digit'
+  hour:"2-digit",minute:"2-digit"
 });
 const mins=(a,b)=>Math.round((b-a)/60000);
 
@@ -229,7 +243,8 @@ function openDayEnd(){
   if(localStorage.getItem(DAY_STATUS)==="CLOSED")return;
 
   let h="<h3>Confirm Day End</h3><p>Next Day Subjects</p>";
-  for(let i=0;i<7;i++)h+=`<input id="s${i}" placeholder="Subject ${i+1}"><br>`;
+  for(let i=0;i<7;i++)
+    h+=`<input id="s${i}" placeholder="Subject ${i+1}"><br>`;
   h+=`<br>Distraction (min)<br>
       <input id="dist" type="number"><br><br>
       <button onclick="confirmDayEnd()">Confirm</button>`;
@@ -255,7 +270,7 @@ function confirmDayEnd(){
   reportBox.classList.remove("hidden");
 }
 
-/* REPORT (COMBINED GRADE) */
+/* REPORT (COMBINED + COLOR CODED) */
 function generateReport(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   let total=0;
@@ -267,9 +282,10 @@ function generateReport(){
   const taskPct=t.length?Math.round(t.filter(x=>x.done).length/t.length*100):0;
 
   const finalScore=Math.round((pct+taskPct)/2);
-  const grade=finalScore>=80?"EXCELLENT":
-              finalScore>=60?"GOOD":
-              finalScore>=40?"AVERAGE":"POOR";
+  const grade=
+    finalScore>=80?"EXCELLENT":
+    finalScore>=60?"GOOD":
+    finalScore>=40?"AVERAGE":"POOR";
 
   const r={date:new Date().toLocaleDateString(),pct,taskPct,finalScore,grade};
   const all=JSON.parse(localStorage.getItem(REPORTS)||"[]");
@@ -280,13 +296,17 @@ function generateReport(){
     <h3>Report Card</h3>
 
     Time Productivity: ${pct}%
-    <div class="progress"><div class="bar" style="width:${pct}%">${pct}%</div></div>
+    <div class="progress">
+      <div class="bar ${grade}" style="width:${pct}%">${pct}%</div>
+    </div>
 
     Tasks Completed: ${taskPct}%
-    <div class="progress"><div class="bar" style="width:${taskPct}%">${taskPct}%</div></div>
+    <div class="progress">
+      <div class="bar ${grade}" style="width:${taskPct}%">${taskPct}%</div>
+    </div>
 
     Final Score: ${finalScore}%<br>
-    Grade: <b>${grade}</b>
+    Grade: <b class="grade-${grade}">${grade}</b>
   `;
 }
 
@@ -298,7 +318,10 @@ function toggleHistory(){
   h.forEach(x=>{
     historyBox.innerHTML+=`
       <div class="history-item">
-        ${x.date} → Final ${x.finalScore}% (${x.grade})
+        ${x.date} →
+        <b class="grade-${x.grade}">
+          ${x.finalScore}% (${x.grade})
+        </b>
       </div>`;
   });
 }
