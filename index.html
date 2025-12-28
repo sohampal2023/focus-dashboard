@@ -49,6 +49,19 @@
       border-radius:6px;
     }
 
+    .compare {
+      background:#fff3cd;
+      padding:10px;
+      margin-top:10px;
+      border-radius:6px;
+    }
+
+    .grade {
+      font-size: 18px;
+      font-weight: bold;
+      margin-top: 10px;
+    }
+
     button { padding:6px 12px; margin-right:6px; }
   </style>
 </head>
@@ -80,13 +93,11 @@
   <button onclick="startDayEnd()">Day End</button>
   <div id="dayEndBox"></div>
 
-  <!-- ✅ REPORT CARD BOX (ADDED) -->
   <div id="reportBox"></div>
-
 </div>
 
 <script>
-/* ================= QUOTE ROTATION ================= */
+/* ===== QUOTE ROTATION ===== */
 const TOTAL_QUOTES = 30;
 let qi = 1;
 setInterval(() => {
@@ -94,24 +105,24 @@ setInterval(() => {
   document.getElementById("quoteImg").src = qi + ".png";
 }, 60000);
 
-/* ================= STORAGE ================= */
+/* ===== STORAGE ===== */
 const SESSIONS = "SESSIONS";
 const CURRENT = "CURRENT_TASKS";
 const NEXT = "NEXT_TASKS";
 const DAY_ENDED = "DAY_ENDED";
 const LAST = "LAST_REPORT";
+const PREV = "PREV_REPORT";
 
-/* ================= HELPERS ================= */
+/* ===== HELPERS ===== */
 function now(){ return new Date(); }
 function minutesBetween(a,b){ return Math.round((b-a)/60000); }
 
-/* ================= LOGIN ================= */
+/* ===== LOGIN ===== */
 function login() {
   const id = prompt("Enter ID");
   const pass = prompt("Enter Password");
   if (!id || !pass) return;
 
-  // hide report on new day login
   document.getElementById("reportBox").innerHTML = "";
 
   const sessions = JSON.parse(localStorage.getItem(SESSIONS) || "[]");
@@ -124,7 +135,7 @@ function login() {
   loadTasks();
 }
 
-/* ================= LOGOUT ================= */
+/* ===== LOGOUT ===== */
 function logout() {
   const sessions = JSON.parse(localStorage.getItem(SESSIONS) || "[]");
   for (let i=sessions.length-1;i>=0;i--) {
@@ -138,7 +149,7 @@ function logout() {
   document.getElementById("taskList").innerText = "Login to see tasks.";
 }
 
-/* ================= DAY END ================= */
+/* ===== DAY END ===== */
 function startDayEnd() {
   if (document.getElementById("statusText").innerText !== "Status: Logged in") {
     alert("Login first");
@@ -178,11 +189,11 @@ function confirmDayEnd(n) {
   localStorage.setItem(DAY_ENDED,"true");
 
   generateReport();
-  showReport();   // ✅ SHOW REPORT (ADDED)
+  showReport();
   logout();
 }
 
-/* ================= TASK FLOW ================= */
+/* ===== TASK FLOW ===== */
 function activateNextDayIfNeeded(){
   if(localStorage.getItem(DAY_ENDED)==="true"){
     const next=localStorage.getItem(NEXT);
@@ -219,7 +230,7 @@ function loadTasks(){
   });
 }
 
-/* ================= REPORT ================= */
+/* ===== REPORT ===== */
 function generateReport(){
   const sessions=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   let totalMin=0;
@@ -236,19 +247,39 @@ function generateReport(){
   const done=tasks.filter(t=>t.done).length;
   const taskPct=tasks.length?Math.round(done/tasks.length*100):100;
 
+  const last = JSON.parse(localStorage.getItem(LAST));
+  if (last) localStorage.setItem(PREV, JSON.stringify(last));
+
   localStorage.setItem(LAST,JSON.stringify({
     totalMin,productive,dist,prodPct,taskPct
   }));
 }
 
-/* ✅ REPORT DISPLAY (ONLY ADDITION) */
+function getGrade(p){
+  if (p>=80) return "EXCELLENT ⭐";
+  if (p>=60) return "GOOD 👍";
+  if (p>=40) return "AVERAGE ⚠";
+  return "POOR ❌";
+}
+
 function showReport(){
   const r=JSON.parse(localStorage.getItem(LAST));
   if(!r) return;
 
+  const prev = JSON.parse(localStorage.getItem(PREV));
+  let compareText = "No previous data";
+
+  if (prev) {
+    const diff = r.prodPct - prev.prodPct;
+    if (diff > 0) compareText = `Improved by ${diff}% 📈`;
+    else if (diff < 0) compareText = `Dropped by ${Math.abs(diff)}% 📉`;
+    else compareText = "Same as yesterday ➖";
+  }
+
   document.getElementById("reportBox").innerHTML=`
     <div class="report">
       <h3>Daily Report Card</h3>
+
       Total Time: ${r.totalMin} min<br>
       Productive Time: ${r.productive} min<br>
       Distraction Time: ${r.dist} min<br><br>
@@ -261,6 +292,12 @@ function showReport(){
       Task Completion: ${r.taskPct}%
       <div class="progress">
         <div class="bar" style="width:${r.taskPct}%">${r.taskPct}%</div>
+      </div>
+
+      <div class="grade">Grade: ${getGrade(r.prodPct)}</div>
+
+      <div class="compare">
+        <b>Comparison:</b> ${compareText}
       </div>
     </div>
   `;
