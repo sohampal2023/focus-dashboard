@@ -7,16 +7,13 @@
 <style>
 *{box-sizing:border-box}
 html,body{
-  margin:0;
-  padding:0;
-  height:100%;
-  font-family:"Segoe UI",system-ui,sans-serif;
+  margin:0;height:100%;
+  font-family:Segoe UI,system-ui,sans-serif;
 }
 body{
   background:linear-gradient(135deg,#0f172a,#020617);
   color:#e5e7eb;
 }
-
 .app{
   display:grid;
   grid-template-columns:280px 1fr;
@@ -25,36 +22,29 @@ body{
 
 /* SIDEBAR */
 .sidebar{
-  background:#020617;
   padding:20px;
   display:flex;
   flex-direction:column;
-  gap:22px;
+  gap:18px;
   border-right:1px solid #1e293b;
 }
 .sidebar h2{
   text-align:center;
-  margin:0;
-  font-size:22px;
   color:#38bdf8;
+  margin:0;
 }
-
 .status{
-  background:#020617;
-  border:1px solid #334155;
-  padding:20px;
+  padding:18px;
   border-radius:14px;
+  border:1px solid #334155;
   text-align:center;
   font-weight:700;
-  font-size:16px;
   line-height:1.5;
 }
-
-/* NAV */
 .nav button{
   width:100%;
-  margin-bottom:12px;
   padding:14px;
+  margin-bottom:10px;
   border-radius:12px;
   border:1px solid #1e293b;
   background:#020617;
@@ -67,9 +57,8 @@ body{
 /* MAIN */
 .main{
   padding:25px;
-  overflow-y:auto;
+  overflow:auto;
 }
-
 .card{
   background:#020617;
   border:1px solid #1e293b;
@@ -88,24 +77,22 @@ body{
 
 /* PROGRESS */
 .progress{
-  background:#020617;
-  border:1px solid #1e293b;
   height:18px;
   border-radius:10px;
   overflow:hidden;
+  border:1px solid #1e293b;
   margin:6px 0 12px;
 }
 .bar{
   height:100%;
   background:linear-gradient(90deg,#22c55e,#4ade80);
-  text-align:center;
   font-size:11px;
+  text-align:center;
 }
 
 /* HISTORY */
 .history-item{
   padding:12px;
-  background:#020617;
   border:1px solid #1e293b;
   border-left:5px solid #38bdf8;
   border-radius:12px;
@@ -121,7 +108,6 @@ body{
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
   <div id="status" class="status">Status: Logged out</div>
-
   <div class="nav">
     <button onclick="login()">Login</button>
     <button onclick="bioBreak()">Bio Break</button>
@@ -132,34 +118,25 @@ body{
 
 <!-- MAIN -->
 <div class="main">
-
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
     <div id="taskList"></div>
   </div>
-
   <div id="dayEndBox" class="card hidden"></div>
   <div id="reportBox" class="card hidden"></div>
   <div id="historyBox" class="card hidden"></div>
-
 </div>
+
 </div>
 
 <script>
 /* DOM */
 const status = document.getElementById("status");
 const tasksBox = document.getElementById("tasksBox");
+const taskList = document.getElementById("taskList");
 const dayEndBox = document.getElementById("dayEndBox");
 const reportBox = document.getElementById("reportBox");
 const historyBox = document.getElementById("historyBox");
-const taskList = document.getElementById("taskList");
-
-/* TIME */
-function timeStamp(){
-  return new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
-}
-function now(){return new Date()}
-function mins(a,b){return Math.round((b-a)/60000)}
 
 /* STORAGE */
 const DAY_STATUS="DAY_STATUS";
@@ -168,16 +145,21 @@ const NEXT_TASKS="NEXT_TASKS";
 const SESSIONS="SESSIONS";
 const REPORTS="REPORTS";
 
+/* TIME */
+const now=()=>new Date();
+const stamp=()=>new Date().toLocaleTimeString([],{
+  hour:'2-digit',minute:'2-digit'
+});
+const mins=(a,b)=>Math.round((b-a)/60000);
+
 /* LOGIN */
 function login(){
-  const id=prompt("Enter ID");
-  const pw=prompt("Enter Password");
-  if(!id||!pw) return;
+  if(!prompt("Enter ID")||!prompt("Enter Password"))return;
 
   if(localStorage.getItem(DAY_STATUS)==="CLOSED"){
-    const next=localStorage.getItem(NEXT_TASKS);
-    if(next){
-      localStorage.setItem(CURRENT_TASKS,next);
+    const n=localStorage.getItem(NEXT_TASKS);
+    if(n){
+      localStorage.setItem(CURRENT_TASKS,n);
       localStorage.removeItem(NEXT_TASKS);
     }
     localStorage.setItem(DAY_STATUS,"ACTIVE");
@@ -185,8 +167,7 @@ function login(){
 
   startSession();
   localStorage.setItem("LOGGED_IN","YES");
-
-  status.innerText="Status: Logged in @ "+timeStamp();
+  status.innerText="Status: Logged in @ "+stamp();
   tasksBox.classList.remove("hidden");
   loadTasks();
 }
@@ -195,13 +176,10 @@ function login(){
 function bioBreak(){
   endSession();
   localStorage.removeItem("LOGGED_IN");
-
-  if(localStorage.getItem(DAY_STATUS)==="CLOSED"){
-    status.innerText="Status: Bio Break (Day Ended)";
-  }else{
-    status.innerText="Status: Bio Break";
-  }
-  status.innerText+=" @ "+timeStamp();
+  status.innerText=
+    (localStorage.getItem(DAY_STATUS)==="CLOSED"
+    ?"Status: Bio Break (Day Ended)"
+    :"Status: Bio Break")+" @ "+stamp();
   tasksBox.classList.add("hidden");
 }
 
@@ -238,78 +216,62 @@ function loadTasks(){
         localStorage.setItem(CURRENT_TASKS,JSON.stringify(data));
       }else cb.checked=false;
     };
-    const div=document.createElement("div");
-    div.className="task";
-    div.appendChild(cb);
-    div.append(" "+t.name);
-    taskList.appendChild(div);
+    const d=document.createElement("div");
+    d.className="task";
+    d.append(cb," "+t.name);
+    taskList.appendChild(d);
   });
 }
 
 /* DAY END */
 function openDayEnd(){
-  if(localStorage.getItem("LOGGED_IN")!=="YES") return;
-  if(localStorage.getItem(DAY_STATUS)==="CLOSED") return;
+  if(localStorage.getItem("LOGGED_IN")!=="YES")return;
+  if(localStorage.getItem(DAY_STATUS)==="CLOSED")return;
 
-  let html="<h3>Confirm Day End</h3>";
-  html+="<p>Next Day Subjects (max 7)</p>";
-  for(let i=0;i<7;i++){
-    html+=`<input id="s${i}" placeholder="Subject ${i+1}"><br>`;
-  }
-  html+=`
-    <br>Distraction Time (minutes)<br>
-    <input id="dist" type="number" min="0"><br><br>
-    <button onclick="confirmDayEnd()">Confirm Day End</button>
-  `;
-  dayEndBox.innerHTML=html;
+  let h="<h3>Confirm Day End</h3><p>Next Day Subjects</p>";
+  for(let i=0;i<7;i++)h+=`<input id="s${i}" placeholder="Subject ${i+1}"><br>`;
+  h+=`<br>Distraction (min)<br>
+      <input id="dist" type="number"><br><br>
+      <button onclick="confirmDayEnd()">Confirm</button>`;
+  dayEndBox.innerHTML=h;
   dayEndBox.classList.remove("hidden");
 }
 
-/* CONFIRM DAY END */
+/* CONFIRM */
 function confirmDayEnd(){
   let next=[];
   const cur=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
   cur.filter(t=>!t.done).forEach(t=>next.push({name:t.name,done:false}));
-
   for(let i=0;i<7;i++){
     const v=document.getElementById("s"+i).value.trim();
-    if(v) next.push({name:v,done:false});
+    if(v)next.push({name:v,done:false});
   }
-
   localStorage.setItem(NEXT_TASKS,JSON.stringify(next));
   generateReport();
   localStorage.setItem(DAY_STATUS,"CLOSED");
-
   bioBreak();
   status.innerText+=" – Thank you";
   dayEndBox.classList.add("hidden");
   reportBox.classList.remove("hidden");
 }
 
-/* REPORT (TIME + TASK %) */
+/* REPORT (COMBINED GRADE) */
 function generateReport(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   let total=0;
-  s.forEach(x=>{if(x.start&&x.end)total+=mins(new Date(x.start),new Date(x.end))});
+  s.forEach(x=>x.start&&x.end&&(total+=mins(new Date(x.start),new Date(x.end))));
+  const dist=+document.getElementById("dist").value||0;
+  const pct=total?Math.round(Math.max(total-dist,0)/total*100):0;
 
-  const dist=Number(document.getElementById("dist").value||0);
-  const prod=Math.max(total-dist,0);
-  const pct=total?Math.round(prod/total*100):0;
+  const t=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
+  const taskPct=t.length?Math.round(t.filter(x=>x.done).length/t.length*100):0;
 
-  /* TASK COMPLETION */
-  const tasks=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
-  let taskPct=0;
-  if(tasks.length){
-    const done=tasks.filter(t=>t.done).length;
-    taskPct=Math.round(done/tasks.length*100);
-  }
+  const finalScore=Math.round((pct+taskPct)/2);
+  const grade=finalScore>=80?"EXCELLENT":
+              finalScore>=60?"GOOD":
+              finalScore>=40?"AVERAGE":"POOR";
 
-  let grade="POOR";
-  if(pct>=80)grade="EXCELLENT";
-  else if(pct>=60)grade="GOOD";
-  else if(pct>=40)grade="AVERAGE";
-
-  const r={date:new Date().toLocaleDateString(),pct,taskPct,grade};
+  const r={date:new Date().toLocaleDateString(),pct,taskPct,finalScore,grade};
   const all=JSON.parse(localStorage.getItem(REPORTS)||"[]");
   all.push(r);
   localStorage.setItem(REPORTS,JSON.stringify(all));
@@ -323,6 +285,7 @@ function generateReport(){
     Tasks Completed: ${taskPct}%
     <div class="progress"><div class="bar" style="width:${taskPct}%">${taskPct}%</div></div>
 
+    Final Score: ${finalScore}%<br>
     Grade: <b>${grade}</b>
   `;
 }
@@ -335,7 +298,7 @@ function toggleHistory(){
   h.forEach(x=>{
     historyBox.innerHTML+=`
       <div class="history-item">
-        ${x.date} → Time ${x.pct}% | Tasks ${x.taskPct}% (${x.grade})
+        ${x.date} → Final ${x.finalScore}% (${x.grade})
       </div>`;
   });
 }
