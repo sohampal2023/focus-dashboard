@@ -6,236 +6,108 @@
 
 <style>
 *{box-sizing:border-box}
-html,body{
-  margin:0;height:100%;
-  font-family:Segoe UI,system-ui,sans-serif;
-}
-body{
-  background:radial-gradient(circle at top,#0f172a,#020617);
-  color:#e5e7eb;
-}
-.app{
-  display:grid;
-  grid-template-columns:280px 1fr;
-  height:100vh;
-}
+html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
+body{background:#020617;color:#e5e7eb}
+.app{display:grid;grid-template-columns:280px 1fr;height:100vh}
 
 /* SIDEBAR */
-.sidebar{
-  padding:20px;
-  display:flex;
-  flex-direction:column;
-  gap:18px;
-  border-right:1px solid #1e293b;
+.sidebar{padding:20px;border-right:1px solid #1e293b}
+.sidebar h2{text-align:center;color:#38bdf8;margin-bottom:12px}
+.status{padding:12px;border:1px solid #334155;border-radius:12px;text-align:center;margin-bottom:12px}
+button{
+  width:100%;padding:12px;margin:6px 0;border-radius:10px;
+  border:1px solid #334155;background:#020617;color:#e5e7eb;cursor:pointer
 }
-.sidebar h2{
-  text-align:center;
-  color:#38bdf8;
-  margin:0;
-}
-.status{
-  padding:14px;
-  border-radius:14px;
-  border:2px solid #334155;
-  text-align:center;
-  font-weight:700;
-  background:#020617;
-}
-.nav button{
-  width:100%;
-  padding:14px;
-  margin-bottom:10px;
-  border-radius:12px;
-  border:1px solid #1e293b;
-  background:#020617;
-  color:#e5e7eb;
-  font-weight:600;
-  cursor:pointer;
-}
-.nav button:disabled{
-  opacity:.35;
-  cursor:not-allowed;
-}
+button:disabled{opacity:.4;cursor:not-allowed}
 
 /* MAIN */
-.main{
-  padding:30px;
-  overflow:auto;
-}
-.card{
-  background:#020617;
-  border:1px solid #1e293b;
-  border-radius:18px;
-  padding:22px;
-  margin-bottom:20px;
-}
+.main{padding:24px;overflow:auto}
+.card{background:#020617;border:1px solid #334155;border-radius:16px;padding:20px;margin-bottom:20px}
 .hidden{display:none}
 
-/* ===== CAR SPEEDOMETER ===== */
-
-.speedo-wrap{
-  display:flex;
-  justify-content:center;
-  margin:20px 0;
+/* SPEEDOMETER (task view only) */
+.speedo{
+  width:320px;height:160px;border-radius:320px 320px 0 0;position:relative;
+  background:conic-gradient(from -90deg,#dc2626,#f97316,#facc15,#22c55e,#8b5cf6);
+  box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b;
 }
-
-.speedo-car{
-  width:340px;
-  height:170px;
-  position:relative;
-  border-radius:340px 340px 0 0;
-  background:
-    radial-gradient(circle at bottom,#020617 55%,transparent 56%),
-    conic-gradient(
-      from -90deg,
-      #dc2626 0deg,
-      #f97316 36deg,
-      #facc15 72deg,
-      #22c55e 108deg,
-      #8b5cf6 180deg
-    );
-  box-shadow:
-    inset 0 0 0 14px #020617,
-    inset 0 0 0 18px #1e293b,
-    0 20px 40px rgba(0,0,0,.6);
-  overflow:hidden;
-}
-
-/* TICKS */
 .ticks{
-  position:absolute;
-  inset:0;
-  background:
-    repeating-conic-gradient(
-      from -90deg,
-      rgba(255,255,255,.7) 0deg 2deg,
-      transparent 2deg 6deg
-    );
+  position:absolute;inset:0;
+  background:repeating-conic-gradient(from -90deg,#fff 0 2deg,transparent 2deg 6deg);
   mask:radial-gradient(circle at bottom,transparent 58%,black 59%);
 }
-
-/* NEEDLE */
-.needle-car{
-  position:absolute;
-  width:6px;
-  height:135px;
-  background:linear-gradient(to top,#e5e7eb,#ffffff);
-  left:50%;
-  bottom:0;
-  transform-origin:bottom center;
+.needle{
+  position:absolute;width:6px;height:120px;background:#fff;
+  left:50%;bottom:0;transform-origin:bottom center;
   transform:rotate(-90deg);
-  transition:transform .7s cubic-bezier(.15,.85,.2,1);
-  box-shadow:
-    0 0 8px rgba(255,255,255,.8),
-    0 0 18px rgba(255,255,255,.4);
-  z-index:5;
+  transition:transform .6s cubic-bezier(.15,.85,.2,1)
+}
+.cap{
+  position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;
+  left:50%;bottom:0;transform:translate(-50%,50%)
 }
 
-/* NEEDLE BASE */
-.needle-cap{
-  position:absolute;
-  width:20px;
-  height:20px;
-  background:#e5e7eb;
-  border-radius:50%;
-  left:50%;
-  bottom:0;
-  transform:translate(-50%,50%);
-  box-shadow:
-    inset 0 0 6px rgba(0,0,0,.6),
-    0 0 10px rgba(255,255,255,.4);
-  z-index:6;
-}
+.percent{text-align:center;font-size:40px;font-weight:800;color:#38bdf8}
+.rating{text-align:center;font-size:18px;font-weight:700;margin-top:6px}
+.details{text-align:center;font-size:14px;color:#cbd5f5}
 
-/* TEXT */
-.percent{
-  text-align:center;
-  font-size:42px;
-  font-weight:900;
-  color:#38bdf8;
-  margin-top:6px;
-}
-.details{
-  text-align:center;
-  font-size:14px;
-  color:#cbd5f5;
-  margin-top:6px;
-}
-.rating{
-  text-align:center;
-  font-size:18px;
-  font-weight:700;
-  margin-top:6px;
-}
-
-/* INPUT */
-input.nextTask{
-  width:100%;
-  padding:8px;
-  margin:6px 0;
-  border-radius:8px;
-  border:1px solid #334155;
-  background:#020617;
-  color:#e5e7eb;
-}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{border:1px solid #334155;padding:8px;text-align:center}
+th{background:#020617}
 </style>
 </head>
 
 <body>
 <div class="app">
 
-<!-- SIDEBAR -->
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
   <div id="statusBox" class="status">Status: Logged out</div>
-
-  <div id="idleBox" class="status hidden">
-    Idle Timer: <b><span id="idleTime">30:00</span></b><br><br>
-    <button onclick="resetIdle()">I am studying</button>
-  </div>
-
-  <div class="nav">
-    <button id="loginBtn" onclick="login()">Login</button>
-    <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
-    <button id="dayEndBtn" onclick="openDayEnd()" disabled>Day End</button>
-  </div>
+  <button id="loginBtn" onclick="login()">Login</button>
+  <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
+  <button id="dayBtn" onclick="dayEnd()" disabled>Day End</button>
 </div>
 
-<!-- MAIN -->
 <div class="main">
 
-<div id="tasksBox" class="card hidden">
-  <div style="display:grid;grid-template-columns:1fr 360px;gap:20px">
-
+<!-- TASK VIEW -->
+<div id="taskBox" class="card hidden">
+  <div style="display:grid;grid-template-columns:1fr 340px;gap:20px">
     <div>
       <h3>Assigned Tasks</h3>
       <div id="taskList"></div>
       <hr>
-      <h4>Extra Work (Bonus)</h4>
+      <h4>Extra Work</h4>
       <div id="extraList"></div>
-      <button onclick="addExtraTask()">+ Add Extra Work</button>
+      <button onclick="addExtra()">+ Add Extra</button>
     </div>
 
     <div>
       <h3 style="text-align:center">Live Progress</h3>
-
-      <div class="speedo-wrap">
-        <div class="speedo-car">
-          <div class="ticks"></div>
-          <div id="liveNeedle" class="needle-car"></div>
-          <div class="needle-cap"></div>
-        </div>
+      <div class="speedo">
+        <div class="ticks"></div>
+        <div id="needle" class="needle"></div>
+        <div class="cap"></div>
       </div>
-
       <div id="livePercent" class="percent">0%</div>
       <div id="liveRating" class="rating">Poor</div>
       <div id="liveDetails" class="details"></div>
     </div>
-
   </div>
 </div>
 
-<div id="dayEndBox" class="card hidden"></div>
+<!-- LOGIN LOG -->
+<div id="logBox" class="card hidden">
+  <h3>Login / Logout Log</h3>
+  <table>
+    <thead>
+      <tr><th>Login</th><th>Logout</th><th>Reason</th></tr>
+    </thead>
+    <tbody id="logTable"></tbody>
+  </table>
+</div>
+
+<!-- REPORT -->
 <div id="reportBox" class="card hidden"></div>
 
 </div>
@@ -243,136 +115,154 @@ input.nextTask{
 
 <script>
 let UID=null;
-let idleTimer=null;
-let idleRemaining=1800;
-
-const K_TASKS="TASKS";
-const K_EXTRA="EXTRA_TASKS";
-const K_NEXT="NEXT_TASKS";
+const now=()=>new Date().toLocaleString();
 const key=k=>UID+"_"+k;
-const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
 
+/* LOGIN */
 function login(){
   UID=prompt("Email");
   if(!UID)return;
 
+  if(localStorage.getItem(key("ASK_REASON"))==="1"){
+    const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
+    const r=prompt("Reason for last logout?");
+    logs[logs.length-1].reason=r||"Not specified";
+    localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+    localStorage.removeItem(key("ASK_REASON"));
+  }
+
+  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
+  logs.push({login:now(),logout:"-",reason:"-"});
+  localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+
   statusBox.innerText="Status: Logged in";
   loginBtn.disabled=true;
   bioBtn.disabled=false;
-  dayEndBtn.disabled=false;
+  dayBtn.disabled=false;
 
-  idleBox.classList.remove("hidden");
-  startIdle();
-
-  mergeTasks();
+  initTasks();
   loadTasks();
-  updateLiveSpeedo();
+  renderLogs();
+  updateSpeedo();
 }
 
-function mergeTasks(){
-  const prev=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
-  const next=JSON.parse(localStorage.getItem(key(K_NEXT))||"[]");
-  const merged=[...prev,...next.map(n=>({name:n,done:false}))];
+/* BIO BREAK */
+function bioBreak(){
+  const logs=JSON.parse(localStorage.getItem(key("LOGS")));
+  logs[logs.length-1].logout=now();
+  localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+  localStorage.setItem(key("ASK_REASON"),"1");
+  location.reload();
+}
 
-  if(!merged.length){
-    merged.push(
-      {name:"Study core subject",done:false},
-      {name:"Revise notes",done:false},
-      {name:"Practice questions",done:false}
-    );
+/* DAY END */
+function dayEnd(){
+  const logs=JSON.parse(localStorage.getItem(key("LOGS")));
+  logs[logs.length-1].logout=now();
+  logs[logs.length-1].reason="Day Completed";
+
+  const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
+  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
+
+  const percent=Math.round(((tasks.filter(t=>t.done).length+extras.length)/tasks.length)*100);
+
+  reportBox.innerHTML=`
+    <h3>Daily Report Card</h3>
+    <div class="percent">${percent}%</div>
+    <div class="rating">${getLabel(percent)}</div>
+    <div class="details">
+      Assigned: ${tasks.length} |
+      Done: ${tasks.filter(t=>t.done).length} |
+      Extra: ${extras.length}
+    </div>
+  `;
+  reportBox.classList.remove("hidden");
+
+  localStorage.removeItem(key("LOGS"));
+  taskBox.classList.add("hidden");
+  logBox.classList.add("hidden");
+}
+
+/* TASKS */
+function initTasks(){
+  if(!localStorage.getItem(key("TASKS"))){
+    localStorage.setItem(key("TASKS"),JSON.stringify([
+      {name:"Study",done:false},
+      {name:"Revise",done:false},
+      {name:"Practice",done:false}
+    ]));
+    localStorage.setItem(key("EXTRA"),"[]");
   }
-
-  localStorage.setItem(key(K_TASKS),JSON.stringify(merged));
-  localStorage.removeItem(key(K_NEXT));
-  localStorage.setItem(key(K_EXTRA),"[]");
-  tasksBox.classList.remove("hidden");
+  taskBox.classList.remove("hidden");
+  logBox.classList.remove("hidden");
 }
 
 function loadTasks(){
   taskList.innerHTML="";
   extraList.innerHTML="";
 
-  const tasks=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
-  const extras=JSON.parse(localStorage.getItem(key(K_EXTRA))||"[]");
+  const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
+  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
 
   tasks.forEach(t=>{
-    const cb=document.createElement("input");
-    cb.type="checkbox";
-    cb.checked=t.done;
-    cb.onchange=()=>{
-      if(!confirm("Confirm task status change?")){
-        cb.checked=!cb.checked;return;
-      }
-      t.done=cb.checked;
-      localStorage.setItem(key(K_TASKS),JSON.stringify(tasks));
-      updateLiveSpeedo();
-    };
-    taskList.append(cb," "+t.name,document.createElement("br"));
+    const c=document.createElement("input");
+    c.type="checkbox";
+    c.checked=t.done;
+    c.onchange=()=>{t.done=c.checked;save(tasks,extras)};
+    taskList.append(c," "+t.name,document.createElement("br"));
   });
 
   extras.forEach(e=>{
-    const cb=document.createElement("input");
-    cb.type="checkbox";
-    cb.checked=e.done;
-    cb.onchange=()=>{
-      if(!confirm("Confirm extra work completion?")){
-        cb.checked=!cb.checked;return;
-      }
-      e.done=cb.checked;
-      localStorage.setItem(key(K_EXTRA),JSON.stringify(extras));
-      updateLiveSpeedo();
-    };
-    extraList.append(cb," "+e.name,document.createElement("br"));
+    extraList.append("✔ "+e.name,document.createElement("br"));
   });
 }
 
-function addExtraTask(){
-  const name=prompt("Extra work?");
-  if(!name)return;
-  const extras=JSON.parse(localStorage.getItem(key(K_EXTRA))||"[]");
-  extras.push({name,done:false});
-  localStorage.setItem(key(K_EXTRA),JSON.stringify(extras));
+function addExtra(){
+  const e=prompt("Extra work?");
+  if(!e)return;
+  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
+  extras.push({name:e});
+  localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
   loadTasks();
-  updateLiveSpeedo();
+  updateSpeedo();
 }
 
-function updateLiveSpeedo(){
-  const tasks=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
-  const extras=JSON.parse(localStorage.getItem(key(K_EXTRA))||"[]");
+function save(tasks,extras){
+  localStorage.setItem(key("TASKS"),JSON.stringify(tasks));
+  localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
+  updateSpeedo();
+}
 
-  const assigned=tasks.length;
-  const done=tasks.filter(t=>t.done).length;
-  const extraDone=extras.filter(e=>e.done).length;
+/* SPEEDO + LABEL */
+function updateSpeedo(){
+  const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
+  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
 
-  const percent=assigned?Math.round(((done+extraDone)/assigned)*100):0;
+  const percent=Math.round(((tasks.filter(t=>t.done).length+extras.length)/tasks.length)*100);
   const capped=Math.min(percent,300);
   const angle=(capped/300)*180 - 90;
 
-  liveNeedle.style.transform=`rotate(${angle}deg)`;
+  needle.style.transform=`rotate(${angle}deg)`;
   livePercent.innerText=percent+"%";
-  liveDetails.innerText=`Assigned: ${assigned} | Done: ${done} | Extra: ${extraDone}`;
-
-  let label="Poor";
-  if(percent>=60) label="Average";
-  if(percent>=100) label="Good";
-  if(percent>=150) label="Excellent";
-  if(percent>=200) label="Fabulous";
-  liveRating.innerText=label;
+  liveRating.innerText=getLabel(percent);
+  liveDetails.innerText=`Assigned: ${tasks.length} | Extra: ${extras.length}`;
 }
 
-function startIdle(){
-  clearInterval(idleTimer);
-  idleRemaining=1800;
-  idleTime.innerText=fmt(idleRemaining);
-  idleTimer=setInterval(()=>{
-    idleRemaining--;
-    idleTime.innerText=fmt(idleRemaining);
-    if(idleRemaining<=0) location.reload();
-  },1000);
+function getLabel(p){
+  if(p < 40) return "Poor";
+  if(p < 60) return "Average";
+  if(p < 80) return "Good";
+  if(p < 100) return "Excellent";
+  return "Fabulous";
 }
-function resetIdle(){startIdle()}
-function openDayEnd(){}
-function bioBreak(){location.reload()}
+
+function renderLogs(){
+  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
+  logTable.innerHTML="";
+  logs.forEach(l=>{
+    logTable.innerHTML+=`<tr><td>${l.login}</td><td>${l.logout}</td><td>${l.reason}</td></tr>`;
+  });
+}
 </script>
 </body>
 </html>
