@@ -16,7 +16,7 @@ body{background:#020617;color:#e5e7eb}
   padding:20px;
   border-right:1px solid #1e293b;
 }
-.sidebar h2{text-align:center;color:#7dd3fc}
+.sidebar h2{text-align:center;color:#7dd3fc;margin-bottom:10px}
 .status{
   padding:10px;
   border:1px solid #334155;
@@ -86,7 +86,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   <div id="statusBox" class="status">Logged out</div>
   <button id="loginBtn" onclick="login()">Login</button>
   <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
-  <button id="dayBtn" onclick="startDayEnd()" disabled>Day End</button>
+  <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
 </div>
 
 <!-- MAIN -->
@@ -102,7 +102,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
       <hr>
       <h4>Extra Work</h4>
       <div id="extraList"></div>
-      <button onclick="addExtra()">+ Add Extra</button>
+      <button onclick="addExtra()">+ Add Extra Work</button>
     </div>
 
     <div>
@@ -121,15 +121,15 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 <!-- LOGIN LOG -->
 <div id="logBox" class="card hidden">
-  <h3>Login / Logout</h3>
+  <h3>Login / Logout Log</h3>
   <table>
     <thead><tr><th>Login</th><th>Logout</th><th>Reason</th></tr></thead>
     <tbody id="logTable"></tbody>
   </table>
 </div>
 
-<!-- DAY END NEXT TASK -->
-<div id="nextTaskBox" class="card hidden"></div>
+<!-- NEXT DAY TASK INPUT -->
+<div id="nextDayBox" class="card hidden"></div>
 
 <!-- REPORT -->
 <div id="reportBox" class="card hidden"></div>
@@ -147,6 +147,7 @@ function login(){
   UID=prompt("Email");
   if(!UID)return;
 
+  // ask reason if required
   if(localStorage.getItem(key("ASK_REASON"))==="1"){
     const logs=JSON.parse(localStorage.getItem(key("LOGS")));
     const r=prompt("Reason for last logout?");
@@ -155,6 +156,7 @@ function login(){
     localStorage.removeItem(key("ASK_REASON"));
   }
 
+  // add new login row
   const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
   logs.push({login:now(),logout:"-",reason:"-"});
   localStorage.setItem(key("LOGS"),JSON.stringify(logs));
@@ -164,9 +166,9 @@ function login(){
   bioBtn.disabled=false;
   dayBtn.disabled=false;
 
-  initTasks();
-  renderLogs();
+  setupTasks();
   loadTasks();
+  renderLogs();
   updateSpeedo();
 }
 
@@ -179,18 +181,27 @@ function bioBreak(){
   location.reload();
 }
 
-/* TASK INIT */
-function initTasks(){
-  if(!localStorage.getItem(key("TASKS"))){
-    localStorage.setItem(key("TASKS"),JSON.stringify([
+/* SETUP TASKS FOR DAY */
+function setupTasks(){
+  const carried=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
+  const next=JSON.parse(localStorage.getItem(key("NEXT_TASKS"))||"[]");
+
+  let merged=[...carried,...next.map(n=>({name:n,done:false}))];
+  if(!merged.length){
+    merged=[
       {name:"Study",done:false},
       {name:"Revise",done:false},
       {name:"Practice",done:false}
-    ]));
-    localStorage.setItem(key("EXTRA"),"[]");
+    ];
   }
+
+  localStorage.setItem(key("TASKS"),JSON.stringify(merged));
+  localStorage.removeItem(key("NEXT_TASKS"));
+  localStorage.setItem(key("EXTRA"),JSON.stringify([]));
+
   taskBox.classList.remove("hidden");
   logBox.classList.remove("hidden");
+  reportBox.classList.add("hidden");
 }
 
 /* LOAD TASKS */
@@ -202,31 +213,31 @@ function loadTasks(){
   const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
 
   tasks.forEach(t=>{
-    const c=document.createElement("input");
-    c.type="checkbox";
-    c.checked=t.done;
-    c.onchange=()=>{
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=t.done;
+    cb.onchange=()=>{
       if(!confirm("Confirm task completion?")){
-        c.checked=!c.checked;return;
+        cb.checked=!cb.checked;return;
       }
-      t.done=c.checked;
+      t.done=cb.checked;
       save(tasks,extras);
     };
-    taskList.append(c," "+t.name,document.createElement("br"));
+    taskList.append(cb," "+t.name,document.createElement("br"));
   });
 
   extras.forEach(e=>{
-    const c=document.createElement("input");
-    c.type="checkbox";
-    c.checked=e.done;
-    c.onchange=()=>{
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=e.done;
+    cb.onchange=()=>{
       if(!confirm("Confirm extra work completion?")){
-        c.checked=!c.checked;return;
+        cb.checked=!cb.checked;return;
       }
-      e.done=c.checked;
+      e.done=cb.checked;
       save(tasks,extras);
     };
-    extraList.append(c," "+e.name,document.createElement("br"));
+    extraList.append(cb," "+e.name,document.createElement("br"));
   });
 }
 
@@ -262,7 +273,6 @@ function updateSpeedo(){
   liveDetails.innerText=`Assigned: ${tasks.length} | Extra: ${extras.length}`;
 }
 
-/* LABEL */
 function getLabel(p){
   if(p<40)return"Poor";
   if(p<60)return"Average";
@@ -272,20 +282,20 @@ function getLabel(p){
 }
 
 /* DAY END STEP 1 */
-function startDayEnd(){
-  nextTaskBox.innerHTML="<h3>Enter Next Day Tasks</h3>";
+function openDayEnd(){
+  nextDayBox.innerHTML="<h3>Enter Next Day Tasks</h3>";
   for(let i=0;i<5;i++){
-    nextTaskBox.innerHTML+=`<input id="nt${i}" style="width:100%;margin:6px 0">`;
+    nextDayBox.innerHTML+=`<input id="nd${i}" style="width:100%;margin:6px 0">`;
   }
-  nextTaskBox.innerHTML+=`<button onclick="finalDayEnd()">Submit</button>`;
-  nextTaskBox.classList.remove("hidden");
+  nextDayBox.innerHTML+=`<button onclick="finalDayEnd()">Submit</button>`;
+  nextDayBox.classList.remove("hidden");
 }
 
 /* DAY END FINAL */
 function finalDayEnd(){
   const next=[];
   for(let i=0;i<5;i++){
-    const v=document.getElementById("nt"+i).value.trim();
+    const v=document.getElementById("nd"+i).value.trim();
     if(v)next.push(v);
   }
   localStorage.setItem(key("NEXT_TASKS"),JSON.stringify(next));
@@ -295,20 +305,28 @@ function finalDayEnd(){
 
   const undone=tasks.filter(t=>!t.done);
   localStorage.setItem(key("TASKS"),JSON.stringify(undone));
+  localStorage.setItem(key("EXTRA"),JSON.stringify([]));
 
-  const percent=Math.round(((tasks.length-undone.length+extras.filter(e=>e.done).length)/tasks.length)*100);
+  const doneCount=tasks.filter(t=>t.done).length;
+  const percent=Math.round((doneCount/tasks.length)*100);
 
   reportBox.innerHTML=`
     <h3>Daily Report</h3>
     <div class="percent">${percent}%</div>
     <div class="rating">${getLabel(percent)}</div>
+    <div class="details">
+      Assigned: ${tasks.length} |
+      Done: ${doneCount} |
+      Carry Forward: ${undone.length}
+    </div>
   `;
   reportBox.classList.remove("hidden");
 
   localStorage.removeItem(key("LOGS"));
+
   taskBox.classList.add("hidden");
   logBox.classList.add("hidden");
-  nextTaskBox.classList.add("hidden");
+  nextDayBox.classList.add("hidden");
 
   loginBtn.disabled=false;
   bioBtn.disabled=true;
