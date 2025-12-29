@@ -116,8 +116,8 @@ input.nextTask{
 
   <div class="nav">
     <button id="loginBtn" onclick="login()">Login</button>
-    <button id="bioBtn" onclick="bioBreak()">Bio Break</button>
-    <button id="dayEndBtn" onclick="openDayEnd()">Day End</button>
+    <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
+    <button id="dayEndBtn" onclick="openDayEnd()" disabled>Day End</button>
   </div>
 </div>
 
@@ -130,6 +130,7 @@ input.nextTask{
   <div id="dayEndBox" class="card hidden"></div>
   <div id="reportBox" class="card hidden"></div>
 </div>
+
 </div>
 
 <script type="module">
@@ -150,44 +151,6 @@ const firebaseConfig = {
 initializeApp(firebaseConfig);
 const auth = getAuth();
 const db = getFirestore();
-
-/* ================= FIREBASE STORAGE LAYER (ADDED) ================= */
-
-const fbCache = {};
-
-async function fbLoadAll(uid){
-  const ref = doc(db,"storage",uid);
-  const snap = await getDoc(ref);
-  if(snap.exists()) Object.assign(fbCache, snap.data());
-}
-
-async function fbSave(uid){
-  const ref = doc(db,"storage",uid);
-  await setDoc(ref, fbCache, { merge:true });
-}
-
-/* ================= LOCALSTORAGE OVERRIDE (ADDED) ================= */
-
-const _ls_get = localStorage.getItem.bind(localStorage);
-const _ls_set = localStorage.setItem.bind(localStorage);
-const _ls_remove = localStorage.removeItem.bind(localStorage);
-
-localStorage.getItem = (k)=>{
-  if(k in fbCache) return fbCache[k];
-  return _ls_get(k);
-};
-
-localStorage.setItem = (k,v)=>{
-  fbCache[k]=v;
-  if(CURRENT_UID) fbSave(CURRENT_UID);
-  return _ls_set(k,v);
-};
-
-localStorage.removeItem = (k)=>{
-  delete fbCache[k];
-  if(CURRENT_UID) fbSave(CURRENT_UID);
-  return _ls_remove(k);
-};
 
 /* DOM */
 const statusEl = document.getElementById("statusBox");
@@ -213,48 +176,51 @@ const IDLE_LIMIT=1800;
 let CURRENT_UID=null;
 let idleTimer=null;
 let idleRemaining=IDLE_LIMIT;
-let lastActiveStamp=null;
 
 /* HELPERS */
 function ukey(k){return CURRENT_UID+"_"+k}
 
 /* LOGIN */
-window.login=async()=>{
-  const email=prompt("Email");
-  const pass=prompt("Password");
-  if(!email||!pass)return;
+window.login = async ()=>{
+  const email = prompt("Email");
+  const pass = prompt("Password");
+  if(!email || !pass) return;
 
-  const cred=await signInWithEmailAndPassword(auth,email,pass);
-  CURRENT_UID=cred.user.uid;
+  try{
+    const cred = await signInWithEmailAndPassword(auth,email,pass);
+    CURRENT_UID = cred.user.uid;
 
-  await fbLoadAll(CURRENT_UID);
+    const ref = doc(db,"users",CURRENT_UID);
+    if(!(await getDoc(ref)).exists()){
+      await setDoc(ref,{ email });
+    }
 
-  const ref=doc(db,"users",CURRENT_UID);
-  if(!(await getDoc(ref)).exists()) await setDoc(ref,{email});
+    if(!localStorage.getItem(ukey(CURRENT_TASKS))){
+      localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify([
+        {name:"Study core subject",done:false},
+        {name:"Revise notes",done:false},
+        {name:"Practice questions",done:false}
+      ]));
+    }
 
-  if(!localStorage.getItem(ukey(CURRENT_TASKS))){
-    localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify([
-      {name:"Study core subject",done:false},
-      {name:"Revise notes",done:false},
-      {name:"Practice questions",done:false}
-    ]));
+    localStorage.setItem(ukey(SESSION_START),Date.now());
+    localStorage.setItem(ukey(PRODUCTIVE_TIME),"0");
+    localStorage.setItem(ukey(IDLE_COUNT),"0");
+
+    idleCountEl.innerText="0";
+    statusEl.innerText="Status: Logged in";
+
+    tasksBox.classList.remove("hidden");
+    idleBox.classList.remove("hidden");
+    bioBtn.disabled=false;
+    dayEndBtn.disabled=false;
+
+    loadTasks();
+    startIdleTimer();
+
+  }catch(err){
+    alert("Login failed:\n" + err.message);
   }
-
-  localStorage.setItem(ukey(SESSION_START),Date.now());
-  localStorage.setItem(ukey(PRODUCTIVE_TIME),"0");
-  localStorage.setItem(ukey(IDLE_COUNT),"0");
-
-  idleCountEl.innerText="0";
-  statusEl.innerText="Status: Logged in";
-
-  tasksBox.classList.remove("hidden");
-  idleBox.classList.remove("hidden");
-
-  bioBtn.disabled=false;
-  dayEndBtn.disabled=false;
-
-  loadTasks();
-  startIdleTimer();
 };
 
 /* TASKS */
@@ -280,12 +246,11 @@ function loadTasks(){
   });
 }
 
-/* IDLE */
+/* IDLE TIMER */
 function startIdleTimer(){
   clearInterval(idleTimer);
   idleRemaining=IDLE_LIMIT;
   updateIdleTime();
-  lastActiveStamp=Date.now();
 
   idleTimer=setInterval(()=>{
     idleRemaining--;
@@ -304,7 +269,7 @@ window.resetIdle=()=>startIdleTimer();
 
 async function idleLogout(){
   clearInterval(idleTimer);
-  if(CURRENT_UID) await fbSave(CURRENT_UID);
+  alert("Idle detected. Auto logout.");
   await signOut(auth);
   location.reload();
 }
@@ -312,7 +277,7 @@ async function idleLogout(){
 /* DAY END */
 window.openDayEnd=()=>{
   let html="<h3>Enter Next Day Tasks</h3>";
-  for(let i=0;i<10;i++){
+  for(let i=0;i<5;i++){
     html+=`<input class="nextTask" placeholder="Next Day Task ${i+1}">`;
   }
   html+=`<br><button onclick="confirmDayEnd()">Submit</button>`;
@@ -322,14 +287,13 @@ window.openDayEnd=()=>{
 
 window.confirmDayEnd=async()=>{
   clearInterval(idleTimer);
-  if(CURRENT_UID) await fbSave(CURRENT_UID);
   await signOut(auth);
   location.reload();
 };
 
-/* BIO */
+/* BIO BREAK */
 window.bioBreak=async()=>{
-  if(CURRENT_UID) await fbSave(CURRENT_UID);
+  clearInterval(idleTimer);
   await signOut(auth);
   location.reload();
 };
