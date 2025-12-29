@@ -102,7 +102,6 @@ input.nextTask{
 <body>
 <div class="app">
 
-<!-- SIDEBAR -->
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
 
@@ -117,12 +116,11 @@ input.nextTask{
 
   <div class="nav">
     <button id="loginBtn" onclick="login()">Login</button>
-    <button id="bioBtn" onclick="bioBreak()">Bio Break</button>
-    <button id="dayEndBtn" onclick="openDayEnd()">Day End</button>
+    <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
+    <button id="dayEndBtn" onclick="openDayEnd()" disabled>Day End</button>
   </div>
 </div>
 
-<!-- MAIN -->
 <div class="main">
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
@@ -168,21 +166,21 @@ const dayEndBtn = document.getElementById("dayEndBtn");
 
 /* CONSTANTS */
 const CURRENT_TASKS="CURRENT_TASKS";
+const NEXT_DAY_TASKS="NEXT_DAY_TASKS";
 const SESSION_START="SESSION_START";
 const PRODUCTIVE_TIME="PRODUCTIVE_TIME";
 const IDLE_COUNT="IDLE_COUNT";
-const IDLE_LIMIT=1800; // 30 minutes
+const IDLE_LIMIT=1800;
 
 /* STATE */
 let CURRENT_UID=null;
 let idleTimer=null;
 let idleRemaining=IDLE_LIMIT;
-let lastActiveStamp=null;
 
 /* HELPERS */
 function ukey(k){return CURRENT_UID+"_"+k}
 
-/* LOGIN (RESET REPORT + IDLE) */
+/* LOGIN */
 window.login=async()=>{
   const email=prompt("Email");
   const pass=prompt("Password");
@@ -194,18 +192,25 @@ window.login=async()=>{
   const ref=doc(db,"users",CURRENT_UID);
   if(!(await getDoc(ref)).exists()) await setDoc(ref,{email});
 
-  /* RESET UI STATE */
-  reportBox.classList.add("hidden");
-  reportBox.innerHTML="";
-  dayEndBox.classList.add("hidden");
+  /* ---- MERGE CARRY FORWARD + NEXT DAY ---- */
+  const prev=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
+  const next=JSON.parse(localStorage.getItem(ukey(NEXT_DAY_TASKS))||"[]");
 
-  if(!localStorage.getItem(ukey(CURRENT_TASKS))){
-    localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify([
+  const merged=[
+    ...prev.filter(t=>!t.done).map(t=>({name:t.name,done:false})),
+    ...next.map(n=>({name:n,done:false}))
+  ];
+
+  if(merged.length===0){
+    merged.push(
       {name:"Study core subject",done:false},
       {name:"Revise notes",done:false},
       {name:"Practice questions",done:false}
-    ]));
+    );
   }
+
+  localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(merged));
+  localStorage.removeItem(ukey(NEXT_DAY_TASKS));
 
   localStorage.setItem(ukey(SESSION_START),Date.now());
   localStorage.setItem(ukey(PRODUCTIVE_TIME),"0");
@@ -224,7 +229,7 @@ window.login=async()=>{
   startIdleTimer();
 };
 
-/* TASKS (CONFIRMATION) */
+/* TASKS */
 function loadTasks(){
   taskList.innerHTML="";
   const data=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
@@ -247,30 +252,23 @@ function loadTasks(){
   });
 }
 
-/* IDLE TIMER */
+/* IDLE */
 function startIdleTimer(){
   clearInterval(idleTimer);
   idleRemaining=IDLE_LIMIT;
   updateIdleTime();
-  lastActiveStamp=Date.now();
-
   idleTimer=setInterval(()=>{
     idleRemaining--;
     updateIdleTime();
     if(idleRemaining<=0) idleLogout();
   },1000);
 }
-
 function updateIdleTime(){
   const m=Math.floor(idleRemaining/60);
   const s=idleRemaining%60;
-  idleTime.innerText=`${m}:${s.toString().padStart(2,"0")}`;
+  idleTime.innerText=`${m}:${String(s).padStart(2,"0")}`;
 }
-
-window.resetIdle=()=>{
-  lastActiveStamp=Date.now();
-  startIdleTimer();
-};
+window.resetIdle=()=>startIdleTimer();
 
 async function idleLogout(){
   clearInterval(idleTimer);
@@ -280,7 +278,7 @@ async function idleLogout(){
   alert("Idle detected. Auto logout.");
   await signOut(auth);
   location.reload();
-};
+}
 
 /* DAY END */
 window.openDayEnd=()=>{
@@ -293,29 +291,18 @@ window.openDayEnd=()=>{
   dayEndBox.classList.remove("hidden");
 };
 
-/* FINAL REPORT + LOCK */
 window.confirmDayEnd=async()=>{
   clearInterval(idleTimer);
 
-  const tasks=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
-  const done=tasks.filter(t=>t.done).length;
-  const taskPercent=tasks.length?Math.round(done/tasks.length*100):0;
+  const inputs=[...document.querySelectorAll(".nextTask")]
+    .map(i=>i.value.trim())
+    .filter(v=>v);
 
-  const productive=Number(localStorage.getItem(ukey(PRODUCTIVE_TIME))||0);
-  const total=Math.floor((Date.now()-Number(localStorage.getItem(ukey(SESSION_START))))/1000);
-  const productivePercent=total?100:0;
+  if(inputs.length>0){
+    localStorage.setItem(ukey(NEXT_DAY_TASKS),JSON.stringify(inputs));
+  }
 
-  const finalScore=Math.round(taskPercent*0.7+productivePercent*0.3);
-  const grade=finalScore>=80?"EXCELLENT":finalScore>=60?"GOOD":finalScore>=40?"AVERAGE":"POOR";
-
-  reportBox.innerHTML=`
-    <h3>Report Card</h3>
-    Task Completion: ${taskPercent}%<br><br>
-    <div class="progress">
-      <div class="bar ${grade}" style="width:${finalScore}%">${finalScore}%</div>
-    </div>
-    Grade: <b>${grade}</b>
-  `;
+  reportBox.innerHTML="<h3>Report Card</h3>Day completed successfully.";
 
   tasksBox.classList.add("hidden");
   dayEndBox.classList.add("hidden");
@@ -330,7 +317,7 @@ window.confirmDayEnd=async()=>{
   await signOut(auth);
 };
 
-/* BIO BREAK */
+/* BIO */
 window.bioBreak=async()=>{
   clearInterval(idleTimer);
   await signOut(auth);
