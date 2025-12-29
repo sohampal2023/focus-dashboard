@@ -357,5 +357,23 @@ setInterval(()=>{
   }
 },60000);
 </script>
+  <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+  import { getFirestore } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
+    authDomain: "focus-dashboard-5965a.firebaseapp.com",
+    projectId: "focus-dashboard-5965a",
+    storageBucket: "focus-dashboard-5965a.firebasestorage.app",
+    messagingSenderId: "337204334808",
+    appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+  window.db = db;
+</script>
+
 </body>
 </html>
