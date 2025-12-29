@@ -147,230 +147,245 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 </div>
 
 <script>
-let UID=null;
-let idleTimer=null;
-let idleRemaining=1800;
-let idleMiss=0;
-let penalty=0;
+let UID = null;
+let idleTimer = null;
+let targetTime = null; // Stores the exact time when timer ends
+let penalty = 0;
 
-const now=()=>new Date().toLocaleString();
-const key=k=>UID+"_"+k;
+const now = () => new Date().toLocaleString();
+const key = k => UID + "_" + k;
 
-/* 🔒 HARD IDLE TIMER – ALWAYS RUNS */
-function startIdle(){
+/* 🔒 HARD IDLE TIMER – SYSTEM CLOCK BASED */
+function startIdle() {
   clearInterval(idleTimer);
-  idleRemaining=1800;
-  idleMiss=0;
+  
+  // Set the target time to 30 minutes (1800 seconds) from NOW
+  targetTime = Date.now() + (1800 * 1000);
+  
   idleBox.classList.remove("hidden");
   updateIdle();
 
-  idleTimer=setInterval(()=>{
-    idleRemaining--;
-    updateIdle();
+  idleTimer = setInterval(() => {
+    // Calculate remaining time by comparing Target Time vs Current System Time
+    const current = Date.now();
+    const remainingSeconds = Math.ceil((targetTime - current) / 1000);
 
-    if(idleRemaining>0 && idleRemaining%30===0){
-      idleMiss++;
-      if(idleMiss>=2){
-        penalty+=2;
-        updateProgress();
-      }
-      if(idleMiss>=3){
-        autoLogout();
-      }
-    }
+    updateIdle(remainingSeconds);
 
-    if(idleRemaining<=0){
+    // Only Logout if time is actually up
+    if (remainingSeconds <= 0) {
       autoLogout();
     }
-  },1000);
+  }, 1000);
 }
 
-function updateIdle(){
-  idleTime.innerText=
-    Math.floor(idleRemaining/60)+":"+
-    String(idleRemaining%60).padStart(2,"0");
+function updateIdle(seconds) {
+  // If seconds argument is missing, calculate it manually
+  if (seconds === undefined && targetTime) {
+      seconds = Math.ceil((targetTime - Date.now()) / 1000);
+  }
+  // Prevent negative numbers in display
+  let displaySeconds = seconds > 0 ? seconds : 0;
+  
+  idleTime.innerText =
+    Math.floor(displaySeconds / 60) + ":" +
+    String(displaySeconds % 60).padStart(2, "0");
 }
-function resetIdle(){startIdle()}
+
+function resetIdle() {
+  // Reset the target time to 30 mins from now
+  targetTime = Date.now() + (1800 * 1000);
+  updateIdle();
+}
 
 /* AUTO LOGOUT */
-function autoLogout(){
+function autoLogout() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
 
-  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
-  if(logs.length){
-    logs[logs.length-1].logout=now();
-    logs[logs.length-1].reason="Idle timeout";
-    localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  if (logs.length) {
+    logs[logs.length - 1].logout = now();
+    logs[logs.length - 1].reason = "30 min Timeout";
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
   location.reload();
 }
 
 /* LOGIN */
-function login(){
-  UID=prompt("Email");
-  if(!UID)return;
+function login() {
+  UID = prompt("Email");
+  if (!UID) return;
 
   localStorage.removeItem(key("DAY_ENDED"));
 
-  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
-  logs.push({login:now(),logout:"-",reason:"-"});
-  localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  logs.push({ login: now(), logout: "-", reason: "-" });
+  localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 
-  statusBox.innerText="Logged in";
-  loginBtn.disabled=true;
-  bioBtn.disabled=false;
-  dayBtn.disabled=false;
+  statusBox.innerText = "Logged in";
+  loginBtn.disabled = true;
+  bioBtn.disabled = false;
+  dayBtn.disabled = false;
 
-  penalty=0;
-  startIdle();
+  penalty = 0;
+  startIdle(); // Starts the clock sync timer
   setupTasks();
   loadTasks();
   renderLogs();
   updateProgress();
 }
 
-/* BIO */
-function bioBreak(){
+/* BIO BREAK */
+function bioBreak() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
 
-  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
-  if(logs.length){
-    logs[logs.length-1].logout=now();
-    logs[logs.length-1].reason="Bio break";
-    localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  if (logs.length) {
+    logs[logs.length - 1].logout = now();
+    logs[logs.length - 1].reason = "Bio break";
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
   location.reload();
 }
 
-/* TASK LOGIC (UNCHANGED) */
-function setupTasks(){
-  const carried=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
-  const next=JSON.parse(localStorage.getItem(key("NEXT_TASKS"))||"[]");
+/* TASK LOGIC */
+function setupTasks() {
+  const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  const next = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
 
-  let merged=[...carried,...next.map(n=>({name:n,done:false}))];
-  if(!merged.length){
-    merged=[
-      {name:"Study",done:false},
-      {name:"Revise",done:false},
-      {name:"Practice",done:false}
+  let merged = [...carried, ...next.map(n => ({ name: n, done: false }))];
+  if (!merged.length) {
+    merged = [
+      { name: "Study", done: false },
+      { name: "Revise", done: false },
+      { name: "Practice", done: false }
     ];
   }
 
-  localStorage.setItem(key("TASKS"),JSON.stringify(merged));
+  localStorage.setItem(key("TASKS"), JSON.stringify(merged));
   localStorage.removeItem(key("NEXT_TASKS"));
-  localStorage.setItem(key("EXTRA"),JSON.stringify([]));
+  localStorage.setItem(key("EXTRA"), JSON.stringify([]));
 
   taskBox.classList.remove("hidden");
   logBox.classList.remove("hidden");
   reportBox.classList.add("hidden");
 }
 
-function loadTasks(){
-  taskList.innerHTML="";
-  extraList.innerHTML="";
-  const tasks=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
-  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
+function loadTasks() {
+  taskList.innerHTML = "";
+  extraList.innerHTML = "";
+  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
 
-  tasks.forEach(t=>{
-    const cb=document.createElement("input");
-    cb.type="checkbox";cb.checked=t.done;
-    cb.onchange=()=>{
-      if(!confirm("Confirm task completion?")){
-        cb.checked=!cb.checked;return;
+  tasks.forEach(t => {
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = t.done;
+    cb.onchange = () => {
+      if (!confirm("Confirm task completion?")) {
+        cb.checked = !cb.checked;
+        return;
       }
-      t.done=cb.checked;save(tasks,extras);
+      t.done = cb.checked;
+      save(tasks, extras);
     };
-    taskList.append(cb," "+t.name,document.createElement("br"));
+    taskList.append(cb, " " + t.name, document.createElement("br"));
   });
 
-  extras.forEach(e=>{
-    const cb=document.createElement("input");
-    cb.type="checkbox";cb.checked=e.done;
-    cb.onchange=()=>{
-      if(!confirm("Confirm extra work completion?")){
-        cb.checked=!cb.checked;return;
+  extras.forEach(e => {
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = e.done;
+    cb.onchange = () => {
+      if (!confirm("Confirm extra work completion?")) {
+        cb.checked = !cb.checked;
+        return;
       }
-      e.done=cb.checked;save(tasks,extras);
+      e.done = cb.checked;
+      save(tasks, extras);
     };
-    extraList.append(cb," "+e.name,document.createElement("br"));
+    extraList.append(cb, " " + e.name, document.createElement("br"));
   });
 }
 
-function addExtra(){
-  const name=prompt("Extra work?");
-  if(!name)return;
-  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
-  extras.push({name,done:false});
-  localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
+function addExtra() {
+  const name = prompt("Extra work?");
+  if (!name) return;
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  extras.push({ name, done: false });
+  localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
   loadTasks();
 }
 
-function save(tasks,extras){
-  localStorage.setItem(key("TASKS"),JSON.stringify(tasks));
-  localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
+function save(tasks, extras) {
+  localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
+  localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
   updateProgress();
 }
 
 /* PROGRESS */
-function calculate(){
-  const tasks=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
-  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
-  const done=tasks.filter(t=>t.done).length+
-              extras.filter(e=>e.done).length;
-  const percent=tasks.length?
-    Math.max(0,Math.round((done/tasks.length)*100-penalty)):0;
-  return{percent,assigned:tasks.length,extra:extras.length};
+function calculate() {
+  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  const done = tasks.filter(t => t.done).length +
+    extras.filter(e => e.done).length;
+  // Note: Penalty calculation simplified as idleMiss is removed
+  const percent = tasks.length ?
+    Math.max(0, Math.round((done / tasks.length) * 100 - penalty)) : 0;
+  return { percent, assigned: tasks.length, extra: extras.length };
 }
-function updateProgress(){
-  const p=calculate();
-  needle.style.transform=
-    `rotate(${(Math.min(p.percent,300)/300)*180-90}deg)`;
-  livePercent.innerText=p.percent+"%";
-  liveRating.innerText=getLabel(p.percent);
-  liveDetails.innerText=
+
+function updateProgress() {
+  const p = calculate();
+  needle.style.transform =
+    `rotate(${(Math.min(p.percent, 300) / 300) * 180 - 90}deg)`;
+  livePercent.innerText = p.percent + "%";
+  liveRating.innerText = getLabel(p.percent);
+  liveDetails.innerText =
     `Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${penalty}%`;
 }
-function getLabel(p){
-  if(p<40)return"Poor";
-  if(p<60)return"Average";
-  if(p<80)return"Good";
-  if(p<=100)return"Excellent";
-  return"Fabulous";
+
+function getLabel(p) {
+  if (p < 40) return "Poor";
+  if (p < 60) return "Average";
+  if (p < 80) return "Good";
+  if (p <= 100) return "Excellent";
+  return "Fabulous";
 }
 
 /* DAY END */
-function openDayEnd(){
+function openDayEnd() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
 
-  nextInputs.innerHTML="";
-  for(let i=0;i<5;i++){
-    nextInputs.innerHTML+=
-      `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i+1}">`;
+  nextInputs.innerHTML = "";
+  for (let i = 0; i < 5; i++) {
+    nextInputs.innerHTML +=
+      `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">`;
   }
   nextDayBox.classList.remove("hidden");
 }
 
-function finalDayEnd(){
-  const next=[];
-  for(let i=0;i<5;i++){
-    const v=document.getElementById("nd"+i).value.trim();
-    if(v)next.push(v);
+function finalDayEnd() {
+  const next = [];
+  for (let i = 0; i < 5; i++) {
+    const v = document.getElementById("nd" + i).value.trim();
+    if (v) next.push(v);
   }
-  localStorage.setItem(key("NEXT_TASKS"),JSON.stringify(next));
+  localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
 
-  const p=calculate();
-  const tasks=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
-  const carry=tasks.filter(t=>!t.done);
+  const p = calculate();
+  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  const carry = tasks.filter(t => !t.done);
 
-  localStorage.setItem(key("TASKS"),JSON.stringify(carry));
-  localStorage.setItem(key("EXTRA"),JSON.stringify([]));
+  localStorage.setItem(key("TASKS"), JSON.stringify(carry));
+  localStorage.setItem(key("EXTRA"), JSON.stringify([]));
   localStorage.removeItem(key("LOGS"));
-  logTable.innerHTML="";
+  logTable.innerHTML = "";
 
-  reportBox.innerHTML=`
+  reportBox.innerHTML = `
     <h3>Daily Report</h3>
     <div class="percent">${p.percent}%</div>
     <div class="rating">${getLabel(p.percent)}</div>
@@ -385,18 +400,18 @@ function finalDayEnd(){
   logBox.classList.add("hidden");
   nextDayBox.classList.add("hidden");
 
-  statusBox.innerText="Day End – Thank you";
-  loginBtn.disabled=false;
-  bioBtn.disabled=true;
-  dayBtn.disabled=true;
+  statusBox.innerText = "Day End – Thank you";
+  loginBtn.disabled = false;
+  bioBtn.disabled = true;
+  dayBtn.disabled = true;
 }
 
 /* LOG TABLE */
-function renderLogs(){
-  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
-  logTable.innerHTML="";
-  logs.forEach(l=>{
-    logTable.innerHTML+=
+function renderLogs() {
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  logTable.innerHTML = "";
+  logs.forEach(l => {
+    logTable.innerHTML +=
       `<tr><td>${l.login}</td><td>${l.logout}</td><td>${l.reason}</td></tr>`;
   });
 }
