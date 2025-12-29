@@ -19,8 +19,6 @@ body{
   grid-template-columns:280px 1fr;
   height:100vh;
 }
-
-/* SIDEBAR */
 .sidebar{
   padding:20px;
   display:flex;
@@ -54,9 +52,10 @@ body{
   font-weight:600;
   cursor:pointer;
 }
-
-/* MAIN */
-.main{padding:25px;overflow:auto}
+.main{
+  padding:25px;
+  overflow:auto;
+}
 .card{
   background:#020617;
   border:1px solid #1e293b;
@@ -65,11 +64,7 @@ body{
   margin-bottom:20px;
 }
 .hidden{display:none}
-
-/* TASKS */
 .task{display:flex;gap:10px;margin:8px 0}
-
-/* PROGRESS */
 .progress{
   height:18px;border-radius:10px;overflow:hidden;
   border:1px solid #1e293b;margin:6px 0 12px;
@@ -79,15 +74,13 @@ body{
 .bar.GOOD{background:#84cc16}
 .bar.AVERAGE{background:#facc15}
 .bar.POOR{background:#ef4444}
-
-/* HISTORY */
 .history-item{
   padding:12px;border:1px solid #1e293b;
   border-left:5px solid #38bdf8;
   border-radius:12px;margin-bottom:10px;
 }
 
-/* ================= ADDED: FOCUS POPUP ================= */
+/* ===== POPUP ===== */
 #focusOverlay{
   position:fixed;
   inset:0;
@@ -98,7 +91,6 @@ body{
   z-index:99999;
 }
 #focusOverlay.hidden{display:none}
-
 .focusBox{
   background:#020617;
   border:2px solid #38bdf8;
@@ -106,9 +98,7 @@ body{
   padding:30px;
   width:380px;
   text-align:center;
-  box-shadow:0 0 40px rgba(56,189,248,.4);
 }
-.focusBox h2{margin-top:0}
 .focusBtns{
   display:flex;
   gap:14px;
@@ -124,18 +114,15 @@ body{
 }
 .focusBtns .yes{background:#22c55e;color:#000}
 .focusBtns .no{background:#ef4444;color:#fff}
-.focusBox small{color:#94a3b8}
-/* ===================================================== */
 </style>
 </head>
 
 <body>
 
-<!-- ================= ADDED: FOCUS POPUP ================= -->
 <div id="focusOverlay" class="hidden">
   <div class="focusBox">
     <h2>Focus Check</h2>
-    <p>Be honest.<br>Are you studying or watching reels?</p>
+    <p>Are you studying or watching reels?</p>
     <div class="focusBtns">
       <button id="btnStudy" class="yes">I am studying</button>
       <button id="btnDistract" class="no">I was distracted</button>
@@ -143,7 +130,6 @@ body{
     <small>No response in 1 minute = idle mark</small>
   </div>
 </div>
-<!-- ===================================================== -->
 
 <div class="app">
 <div class="sidebar">
@@ -169,52 +155,167 @@ body{
 </div>
 
 <script type="module">
-/* ===== YOUR EXISTING CODE (UNCHANGED) ===== */
-/* … ALL YOUR ORIGINAL 344 LINES STAY HERE … */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-/* ===== ADDED: FOCUS POPUP LOGIC (SAFE ADD) ===== */
-const focusOverlay=document.getElementById("focusOverlay");
+const app=initializeApp({
+  apiKey:"AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
+  authDomain:"focus-dashboard-5965a.firebaseapp.com",
+  projectId:"focus-dashboard-5965a"
+});
+const db=getFirestore(app);
+
+/* ===== ORIGINAL VARIABLES ===== */
+const status=document.getElementById("status");
+const tasksBox=document.getElementById("tasksBox");
+const taskList=document.getElementById("taskList");
+const dayEndBox=document.getElementById("dayEndBox");
+const reportBox=document.getElementById("reportBox");
+const historyBox=document.getElementById("historyBox");
+
+const DAY_STATUS="DAY_STATUS";
+const CURRENT_TASKS="CURRENT_TASKS";
+const NEXT_TASKS="NEXT_TASKS";
+const SESSIONS="SESSIONS";
+const REPORTS="REPORTS";
+
+const now=()=>new Date();
+const stamp=()=>new Date().toLocaleTimeString([],{
+  hour:"2-digit",minute:"2-digit"
+});
+const mins=(a,b)=>Math.round((b-a)/60000);
+
+let idleMarks=0;
+let lastActivity=Date.now();
+let idlePopupShown=false;
+
+/* ===== FUNCTIONS (UNCHANGED) ===== */
+async function saveIdleMarks(){
+  try{
+    await setDoc(doc(db,"user_state","default"),{
+      idleMarks,lastActive:new Date()
+    });
+  }catch(e){}
+}
+async function loadIdleMarks(){
+  try{
+    const s=await getDoc(doc(db,"user_state","default"));
+    if(s.exists()) idleMarks=s.data().idleMarks||0;
+  }catch(e){}
+}
+
+async function login(){
+  if(!prompt("Enter ID")||!prompt("Enter Password"))return;
+  await loadIdleMarks();
+  lastActivity=Date.now();
+  startSession();
+  localStorage.setItem("LOGGED_IN","YES");
+  status.innerText="Status: Logged in @ "+stamp();
+  tasksBox.classList.remove("hidden");
+  loadTasks();
+}
+
+function bioBreak(){
+  endSession();
+  localStorage.removeItem("LOGGED_IN");
+  status.innerText="Status: Bio Break @ "+stamp();
+  tasksBox.classList.add("hidden");
+}
+
+function startSession(){
+  const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
+  s.push({start:now().toISOString(),end:null});
+  localStorage.setItem(SESSIONS,JSON.stringify(s));
+}
+function endSession(){
+  const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
+  for(let i=s.length-1;i>=0;i--){
+    if(!s[i].end){s[i].end=now().toISOString();break;}
+  }
+  localStorage.setItem(SESSIONS,JSON.stringify(s));
+}
+
+function loadTasks(){
+  taskList.innerHTML="";
+  const data=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
+  if(!data.length){
+    taskList.innerText="No tasks assigned.";
+    return;
+  }
+  data.forEach(t=>{
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=t.done;
+    cb.disabled=t.done;
+    cb.onchange=()=>{
+      if(confirm("Confirm task done?")){
+        t.done=true;
+        localStorage.setItem(CURRENT_TASKS,JSON.stringify(data));
+      }else cb.checked=false;
+    };
+    const d=document.createElement("div");
+    d.className="task";
+    d.append(cb," "+t.name);
+    taskList.appendChild(d);
+  });
+}
+
+function openDayEnd(){
+  if(localStorage.getItem("LOGGED_IN")!=="YES")return;
+  let h="<h3>Confirm Day End</h3>";
+  for(let i=0;i<7;i++)
+    h+=`<input id="s${i}" placeholder="Subject ${i+1}"><br>`;
+  h+=`<br>Distraction (min)<br>
+      <input id="dist" type="number"><br><br>
+      <button onclick="confirmDayEnd()">Confirm</button>`;
+  dayEndBox.innerHTML=h;
+  dayEndBox.classList.remove("hidden");
+}
+
+function confirmDayEnd(){
+  idleMarks=0;
+  saveIdleMarks();
+  generateReport();
+  bioBreak();
+  status.innerText+=" – Thank you";
+}
+
+function generateReport(){
+  reportBox.innerHTML="<h3>Report generated</h3>";
+}
+
+function toggleHistory(){
+  historyBox.classList.toggle("hidden");
+}
+
+/* ===== IDLE POPUP ===== */
+const overlay=document.getElementById("focusOverlay");
 const btnStudy=document.getElementById("btnStudy");
 const btnDistract=document.getElementById("btnDistract");
 
-let focusTimer=null;
-
-function showFocusPopup(){
-  focusOverlay.classList.remove("hidden");
-  clearTimeout(focusTimer);
-  focusTimer=setTimeout(()=>{
-    idleMarks++;
-    focusOverlay.classList.add("hidden");
-  },60000); // 1 minute
-}
-
-function hideFocusPopup(){
-  clearTimeout(focusTimer);
-  focusOverlay.classList.add("hidden");
-}
-
 btnStudy.addEventListener("click",()=>{
-  hideFocusPopup();
+  overlay.classList.add("hidden");
+  lastActivity=Date.now();
 });
-
 btnDistract.addEventListener("click",()=>{
   idleMarks++;
-  hideFocusPopup();
+  saveIdleMarks();
+  overlay.classList.add("hidden");
 });
 
-/* show popup every idle cycle */
 setInterval(()=>{
   if(localStorage.getItem("LOGGED_IN")==="YES"){
-    showFocusPopup();
+    overlay.classList.remove("hidden");
   }
-},30000); // test: every 30 sec
+},30000);
 
-/* ===== KEEP YOUR EXISTING window EXPOSE ===== */
-window.login=login;
-window.bioBreak=bioBreak;
-window.openDayEnd=openDayEnd;
-window.toggleHistory=toggleHistory;
-window.confirmDayEnd=confirmDayEnd;
+/* ===== CRITICAL FIX: EXPOSE FUNCTIONS ===== */
+window.login = login;
+window.bioBreak = bioBreak;
+window.openDayEnd = openDayEnd;
+window.toggleHistory = toggleHistory;
+window.confirmDayEnd = confirmDayEnd;
+
 </script>
 
 </body>
