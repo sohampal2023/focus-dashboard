@@ -6,25 +6,84 @@
 
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
-body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
-.app{display:grid;grid-template-columns:280px 1fr;height:100vh}
-.sidebar{padding:20px;display:flex;flex-direction:column;gap:18px;border-right:1px solid #1e293b}
-.sidebar h2{text-align:center;color:#38bdf8;margin:0}
-.status{padding:26px;border-radius:16px;border:2px solid #334155;text-align:center;font-weight:900;background:#020617}
-.nav button{width:100%;padding:14px;margin-bottom:10px;border-radius:12px;border:1px solid #1e293b;background:#020617;color:#e5e7eb;font-weight:600;cursor:pointer}
+html,body{
+  margin:0;height:100%;
+  font-family:Segoe UI,system-ui,sans-serif
+}
+body{
+  background:linear-gradient(135deg,#0f172a,#020617);
+  color:#e5e7eb
+}
+.app{
+  display:grid;
+  grid-template-columns:280px 1fr;
+  height:100vh
+}
+.sidebar{
+  padding:20px;
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+  border-right:1px solid #1e293b
+}
+.sidebar h2{
+  text-align:center;
+  color:#38bdf8;
+  margin:0
+}
+.status{
+  padding:26px;
+  border-radius:16px;
+  border:2px solid #334155;
+  text-align:center;
+  font-weight:900;
+  background:#020617
+}
+.nav button{
+  width:100%;
+  padding:14px;
+  margin-bottom:10px;
+  border-radius:12px;
+  border:1px solid #1e293b;
+  background:#020617;
+  color:#e5e7eb;
+  font-weight:600;
+  cursor:pointer
+}
 .nav button:hover{border-color:#38bdf8}
 .main{padding:25px;overflow:auto}
-.card{background:#020617;border:1px solid #1e293b;border-radius:16px;padding:20px;margin-bottom:20px}
+.card{
+  background:#020617;
+  border:1px solid #1e293b;
+  border-radius:16px;
+  padding:20px;
+  margin-bottom:20px
+}
 .hidden{display:none}
 .task{display:flex;gap:10px;margin:8px 0}
-.progress{height:18px;border-radius:10px;overflow:hidden;border:1px solid #1e293b}
-.bar{height:100%;font-size:11px;font-weight:700;text-align:center}
+.progress{
+  height:18px;
+  border-radius:10px;
+  overflow:hidden;
+  border:1px solid #1e293b
+}
+.bar{
+  height:100%;
+  font-size:11px;
+  font-weight:700;
+  text-align:center
+}
 .bar.EXCELLENT{background:#22c55e}
 .bar.GOOD{background:#84cc16}
 .bar.AVERAGE{background:#facc15}
 .bar.POOR{background:#ef4444}
-.history-item{padding:12px;border:1px solid #1e293b;border-left:5px solid #38bdf8;border-radius:12px;margin-bottom:10px}
+.history-item{
+  padding:12px;
+  border:1px solid #1e293b;
+  border-left:5px solid #38bdf8;
+  border-radius:12px;
+  margin-bottom:10px
+}
 </style>
 </head>
 
@@ -77,7 +136,7 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-/* ✅ MULTI ADMIN EMAIL SUPPORT */
+/* MULTI ADMIN */
 const ADMIN_EMAILS = [
   "admin@study.com",
   "soham@study.com"
@@ -106,28 +165,52 @@ const REPORTS="REPORTS";
 /* HELPERS */
 const ukey=k=>`${CURRENT_UID}_${k}`;
 const now=()=>new Date();
-const stamp=()=>new Date().toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"});
+const stamp=()=>new Date().toLocaleTimeString([],{
+  hour:"2-digit",minute:"2-digit"
+});
 const mins=(a,b)=>Math.round((b-a)/60000);
+
+/* 🔁 NEW DAY PROMOTION LOGIC */
+function startNewDayIfNeeded(){
+  const status = localStorage.getItem(ukey(DAY_STATUS));
+
+  if(status === "CLOSED"){
+    const nextTasks = JSON.parse(
+      localStorage.getItem(ukey(NEXT_TASKS)) || "[]"
+    );
+
+    localStorage.setItem(
+      ukey(CURRENT_TASKS),
+      JSON.stringify(nextTasks)
+    );
+
+    localStorage.removeItem(ukey(NEXT_TASKS));
+    localStorage.setItem(ukey(DAY_STATUS),"ACTIVE");
+  }
+}
 
 /* LOGIN */
 window.login = async ()=>{
-  const email=prompt("Email");
-  const pass=prompt("Password");
-  if(!email||!pass)return;
+  const email = prompt("Email");
+  const pass = prompt("Password");
+  if(!email || !pass) return;
 
-  const cred=await signInWithEmailAndPassword(auth,email,pass);
-  CURRENT_UID=cred.user.uid;
-  CURRENT_EMAIL=email;
+  const cred = await signInWithEmailAndPassword(auth,email,pass);
+  CURRENT_UID = cred.user.uid;
+  CURRENT_EMAIL = email;
 
   await loadUserData();
+  startNewDayIfNeeded();
+  saveUserData();
 
   if(ADMIN_EMAILS.includes(email)){
     adminBtn.classList.remove("hidden");
   }
 
-  idleMarks=0;
-  lastActivity=Date.now();
-  status.innerText="Status: Logged in @ "+stamp();
+  idleMarks = 0;
+  lastActivity = Date.now();
+
+  status.innerText = "Status: Logged in @ " + stamp();
   tasksBox.classList.remove("hidden");
   loadTasks();
 };
@@ -144,9 +227,9 @@ async function saveUserData(){
 }
 
 async function loadUserData(){
-  const snap=await getDoc(doc(db,"users",CURRENT_UID));
-  if(!snap.exists())return;
-  const d=snap.data();
+  const snap = await getDoc(doc(db,"users",CURRENT_UID));
+  if(!snap.exists()) return;
+  const d = snap.data();
   localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(d.tasks||[]));
   localStorage.setItem(ukey(REPORTS),JSON.stringify(d.reports||[]));
   localStorage.setItem(ukey(SESSIONS),JSON.stringify(d.sessions||[]));
@@ -157,19 +240,28 @@ async function loadUserData(){
 function loadTasks(){
   taskList.innerHTML="";
   const data=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
-  if(!data.length){taskList.innerText="No tasks assigned.";return;}
+  if(!data.length){
+    taskList.innerText="No tasks assigned.";
+    return;
+  }
   data.forEach(t=>{
     const cb=document.createElement("input");
-    cb.type="checkbox";cb.checked=t.done;cb.disabled=t.done;
+    cb.type="checkbox";
+    cb.checked=t.done;
+    cb.disabled=t.done;
     cb.onchange=()=>{
       if(confirm("Confirm task done?")){
         t.done=true;
-        localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(data));
+        localStorage.setItem(
+          ukey(CURRENT_TASKS),
+          JSON.stringify(data)
+        );
         saveUserData();
       }else cb.checked=false;
     };
     const d=document.createElement("div");
-    d.className="task";d.append(cb," "+t.name);
+    d.className="task";
+    d.append(cb," "+t.name);
     taskList.appendChild(d);
   });
 }
@@ -177,9 +269,14 @@ function loadTasks(){
 /* DAY END */
 window.openDayEnd=()=>{
   let h="<h3>Confirm Day End</h3>";
-  for(let i=0;i<7;i++)h+=`<input id="s${i}" placeholder="Task ${i+1}"><br>`;
-  h+=`<br>Distraction(min)<input id="dist" type="number"><br><br>
-  <button onclick="confirmDayEnd()">Confirm</button>`;
+  for(let i=0;i<7;i++){
+    h+=`<input id="s${i}" placeholder="Task ${i+1}"><br>`;
+  }
+  h+=`
+    <br>Distraction (min)
+    <input id="dist" type="number"><br><br>
+    <button onclick="confirmDayEnd()">Confirm</button>
+  `;
   dayEndBox.innerHTML=h;
   dayEndBox.classList.remove("hidden");
 };
@@ -187,14 +284,20 @@ window.openDayEnd=()=>{
 window.confirmDayEnd=()=>{
   let next=[];
   const cur=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
-  cur.filter(t=>!t.done).forEach(t=>next.push({name:t.name,done:false}));
+
+  cur.filter(t=>!t.done).forEach(t=>{
+    next.push({name:t.name,done:false});
+  });
+
   for(let i=0;i<7;i++){
     const v=document.getElementById("s"+i).value.trim();
-    if(v)next.push({name:v,done:false});
+    if(v) next.push({name:v,done:false});
   }
+
   localStorage.setItem(ukey(NEXT_TASKS),JSON.stringify(next));
-  generateReport();
   localStorage.setItem(ukey(DAY_STATUS),"CLOSED");
+
+  generateReport();
   saveUserData();
   bioBreak();
 };
@@ -202,17 +305,48 @@ window.confirmDayEnd=()=>{
 /* REPORT */
 function generateReport(){
   const s=JSON.parse(localStorage.getItem(ukey(SESSIONS))||"[]");
-  let total=0;s.forEach(x=>x.end&&(total+=mins(new Date(x.start),new Date(x.end))));
+  let total=0;
+  s.forEach(x=>{
+    if(x.start && x.end){
+      total+=mins(new Date(x.start),new Date(x.end));
+    }
+  });
+
   const dist=+document.getElementById("dist").value||0;
-  const pct=total?Math.round(Math.max(total-dist,0)/total*100):0;
+  const pct=total
+    ? Math.round(Math.max(total-dist,0)/total*100)
+    : 0;
+
   const t=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
-  const taskPct=t.length?Math.round(t.filter(x=>x.done).length/t.length*100):0;
+  const taskPct=t.length
+    ? Math.round(t.filter(x=>x.done).length/t.length*100)
+    : 0;
+
   const score=Math.round((pct+taskPct)/2);
-  const grade=score>=80?"EXCELLENT":score>=60?"GOOD":score>=40?"AVERAGE":"POOR";
+  const grade=
+    score>=80?"EXCELLENT":
+    score>=60?"GOOD":
+    score>=40?"AVERAGE":"POOR";
+
   const all=JSON.parse(localStorage.getItem(ukey(REPORTS))||"[]");
-  all.push({date:new Date().toLocaleDateString(),finalScore:score,grade});
+  all.push({
+    date:new Date().toLocaleDateString(),
+    finalScore:score,
+    grade
+  });
+
   localStorage.setItem(ukey(REPORTS),JSON.stringify(all));
-  reportBox.innerHTML=`<h3>Report</h3>${score}%<div class="progress"><div class="bar ${grade}" style="width:${score}%">${score}%</div></div>`;
+
+  reportBox.innerHTML=`
+    <h3>Report Card</h3>
+    ${score}%
+    <div class="progress">
+      <div class="bar ${grade}" style="width:${score}%">
+        ${score}%
+      </div>
+    </div>
+    Grade: <b>${grade}</b>
+  `;
 }
 
 /* HISTORY */
@@ -221,11 +355,14 @@ window.toggleHistory=()=>{
   historyBox.innerHTML="<h3>History</h3>";
   JSON.parse(localStorage.getItem(ukey(REPORTS))||"[]")
     .forEach(x=>{
-      historyBox.innerHTML+=`<div class="history-item">${x.date} → ${x.finalScore}% (${x.grade})</div>`;
+      historyBox.innerHTML+=`
+        <div class="history-item">
+          ${x.date} → ${x.finalScore}% (${x.grade})
+        </div>`;
     });
 };
 
-/* ADMIN PANEL */
+/* ADMIN */
 window.openAdmin=async()=>{
   adminBox.classList.remove("hidden");
   adminBox.innerHTML="<h3>All Users Report</h3>";
@@ -233,7 +370,10 @@ window.openAdmin=async()=>{
   snap.forEach(d=>{
     const r=d.data().reports||[];
     r.forEach(x=>{
-      adminBox.innerHTML+=`<div class="history-item">${d.data().email} → ${x.date} ${x.finalScore}%</div>`;
+      adminBox.innerHTML+=`
+        <div class="history-item">
+          ${d.data().email} → ${x.date} ${x.finalScore}%
+        </div>`;
     });
   });
 };
@@ -247,16 +387,20 @@ window.bioBreak=async()=>{
 };
 
 /* IDLE SYSTEM */
-let lastActivity=Date.now(),idleMarks=0,idlePopupShown=false;
-["click","keydown","mousemove"].forEach(e=>{
+let lastActivity=Date.now();
+let idleMarks=0;
+let idlePopupShown=false;
+
+["click","keydown","mousemove","touchstart"].forEach(e=>{
   document.addEventListener(e,()=>{
     lastActivity=Date.now();
     idlePopupShown=false;
   });
 });
+
 setInterval(()=>{
-  if(!CURRENT_UID)return;
-  if(Date.now()-lastActivity>=20*60*1000&&!idlePopupShown){
+  if(!CURRENT_UID) return;
+  if(Date.now()-lastActivity>=20*60*1000 && !idlePopupShown){
     idlePopupShown=true;
     idleMarks++;
     alert("Idle 20 minutes. Mark "+idleMarks+"/3");
