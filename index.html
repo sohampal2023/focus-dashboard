@@ -151,7 +151,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <script>
 let UID=null;
 let idleTimer=null;
-let idleRemaining=1800;   // ✅ 30 minutes
+let idleRemaining=1800;
 let idleMiss=0;
 let penalty=0;
 
@@ -161,7 +161,7 @@ const key=k=>UID+"_"+k;
 /* IDLE */
 function startIdle(){
   clearInterval(idleTimer);
-  idleRemaining=1800;    // ✅ reset to 30 minutes
+  idleRemaining=1800;
   idleMiss=0;
   idleBox.classList.remove("hidden");
   updateIdle();
@@ -184,9 +184,11 @@ function resetIdle(){startIdle()}
 function autoLogout(){
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
-  const logs=JSON.parse(localStorage.getItem(key("LOGS")));
-  logs[logs.length-1].logout=now();
-  localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
+  if(logs.length){
+    logs[logs.length-1].logout=now();
+    localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+  }
   localStorage.setItem(key("ASK_REASON"),"1");
   location.reload();
 }
@@ -199,10 +201,12 @@ function login(){
   localStorage.removeItem(key("DAY_ENDED"));
 
   if(localStorage.getItem(key("ASK_REASON"))==="1"){
-    const logs=JSON.parse(localStorage.getItem(key("LOGS")));
-    logs[logs.length-1].reason=
-      prompt("Reason for last logout?")||"Idle timeout";
-    localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+    const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
+    if(logs.length){
+      logs[logs.length-1].reason=
+        prompt("Reason for last logout?")||"Idle timeout";
+      localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+    }
     localStorage.removeItem(key("ASK_REASON"));
   }
 
@@ -227,9 +231,11 @@ function login(){
 function bioBreak(){
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
-  const logs=JSON.parse(localStorage.getItem(key("LOGS")));
-  logs[logs.length-1].logout=now();
-  localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
+  if(logs.length){
+    logs[logs.length-1].logout=now();
+    localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+  }
   localStorage.setItem(key("ASK_REASON"),"1");
   location.reload();
 }
@@ -261,8 +267,8 @@ function setupTasks(){
 function loadTasks(){
   taskList.innerHTML="";
   extraList.innerHTML="";
-  const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
-  const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
+  const tasks=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
+  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
 
   tasks.forEach(t=>{
     const cb=document.createElement("input");
@@ -291,7 +297,7 @@ function loadTasks(){
 function addExtra(){
   const name=prompt("Extra work?");
   if(!name)return;
-  const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
+  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
   extras.push({name,done:false});
   localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
   loadTasks();
@@ -304,8 +310,8 @@ function save(tasks,extras){
 
 /* PROGRESS */
 function calculate(){
-  const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
-  const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
+  const tasks=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
+  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
   const done=tasks.filter(t=>t.done).length+
               extras.filter(e=>e.done).length;
   const percent=tasks.length?
@@ -350,12 +356,16 @@ function finalDayEnd(){
   localStorage.setItem(key("NEXT_TASKS"),JSON.stringify(next));
 
   const p=calculate();
-  const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
+  const tasks=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
   const carry=tasks.filter(t=>!t.done);
 
   localStorage.setItem(key("TASKS"),JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"),JSON.stringify([]));
+
+  /* ✅ CLEAR LOGS COMPLETELY */
   localStorage.removeItem(key("LOGS"));
+  logTable.innerHTML="";
+
   localStorage.setItem(key("DAY_ENDED"),"1");
 
   reportBox.innerHTML=`
@@ -382,7 +392,7 @@ function finalDayEnd(){
 
 /* LOG TABLE */
 function renderLogs(){
-  const logs=JSON.parse(localStorage.getItem(key("LOGS")));
+  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
   logTable.innerHTML="";
   logs.forEach(l=>{
     logTable.innerHTML+=
