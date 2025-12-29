@@ -6,25 +6,96 @@
 
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
-body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
-.app{display:grid;grid-template-columns:280px 1fr;height:100vh}
-.sidebar{padding:20px;display:flex;flex-direction:column;gap:18px;border-right:1px solid #1e293b}
-.sidebar h2{text-align:center;color:#38bdf8;margin:0}
-.status{padding:16px;border-radius:16px;border:2px solid #334155;text-align:center;font-weight:700;background:#020617}
-.nav button{width:100%;padding:14px;margin-bottom:10px;border-radius:12px;border:1px solid #1e293b;background:#020617;color:#e5e7eb;font-weight:600;cursor:pointer}
-.nav button:disabled{opacity:.4;cursor:not-allowed}
-.main{padding:25px;overflow:auto}
-.card{background:#020617;border:1px solid #1e293b;border-radius:16px;padding:20px;margin-bottom:20px}
+html,body{
+  margin:0;height:100%;
+  font-family:Segoe UI,system-ui,sans-serif;
+}
+body{
+  background:linear-gradient(135deg,#0f172a,#020617);
+  color:#e5e7eb;
+}
+.app{
+  display:grid;
+  grid-template-columns:280px 1fr;
+  height:100vh;
+}
+.sidebar{
+  padding:20px;
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+  border-right:1px solid #1e293b;
+}
+.sidebar h2{
+  text-align:center;
+  color:#38bdf8;
+  margin:0;
+}
+.status{
+  padding:16px;
+  border-radius:16px;
+  border:2px solid #334155;
+  text-align:center;
+  font-weight:700;
+  background:#020617;
+}
+.nav button{
+  width:100%;
+  padding:14px;
+  margin-bottom:10px;
+  border-radius:12px;
+  border:1px solid #1e293b;
+  background:#020617;
+  color:#e5e7eb;
+  font-weight:600;
+  cursor:pointer;
+}
+.nav button:disabled{
+  opacity:.4;
+  cursor:not-allowed;
+}
+.main{
+  padding:25px;
+  overflow:auto;
+}
+.card{
+  background:#020617;
+  border:1px solid #1e293b;
+  border-radius:16px;
+  padding:20px;
+  margin-bottom:20px;
+}
 .hidden{display:none}
-.task{display:flex;gap:10px;margin:10px 0}
-.progress{height:18px;border-radius:10px;overflow:hidden;border:1px solid #1e293b}
-.bar{height:100%;font-size:11px;font-weight:700;text-align:center}
+.task{
+  display:flex;
+  gap:10px;
+  margin:10px 0;
+}
+.progress{
+  height:18px;
+  border-radius:10px;
+  overflow:hidden;
+  border:1px solid #1e293b;
+}
+.bar{
+  height:100%;
+  font-size:11px;
+  font-weight:700;
+  text-align:center;
+}
 .EXCELLENT{background:#22c55e}
 .GOOD{background:#84cc16}
 .AVERAGE{background:#facc15}
 .POOR{background:#ef4444}
-input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px solid #334155;background:#020617;color:#e5e7eb}
+input.nextTask{
+  width:100%;
+  padding:8px;
+  margin:6px 0;
+  border-radius:8px;
+  border:1px solid #334155;
+  background:#020617;
+  color:#e5e7eb;
+}
 </style>
 </head>
 
@@ -33,6 +104,7 @@ input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px 
 
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
+
   <div id="statusBox" class="status">Status: Logged out</div>
 
   <div id="idleBox" class="status hidden">
@@ -52,6 +124,10 @@ input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px 
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
     <div id="taskList"></div>
+    <hr>
+    <h4>Extra Work (Bonus)</h4>
+    <div id="extraList"></div>
+    <button onclick="addExtraTask()">+ Add Extra Work</button>
   </div>
 
   <div id="dayEndBox" class="card hidden"></div>
@@ -64,24 +140,23 @@ input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px 
 let UID=null;
 let idleTimer=null;
 let idleRemaining=1800;
-let sessionStart=0;
 
-/* ===== KEYS ===== */
+/* ===== CONSTANTS ===== */
 const K_TASKS="TASKS";
+const K_EXTRA="EXTRA_TASKS";
 const K_NEXT="NEXT_TASKS";
 const K_IDLE="IDLE_COUNT";
-const key=k=>UID+"_"+k;
+const BONUS_PER_EXTRA=5;
 
-/* ===== TIME ===== */
+/* ===== HELPERS ===== */
+const key=k=>UID+"_"+k;
 const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
 
 /* ===== LOGIN ===== */
 function login(){
   const email=prompt("Email");
-  if(!email) return;
+  if(!email)return;
   UID=email;
-
-  sessionStart=Date.now();
 
   document.getElementById("statusBox").innerText="Status: Logged in";
   document.getElementById("bioBtn").disabled=false;
@@ -95,7 +170,7 @@ function login(){
   startIdle();
 }
 
-/* ===== TASK MERGE ===== */
+/* ===== TASK MERGE (CARRY FORWARD) ===== */
 function mergeTasks(){
   const prev=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
   const next=JSON.parse(localStorage.getItem(key(K_NEXT))||"[]");
@@ -115,15 +190,20 @@ function mergeTasks(){
 
   localStorage.setItem(key(K_TASKS),JSON.stringify(merged));
   localStorage.removeItem(key(K_NEXT));
+  localStorage.setItem(key(K_EXTRA),"[]");
 }
 
-/* ===== TASKS ===== */
+/* ===== TASK UI ===== */
 function loadTasks(){
   const list=document.getElementById("taskList");
+  const extra=document.getElementById("extraList");
   document.getElementById("tasksBox").classList.remove("hidden");
+
   list.innerHTML="";
+  extra.innerHTML="";
 
   const tasks=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
+  const extras=JSON.parse(localStorage.getItem(key(K_EXTRA))||"[]");
 
   tasks.forEach(t=>{
     const cb=document.createElement("input");
@@ -131,17 +211,40 @@ function loadTasks(){
     cb.checked=t.done;
     cb.onchange=()=>{
       if(!confirm("Confirm task status change?")){
-        cb.checked=!cb.checked;
-        return;
+        cb.checked=!cb.checked;return;
       }
       t.done=cb.checked;
       localStorage.setItem(key(K_TASKS),JSON.stringify(tasks));
     };
     list.append(cb," "+t.name,document.createElement("br"));
   });
+
+  extras.forEach(e=>{
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=e.done;
+    cb.onchange=()=>{
+      if(!confirm("Confirm extra work completion?")){
+        cb.checked=!cb.checked;return;
+      }
+      e.done=cb.checked;
+      localStorage.setItem(key(K_EXTRA),JSON.stringify(extras));
+    };
+    extra.append(cb," "+e.name,document.createElement("br"));
+  });
 }
 
-/* ===== IDLE ===== */
+/* ===== ADD EXTRA WORK ===== */
+function addExtraTask(){
+  const name=prompt("Extra work description?");
+  if(!name)return;
+  const extras=JSON.parse(localStorage.getItem(key(K_EXTRA))||"[]");
+  extras.push({name,done:false});
+  localStorage.setItem(key(K_EXTRA),JSON.stringify(extras));
+  loadTasks();
+}
+
+/* ===== IDLE TIMER ===== */
 function startIdle(){
   clearInterval(idleTimer);
   idleRemaining=1800;
@@ -184,33 +287,31 @@ function confirmDayEnd(){
   if(next.length) localStorage.setItem(key(K_NEXT),JSON.stringify(next));
 
   const tasks=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
+  const extras=JSON.parse(localStorage.getItem(key(K_EXTRA))||"[]");
+
   const done=tasks.filter(t=>t.done).length;
-  const workPct=Math.round(done/tasks.length*100);
-
-  const totalSec=Math.floor((Date.now()-sessionStart)/1000);
-  const productivePct=Math.min(100,Math.round((totalSec-idleRemaining)/totalSec*100));
-  const idleCount=Number(localStorage.getItem(key(K_IDLE))||0);
-
-  let final=Math.round(workPct*0.6+productivePct*0.4-idleCount*5);
-  final=Math.max(0,Math.min(100,final));
+  const basePct=Math.round(done/tasks.length*100);
+  const extraDone=extras.filter(e=>e.done).length;
+  const final=Math.min(100,basePct+extraDone*BONUS_PER_EXTRA);
 
   const grade=final>=80?"EXCELLENT":final>=60?"GOOD":final>=40?"AVERAGE":"POOR";
 
   document.getElementById("reportBox").innerHTML=`
     <h3>Report Card</h3>
-    Work Completion: ${workPct}%<br>
-    Productive Time: ${productivePct}%<br>
-    Idle Count: ${idleCount}<br><br>
-    <div class="progress"><div class="bar ${grade}" style="width:${final}%">${final}%</div></div>
+    Done Tasks: ${done}/${tasks.length}<br>
+    Extra Work Done: ${extraDone}<br><br>
+    <div class="progress">
+      <div class="bar ${grade}" style="width:${final}%">${final}%</div>
+    </div>
     Grade: <b>${grade}</b>
   `;
   document.getElementById("reportBox").classList.remove("hidden");
 
   document.getElementById("tasksBox").classList.add("hidden");
   document.getElementById("dayEndBox").classList.add("hidden");
-  document.getElementById("idleBox").classList.add("hidden");
 
   localStorage.removeItem(key(K_TASKS));
+  localStorage.removeItem(key(K_EXTRA));
 }
 
 /* ===== BIO BREAK ===== */
