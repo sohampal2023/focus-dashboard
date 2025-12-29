@@ -8,6 +8,7 @@
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
 body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
+
 .app{display:grid;grid-template-columns:280px 1fr;height:100vh}
 
 /* SIDEBAR */
@@ -15,9 +16,11 @@ body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
 .sidebar h2{text-align:center;color:#38bdf8;margin:0}
 .status{padding:26px;border-radius:16px;border:2px solid #334155;text-align:center;font-weight:900;font-size:18px;background:#020617}
 
-/* NAV */
-.nav button{width:100%;padding:14px;margin-bottom:10px;border-radius:12px;border:1px solid #1e293b;background:#020617;color:#e5e7eb;font-weight:600;cursor:pointer}
-.nav button:hover{border-color:#38bdf8}
+.nav button{
+  width:100%;padding:14px;margin-bottom:10px;border-radius:12px;
+  border:1px solid #1e293b;background:#020617;color:#e5e7eb;
+  font-weight:600;cursor:pointer
+}
 
 /* MAIN */
 .main{padding:25px;overflow:auto}
@@ -28,28 +31,27 @@ body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
 .task{display:flex;gap:10px;margin:8px 0}
 
 /* PROGRESS */
-.progress{height:18px;border-radius:10px;overflow:hidden;border:1px solid #1e293b;margin:6px 0 12px}
+.progress{height:18px;border-radius:10px;overflow:hidden;border:1px solid #1e293b}
 .bar{height:100%;font-size:11px;font-weight:700;text-align:center}
 .bar.EXCELLENT{background:#22c55e}
 .bar.GOOD{background:#84cc16}
 .bar.AVERAGE{background:#facc15}
 .bar.POOR{background:#ef4444}
 
-/* HISTORY */
-.history-item{padding:12px;border:1px solid #1e293b;border-left:5px solid #38bdf8;border-radius:12px;margin-bottom:10px}
-
-/* FOCUS POPUP */
-.focus-popup{
-  position:fixed;inset:0;background:rgba(0,0,0,.7);
-  display:flex;align-items:center;justify-content:center;z-index:9999
+/* POPUP */
+.overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.8);
+  display:flex;align-items:center;justify-content:center;z-index:1000
 }
-.focus-box{
-  background:#020617;border:2px solid #38bdf8;border-radius:18px;
-  padding:30px;width:320px;text-align:center
+.popup{
+  background:#020617;border:2px solid #38bdf8;border-radius:16px;
+  padding:30px;width:380px;text-align:center
 }
-.focus-box h3{margin-top:0}
-.focus-btns{display:flex;gap:10px;margin-top:20px}
-.focus-btns button{flex:1;padding:10px;border-radius:10px;border:none;font-weight:700;cursor:pointer}
+.popup h3{margin-top:0}
+.popup button{
+  padding:12px 18px;border:none;border-radius:10px;
+  font-weight:700;cursor:pointer;margin:10px
+}
 .study{background:#22c55e}
 .distract{background:#ef4444}
 </style>
@@ -58,55 +60,45 @@ body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
 <body>
 <div class="app">
 
+<!-- SIDEBAR -->
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
   <div id="status" class="status">Status: Logged out</div>
   <div class="nav">
-    <button onclick="login()">Login</button>
-    <button onclick="bioBreak()">Bio Break</button>
-    <button onclick="openDayEnd()">Day End</button>
-    <button onclick="toggleHistory()">History</button>
+    <button id="loginBtn">Login</button>
+    <button id="bioBtn">Bio Break</button>
+    <button id="dayEndBtn">Day End</button>
+    <button id="historyBtn">History</button>
   </div>
 </div>
 
+<!-- MAIN -->
 <div class="main">
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
     <div id="taskList"></div>
-    <br>
-    <button onclick="addExtraTask()">+ Extra Work</button>
   </div>
-
-  <div id="dayEndBox" class="card hidden"></div>
   <div id="reportBox" class="card hidden"></div>
   <div id="historyBox" class="card hidden"></div>
 </div>
-
 </div>
 
-<!-- FOCUS POPUP -->
-<div id="focusPopup" class="focus-popup hidden">
-  <div class="focus-box">
+<!-- POPUP -->
+<div id="focusOverlay" class="overlay hidden">
+  <div class="popup">
     <h3>Focus Check</h3>
-    <p>Be honest.<br>Are you studying or distracted?</p>
-    <div class="focus-btns">
-      <button class="study" onclick="focusResponse(true)">Studying</button>
-      <button class="distract" onclick="focusResponse(false)">Distracted</button>
-    </div>
-    <p style="font-size:12px;margin-top:10px">
-      No response in 1 minute → idle mark
-    </p>
+    <p>Are you studying or distracted?</p>
+    <button class="study" id="studyBtn">Studying</button>
+    <button class="distract" id="distractBtn">Distracted</button>
+    <p style="font-size:12px">No response in 1 minute → idle mark</p>
   </div>
 </div>
 
 <script type="module">
-/* ===== FIREBASE ===== */
+/* ================= FIREBASE ================= */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
 from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import {
-  getFirestore, doc, setDoc, getDoc, addDoc, collection, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
 const firebaseConfig={
   apiKey:"AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
@@ -116,161 +108,78 @@ const firebaseConfig={
 
 const app=initializeApp(firebaseConfig);
 const auth=getAuth(app);
-const db=getFirestore(app);
 
-/* DOM */
+/* ================= DOM ================= */
 const status=document.getElementById("status");
 const tasksBox=document.getElementById("tasksBox");
 const taskList=document.getElementById("taskList");
-const dayEndBox=document.getElementById("dayEndBox");
 const reportBox=document.getElementById("reportBox");
 const historyBox=document.getElementById("historyBox");
-const focusPopup=document.getElementById("focusPopup");
+const overlay=document.getElementById("focusOverlay");
 
-/* STORAGE */
-const CURRENT_TASKS="CURRENT_TASKS";
-const REPORTS="REPORTS";
-
-/* STATE */
-let currentUser=null;
+/* ================= STATE ================= */
 let idleMarks=0;
-let distractionPenalty=0;
-let overtimeBonus=0;
-let focusTimer=null;
+let score=100;
+let popupTimer=null;
 
-/* TIME */
+/* ================= HELPERS ================= */
 const stamp=()=>new Date().toLocaleTimeString([],{
   hour:"2-digit",minute:"2-digit"
 });
 
-/* AUTH */
+/* ================= LOGIN ================= */
 async function login(){
   const email=prompt("Enter email");
-  const password=prompt("Enter password");
-  if(!email||!password)return;
+  const pass=prompt("Enter password");
+  if(!email||!pass) return;
   try{
-    await signInWithEmailAndPassword(auth,email,password);
-  }catch(e){alert(e.message)}
+    await signInWithEmailAndPassword(auth,email,pass);
+  }catch(e){
+    alert(e.message);
+  }
 }
 
 async function bioBreak(){
-  if(!currentUser)return;
-  await logActivity("BIO_BREAK");
   await signOut(auth);
 }
 
-/* AUTH STATE */
-onAuthStateChanged(auth,async user=>{
+function showPopup(){
+  overlay.classList.remove("hidden");
+  popupTimer=setTimeout(()=>{
+    idleMarks++;
+    overlay.classList.add("hidden");
+  },60000);
+}
+
+function focusResponse(study){
+  clearTimeout(popupTimer);
+  overlay.classList.add("hidden");
+  if(!study){
+    score=Math.max(score-2,0);
+  }
+}
+
+/* ================= AUTH STATE ================= */
+onAuthStateChanged(auth,user=>{
   if(user){
-    currentUser=user;
     status.innerText="Status: Logged in @ "+stamp();
     tasksBox.classList.remove("hidden");
-    await logActivity("LOGIN");
-    loadTasks();
-    startFocusCycle();
+    showPopup();
   }else{
-    currentUser=null;
     status.innerText="Status: Logged out";
     tasksBox.classList.add("hidden");
-    stopFocusCycle();
   }
 });
 
-/* ACTIVITY LOG */
-async function logActivity(type){
-  if(!currentUser)return;
-  await addDoc(
-    collection(db,"users",currentUser.uid,"activity"),
-    {type,time:serverTimestamp(),agent:navigator.userAgent}
-  );
-}
-
-/* TASKS */
-function loadTasks(){
-  taskList.innerHTML="";
-  const data=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
-  if(!data.length){taskList.innerText="No tasks";return}
-  data.forEach(t=>{
-    const cb=document.createElement("input");
-    cb.type="checkbox";cb.checked=t.done;
-    cb.onchange=()=>{t.done=true;saveTasks(data)};
-    const d=document.createElement("div");
-    d.className="task";d.append(cb," "+t.name);
-    taskList.appendChild(d);
-  });
-}
-function saveTasks(d){localStorage.setItem(CURRENT_TASKS,JSON.stringify(d))}
-function addExtraTask(){
-  const n=prompt("Extra task");
-  if(!n)return;
-  const d=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
-  d.push({name:n,done:false,extra:true});
-  overtimeBonus+=2;
-  saveTasks(d);loadTasks();
-}
-
-/* DAY END */
-function openDayEnd(){
-  if(!currentUser)return;
-  dayEndBox.innerHTML=`
-    <h3>Day End</h3>
-    <button onclick="confirmDayEnd()">Confirm</button>`;
-  dayEndBox.classList.remove("hidden");
-}
-
-async function confirmDayEnd(){
-  await logActivity("DAY_END");
-  generateReport();
-  await signOut(auth);
-}
-
-/* REPORT */
-function generateReport(){
-  const tasks=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
-  const taskPct=tasks.length?
-    Math.round(tasks.filter(t=>t.done).length/tasks.length*100):0;
-  let final=taskPct - distractionPenalty + overtimeBonus;
-  final=Math.max(Math.min(final,100),0);
-
-  const grade=final>=80?"EXCELLENT":final>=60?"GOOD":final>=40?"AVERAGE":"POOR";
-
-  reportBox.innerHTML=`
-    <h3>Report Card</h3>
-    Final Score: ${final}%
-    <div class="progress">
-      <div class="bar ${grade}" style="width:${final}%">${final}%</div>
-    </div>
-    Grade: <b>${grade}</b>`;
-  reportBox.classList.remove("hidden");
-}
-
-/* HISTORY */
-function toggleHistory(){
+/* ================= FIX BUTTONS ================= */
+document.getElementById("loginBtn").addEventListener("click",login);
+document.getElementById("bioBtn").addEventListener("click",bioBreak);
+document.getElementById("studyBtn").addEventListener("click",()=>focusResponse(true));
+document.getElementById("distractBtn").addEventListener("click",()=>focusResponse(false));
+document.getElementById("historyBtn").addEventListener("click",()=>{
   historyBox.classList.toggle("hidden");
-}
-
-/* FOCUS SYSTEM */
-function startFocusCycle(){
-  focusTimer=setInterval(()=>{
-    focusPopup.classList.remove("hidden");
-    setTimeout(()=>{idleMarks++;distractionPenalty+=2;focusPopup.classList.add("hidden")},60000);
-  },20*60*1000);
-}
-function stopFocusCycle(){clearInterval(focusTimer)}
-function focusResponse(ok){
-  if(!ok){distractionPenalty+=2}
-  focusPopup.classList.add("hidden");
-}
-
-/* EXPOSE */
-window.login=login;
-window.bioBreak=bioBreak;
-window.openDayEnd=openDayEnd;
-window.toggleHistory=toggleHistory;
-window.confirmDayEnd=confirmDayEnd;
-window.focusResponse=focusResponse;
-window.addExtraTask=addExtraTask;
-
+});
 </script>
+
 </body>
 </html>
