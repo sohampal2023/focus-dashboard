@@ -253,7 +253,7 @@ function bioBreak() {
   location.reload();
 }
 
-/* TASK LOGIC */
+/* TASK LOGIC (FIXED: Extra work persists) */
 function setupTasks() {
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const next = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
@@ -269,7 +269,9 @@ function setupTasks() {
 
   localStorage.setItem(key("TASKS"), JSON.stringify(merged));
   localStorage.removeItem(key("NEXT_TASKS"));
-  localStorage.setItem(key("EXTRA"), JSON.stringify([]));
+  
+  // FIX: Removed the line that was deleting EXTRA work here.
+  // We only delete EXTRA work in finalDayEnd() now.
 
   taskBox.classList.remove("hidden");
   logBox.classList.remove("hidden");
@@ -357,7 +359,7 @@ function getLabel(p) {
   return "Fabulous";
 }
 
-/* DAY END & FULL REPORT CARD */
+/* DAY END */
 function openDayEnd() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
@@ -397,14 +399,13 @@ function finalDayEnd() {
         </ul>
     </div>`;
   }
-  // 🟢 END LIST LOGIC
 
+  // SAVE CARRY, CLEAR EXTRA (ONLY HERE)
   localStorage.setItem(key("TASKS"), JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"), JSON.stringify([]));
   localStorage.removeItem(key("LOGS"));
   logTable.innerHTML = "";
 
-  // 🟢 REPORT CARD: PERCENT + RATING + DETAILS + LIST
   reportBox.innerHTML = `
     <h3>Daily Report</h3>
     <div class="percent">${p.percent}%</div>
