@@ -6,96 +6,25 @@
 
 <style>
 *{box-sizing:border-box}
-html,body{
-  margin:0;height:100%;
-  font-family:Segoe UI,system-ui,sans-serif;
-}
-body{
-  background:linear-gradient(135deg,#0f172a,#020617);
-  color:#e5e7eb;
-}
-.app{
-  display:grid;
-  grid-template-columns:280px 1fr;
-  height:100vh;
-}
-.sidebar{
-  padding:20px;
-  display:flex;
-  flex-direction:column;
-  gap:18px;
-  border-right:1px solid #1e293b;
-}
-.sidebar h2{
-  text-align:center;
-  color:#38bdf8;
-  margin:0;
-}
-.status{
-  padding:16px;
-  border-radius:16px;
-  border:2px solid #334155;
-  text-align:center;
-  font-weight:700;
-  background:#020617;
-}
-.nav button{
-  width:100%;
-  padding:14px;
-  margin-bottom:10px;
-  border-radius:12px;
-  border:1px solid #1e293b;
-  background:#020617;
-  color:#e5e7eb;
-  font-weight:600;
-  cursor:pointer;
-}
-.nav button:disabled{
-  opacity:.4;
-  cursor:not-allowed;
-}
-.main{
-  padding:25px;
-  overflow:auto;
-}
-.card{
-  background:#020617;
-  border:1px solid #1e293b;
-  border-radius:16px;
-  padding:20px;
-  margin-bottom:20px;
-}
+html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
+body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
+.app{display:grid;grid-template-columns:280px 1fr;height:100vh}
+.sidebar{padding:20px;display:flex;flex-direction:column;gap:18px;border-right:1px solid #1e293b}
+.sidebar h2{text-align:center;color:#38bdf8;margin:0}
+.status{padding:16px;border-radius:16px;border:2px solid #334155;text-align:center;font-weight:700;background:#020617}
+.nav button{width:100%;padding:14px;margin-bottom:10px;border-radius:12px;border:1px solid #1e293b;background:#020617;color:#e5e7eb;font-weight:600;cursor:pointer}
+.nav button:disabled{opacity:.4;cursor:not-allowed}
+.main{padding:25px;overflow:auto}
+.card{background:#020617;border:1px solid #1e293b;border-radius:16px;padding:20px;margin-bottom:20px}
 .hidden{display:none}
-.task{
-  display:flex;
-  gap:10px;
-  margin:10px 0;
-}
-.progress{
-  height:18px;
-  border-radius:10px;
-  overflow:hidden;
-  border:1px solid #1e293b;
-}
-.bar{
-  height:100%;
-  font-size:11px;
-  font-weight:700;
-  text-align:center;
-}
+.task{display:flex;gap:10px;margin:10px 0}
+.progress{height:18px;border-radius:10px;overflow:hidden;border:1px solid #1e293b}
+.bar{height:100%;font-size:11px;font-weight:700;text-align:center}
 .EXCELLENT{background:#22c55e}
 .GOOD{background:#84cc16}
 .AVERAGE{background:#facc15}
 .POOR{background:#ef4444}
-input.nextTask{
-  width:100%;
-  padding:8px;
-  margin:6px 0;
-  border-radius:8px;
-  border:1px solid #334155;
-  background:#020617;
-  color:#e5e7eb;
-}
+input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px solid #334155;background:#020617;color:#e5e7eb}
 </style>
 </head>
 
@@ -141,15 +70,15 @@ let UID=null;
 let idleTimer=null;
 let idleRemaining=1800;
 
-/* ===== CONSTANTS ===== */
+/* ===== KEYS ===== */
 const K_TASKS="TASKS";
 const K_EXTRA="EXTRA_TASKS";
 const K_NEXT="NEXT_TASKS";
 const K_IDLE="IDLE_COUNT";
 const BONUS_PER_EXTRA=5;
-
-/* ===== HELPERS ===== */
 const key=k=>UID+"_"+k;
+
+/* ===== TIME ===== */
 const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
 
 /* ===== LOGIN ===== */
@@ -170,13 +99,13 @@ function login(){
   startIdle();
 }
 
-/* ===== TASK MERGE (CARRY FORWARD) ===== */
+/* ===== MERGE TASKS (carry forward) ===== */
 function mergeTasks(){
   const prev=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
   const next=JSON.parse(localStorage.getItem(key(K_NEXT))||"[]");
 
   const merged=[
-    ...prev.filter(t=>!t.done).map(t=>({name:t.name,done:false})),
+    ...prev.map(t=>({name:t.name,done:false})),
     ...next.map(n=>({name:n,done:false}))
   ];
 
@@ -193,7 +122,7 @@ function mergeTasks(){
   localStorage.setItem(key(K_EXTRA),"[]");
 }
 
-/* ===== TASK UI ===== */
+/* ===== LOAD TASKS ===== */
 function loadTasks(){
   const list=document.getElementById("taskList");
   const extra=document.getElementById("extraList");
@@ -234,7 +163,7 @@ function loadTasks(){
   });
 }
 
-/* ===== ADD EXTRA WORK ===== */
+/* ===== EXTRA WORK ===== */
 function addExtraTask(){
   const name=prompt("Extra work description?");
   if(!name)return;
@@ -255,14 +184,10 @@ function startIdle(){
     if(idleRemaining<=0) idleLogout();
   },1000);
 }
-function updateIdle(){
-  document.getElementById("idleTime").innerText=fmt(idleRemaining);
-}
-function resetIdle(){ startIdle(); }
+function updateIdle(){document.getElementById("idleTime").innerText=fmt(idleRemaining)}
+function resetIdle(){startIdle()}
 function idleLogout(){
   clearInterval(idleTimer);
-  let c=Number(localStorage.getItem(key(K_IDLE))||0)+1;
-  localStorage.setItem(key(K_IDLE),c);
   alert("Idle logout");
   location.reload();
 }
@@ -289,8 +214,11 @@ function confirmDayEnd(){
   const tasks=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
   const extras=JSON.parse(localStorage.getItem(key(K_EXTRA))||"[]");
 
-  const done=tasks.filter(t=>t.done).length;
-  const basePct=Math.round(done/tasks.length*100);
+  const undone=tasks.filter(t=>!t.done);
+  localStorage.setItem(key(K_TASKS),JSON.stringify(undone)); // ✅ carry forward
+
+  const doneCount=tasks.length-undone.length;
+  const basePct=Math.round(doneCount/tasks.length*100);
   const extraDone=extras.filter(e=>e.done).length;
   const final=Math.min(100,basePct+extraDone*BONUS_PER_EXTRA);
 
@@ -298,7 +226,7 @@ function confirmDayEnd(){
 
   document.getElementById("reportBox").innerHTML=`
     <h3>Report Card</h3>
-    Done Tasks: ${done}/${tasks.length}<br>
+    Done Tasks: ${doneCount}/${tasks.length}<br>
     Extra Work Done: ${extraDone}<br><br>
     <div class="progress">
       <div class="bar ${grade}" style="width:${final}%">${final}%</div>
@@ -309,9 +237,6 @@ function confirmDayEnd(){
 
   document.getElementById("tasksBox").classList.add("hidden");
   document.getElementById("dayEndBox").classList.add("hidden");
-
-  localStorage.removeItem(key(K_TASKS));
-  localStorage.removeItem(key(K_EXTRA));
 }
 
 /* ===== BIO BREAK ===== */
