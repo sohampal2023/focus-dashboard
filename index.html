@@ -59,6 +59,11 @@ input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px 
     <button onclick="addExtraTask()">+ Add Extra Work</button>
   </div>
 
+  <div id="logBox" class="card hidden">
+    <h3>Login / Logout Log</h3>
+    <ol id="logList"></ol>
+  </div>
+
   <div id="dayEndBox" class="card hidden"></div>
   <div id="reportBox" class="card hidden"></div>
 </div>
@@ -75,6 +80,7 @@ const K_TASKS="TASKS";
 const K_EXTRA="EXTRA_TASKS";
 const K_NEXT="NEXT_TASKS";
 const K_IDLE="IDLE_COUNT";
+const K_LOG="LOGS";
 const BONUS_PER_EXTRA=5;
 const key=k=>UID+"_"+k;
 
@@ -87,19 +93,44 @@ function login(){
   if(!email)return;
   UID=email;
 
-  document.getElementById("statusBox").innerText="Status: Logged in";
-  document.getElementById("bioBtn").disabled=false;
-  document.getElementById("dayEndBtn").disabled=false;
-  document.getElementById("idleBox").classList.remove("hidden");
+  /* hide old report */
+  reportBox.classList.add("hidden");
+  reportBox.innerHTML="";
+
+  statusBox.innerText="Status: Logged in";
+  bioBtn.disabled=false;
+  dayEndBtn.disabled=false;
+  idleBox.classList.remove("hidden");
 
   localStorage.setItem(key(K_IDLE),"0");
 
+  /* log login */
+  const logs=JSON.parse(localStorage.getItem(key(K_LOG))||"[]");
+  logs.push({login:new Date().toLocaleString(),logout:"—"});
+  localStorage.setItem(key(K_LOG),JSON.stringify(logs));
+
   mergeTasks();
   loadTasks();
+  renderLogs();
   startIdle();
 }
 
-/* ===== MERGE TASKS (carry forward) ===== */
+/* ===== LOG LIST ===== */
+function renderLogs(){
+  const box=document.getElementById("logBox");
+  const list=document.getElementById("logList");
+  box.classList.remove("hidden");
+  list.innerHTML="";
+
+  const logs=JSON.parse(localStorage.getItem(key(K_LOG))||"[]");
+  logs.forEach(l=>{
+    const li=document.createElement("li");
+    li.innerText=`Login: ${l.login} | Logout: ${l.logout}`;
+    list.appendChild(li);
+  });
+}
+
+/* ===== MERGE TASKS ===== */
 function mergeTasks(){
   const prev=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
   const next=JSON.parse(localStorage.getItem(key(K_NEXT))||"[]");
@@ -122,14 +153,11 @@ function mergeTasks(){
   localStorage.setItem(key(K_EXTRA),"[]");
 }
 
-/* ===== LOAD TASKS ===== */
+/* ===== TASK UI ===== */
 function loadTasks(){
-  const list=document.getElementById("taskList");
-  const extra=document.getElementById("extraList");
-  document.getElementById("tasksBox").classList.remove("hidden");
-
-  list.innerHTML="";
-  extra.innerHTML="";
+  tasksBox.classList.remove("hidden");
+  taskList.innerHTML="";
+  extraList.innerHTML="";
 
   const tasks=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
   const extras=JSON.parse(localStorage.getItem(key(K_EXTRA))||"[]");
@@ -145,7 +173,7 @@ function loadTasks(){
       t.done=cb.checked;
       localStorage.setItem(key(K_TASKS),JSON.stringify(tasks));
     };
-    list.append(cb," "+t.name,document.createElement("br"));
+    taskList.append(cb," "+t.name,document.createElement("br"));
   });
 
   extras.forEach(e=>{
@@ -159,7 +187,7 @@ function loadTasks(){
       e.done=cb.checked;
       localStorage.setItem(key(K_EXTRA),JSON.stringify(extras));
     };
-    extra.append(cb," "+e.name,document.createElement("br"));
+    extraList.append(cb," "+e.name,document.createElement("br"));
   });
 }
 
@@ -173,7 +201,7 @@ function addExtraTask(){
   loadTasks();
 }
 
-/* ===== IDLE TIMER ===== */
+/* ===== IDLE ===== */
 function startIdle(){
   clearInterval(idleTimer);
   idleRemaining=1800;
@@ -184,13 +212,9 @@ function startIdle(){
     if(idleRemaining<=0) idleLogout();
   },1000);
 }
-function updateIdle(){document.getElementById("idleTime").innerText=fmt(idleRemaining)}
+function updateIdle(){idleTime.innerText=fmt(idleRemaining)}
 function resetIdle(){startIdle()}
-function idleLogout(){
-  clearInterval(idleTimer);
-  alert("Idle logout");
-  location.reload();
-}
+function idleLogout(){alert("Idle logout");location.reload()}
 
 /* ===== DAY END ===== */
 function openDayEnd(){
@@ -199,13 +223,15 @@ function openDayEnd(){
     html+=`<input class="nextTask" placeholder="Next Day Task ${i+1}">`;
   }
   html+=`<br><button onclick="confirmDayEnd()">Submit</button>`;
-  const box=document.getElementById("dayEndBox");
-  box.innerHTML=html;
-  box.classList.remove("hidden");
+  dayEndBox.innerHTML=html;
+  dayEndBox.classList.remove("hidden");
 }
 
 function confirmDayEnd(){
   clearInterval(idleTimer);
+  idleRemaining=0;
+  idleTime.innerText="0:00";
+  idleBox.classList.add("hidden");
 
   const next=[...document.querySelectorAll(".nextTask")]
     .map(i=>i.value.trim()).filter(v=>v);
@@ -215,7 +241,7 @@ function confirmDayEnd(){
   const extras=JSON.parse(localStorage.getItem(key(K_EXTRA))||"[]");
 
   const undone=tasks.filter(t=>!t.done);
-  localStorage.setItem(key(K_TASKS),JSON.stringify(undone)); // ✅ carry forward
+  localStorage.setItem(key(K_TASKS),JSON.stringify(undone));
 
   const doneCount=tasks.length-undone.length;
   const basePct=Math.round(doneCount/tasks.length*100);
@@ -224,7 +250,7 @@ function confirmDayEnd(){
 
   const grade=final>=80?"EXCELLENT":final>=60?"GOOD":final>=40?"AVERAGE":"POOR";
 
-  document.getElementById("reportBox").innerHTML=`
+  reportBox.innerHTML=`
     <h3>Report Card</h3>
     Done Tasks: ${doneCount}/${tasks.length}<br>
     Extra Work Done: ${extraDone}<br><br>
@@ -233,15 +259,19 @@ function confirmDayEnd(){
     </div>
     Grade: <b>${grade}</b>
   `;
-  document.getElementById("reportBox").classList.remove("hidden");
+  reportBox.classList.remove("hidden");
 
-  document.getElementById("tasksBox").classList.add("hidden");
-  document.getElementById("dayEndBox").classList.add("hidden");
+  tasksBox.classList.add("hidden");
+  dayEndBox.classList.add("hidden");
 }
 
 /* ===== BIO BREAK ===== */
 function bioBreak(){
-  alert("Bio Break logged");
+  const logs=JSON.parse(localStorage.getItem(key(K_LOG))||"[]");
+  if(logs.length){
+    logs[logs.length-1].logout=new Date().toLocaleString();
+    localStorage.setItem(key(K_LOG),JSON.stringify(logs));
+  }
   location.reload();
 }
 </script>
