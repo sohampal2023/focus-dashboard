@@ -6,60 +6,159 @@
 
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
-body{background:#020617;color:#e5e7eb}
+html,body{
+  margin:0;height:100%;
+  font-family:Segoe UI,system-ui,sans-serif
+}
+body{
+  background:#020617;
+  color:#e5e7eb
+}
 
-.app{display:grid;grid-template-columns:260px 1fr;height:100vh}
+.app{
+  display:grid;
+  grid-template-columns:260px 1fr;
+  height:100vh
+}
 
 /* SIDEBAR */
-.sidebar{padding:20px;border-right:1px solid #1e293b}
-.sidebar h2{text-align:center;color:#7dd3fc}
-.status{padding:10px;border:1px solid #334155;border-radius:10px;text-align:center;margin-bottom:10px}
-button{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #334155;background:#020617;color:#e5e7eb;cursor:pointer}
+.sidebar{
+  padding:20px;
+  border-right:1px solid #1e293b
+}
+.sidebar h2{
+  text-align:center;
+  color:#7dd3fc;
+  margin-bottom:12px
+}
+.status{
+  padding:10px;
+  border:1px solid #334155;
+  border-radius:10px;
+  text-align:center;
+  margin-bottom:10px
+}
+button{
+  width:100%;
+  padding:12px;
+  margin:6px 0;
+  border-radius:10px;
+  border:1px solid #334155;
+  background:#020617;
+  color:#e5e7eb;
+  cursor:pointer
+}
 button:disabled{opacity:.4}
 
-/* MAIN */
-.main{padding:24px;overflow:auto}
-.card{background:#020617;border:1px solid #334155;border-radius:14px;padding:20px;margin-bottom:20px}
-.hidden{display:none}
-
-/* IDLE */
+/* IDLE BOX */
 .idleBox{
   padding:12px;
-  border:1px solid #7dd3fc;
+  border:1px solid #38bdf8;
   border-radius:12px;
-  margin-bottom:12px;
   text-align:center;
+  margin-bottom:12px;
+  background:#020617
 }
 
-/* SPEEDO */
+/* MAIN */
+.main{
+  padding:24px;
+  overflow:auto
+}
+.card{
+  background:#020617;
+  border:1px solid #334155;
+  border-radius:14px;
+  padding:20px;
+  margin-bottom:20px
+}
+.hidden{display:none}
+
+/* SPEEDOMETER */
 .speedo{
-  width:300px;height:150px;border-radius:300px 300px 0 0;
-  background:conic-gradient(from -90deg,#7f1d1d,#92400e,#a16207,#14532d,#312e81);
+  width:300px;
+  height:150px;
+  border-radius:300px 300px 0 0;
+  background:conic-gradient(
+    from -90deg,
+    #7f1d1d,
+    #92400e,
+    #a16207,
+    #14532d,
+    #312e81
+  );
   position:relative;
-  box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b;
+  box-shadow:
+    inset 0 0 0 14px #020617,
+    inset 0 0 0 18px #1e293b
 }
-.needle{position:absolute;width:4px;height:110px;background:#e5e7eb;left:50%;bottom:0;transform-origin:bottom center;transform:rotate(-90deg);transition:.6s}
-.cap{position:absolute;width:14px;height:14px;background:#e5e7eb;border-radius:50%;left:50%;bottom:0;transform:translate(-50%,50%)}
+.needle{
+  position:absolute;
+  width:4px;
+  height:110px;
+  background:#e5e7eb;
+  left:50%;
+  bottom:0;
+  transform-origin:bottom center;
+  transform:rotate(-90deg);
+  transition:.6s cubic-bezier(.15,.85,.2,1)
+}
+.cap{
+  position:absolute;
+  width:14px;
+  height:14px;
+  background:#e5e7eb;
+  border-radius:50%;
+  left:50%;
+  bottom:0;
+  transform:translate(-50%,50%)
+}
 
-.percent{text-align:center;font-size:36px;font-weight:800;color:#7dd3fc}
-.rating{text-align:center;font-size:18px;font-weight:700}
-.details{text-align:center;font-size:14px;color:#cbd5f5}
+.percent{
+  text-align:center;
+  font-size:36px;
+  font-weight:800;
+  color:#7dd3fc
+}
+.rating{
+  text-align:center;
+  font-size:18px;
+  font-weight:700
+}
+.details{
+  text-align:center;
+  font-size:14px;
+  color:#cbd5f5
+}
 
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{border:1px solid #334155;padding:6px;text-align:center}
+/* TABLE */
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px
+}
+th,td{
+  border:1px solid #334155;
+  padding:6px;
+  text-align:center
+}
 </style>
 </head>
 
 <body>
 <div class="app">
 
+<!-- SIDEBAR -->
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
+
   <div id="statusBox" class="status">Logged out</div>
 
+  <!-- IDLE COUNTER (VISIBLE AFTER LOGIN) -->
   <div id="idleBox" class="idleBox hidden">
-    Idle Time Left: <b><span id="idleTime">30:00</span></b><br><br>
+    Idle Time Left:
+    <b><span id="idleTime">30:00</span></b>
+    <br><br>
     <button onclick="resetIdle()">I am studying</button>
   </div>
 
@@ -68,6 +167,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
 </div>
 
+<!-- MAIN -->
 <div class="main">
 
 <div id="taskBox" class="card hidden">
@@ -79,7 +179,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
       <hr>
       <h4>Extra Work</h4>
       <div id="extraList"></div>
-      <button onclick="addExtra()">+ Add Extra</button>
+      <button onclick="addExtra()">+ Add Extra Work</button>
     </div>
 
     <div>
@@ -99,7 +199,9 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <div id="logBox" class="card hidden">
   <h3>Login / Logout Log</h3>
   <table>
-    <thead><tr><th>Login</th><th>Logout</th><th>Reason</th></tr></thead>
+    <thead>
+      <tr><th>Login</th><th>Logout</th><th>Reason</th></tr>
+    </thead>
     <tbody id="logTable"></tbody>
   </table>
 </div>
@@ -120,20 +222,19 @@ let penalty=0;
 const now=()=>new Date().toLocaleString();
 const key=k=>UID+"_"+k;
 
-/* IDLE */
+/* ===== IDLE LOGIC ===== */
 function startIdle(){
+  clearInterval(idleTimer);
   idleRemaining=1800;
   idleMiss=0;
-  idleTime.innerText="30:00";
   idleBox.classList.remove("hidden");
+  updateIdleText();
 
-  clearInterval(idleTimer);
   idleTimer=setInterval(()=>{
     idleRemaining--;
-    idleTime.innerText=
-      Math.floor(idleRemaining/60)+":"+String(idleRemaining%60).padStart(2,"0");
+    updateIdleText();
 
-    if(idleRemaining%30===0 && idleRemaining!==1800){
+    if(idleRemaining>0 && idleRemaining%30===0){
       idleMiss++;
       if(idleMiss>=2){
         penalty+=2;
@@ -146,12 +247,20 @@ function startIdle(){
   },1000);
 }
 
+function updateIdleText(){
+  const m=Math.floor(idleRemaining/60);
+  const s=String(idleRemaining%60).padStart(2,"0");
+  idleTime.innerText=`${m}:${s}`;
+}
+
 function resetIdle(){
   startIdle();
 }
 
 function autoLogout(){
   clearInterval(idleTimer);
+  idleBox.classList.add("hidden");
+
   const logs=JSON.parse(localStorage.getItem(key("LOGS")));
   logs[logs.length-1].logout=now();
   localStorage.setItem(key("LOGS"),JSON.stringify(logs));
@@ -159,7 +268,7 @@ function autoLogout(){
   location.reload();
 }
 
-/* LOGIN */
+/* ===== LOGIN ===== */
 function login(){
   UID=prompt("Email");
   if(!UID)return;
@@ -189,9 +298,11 @@ function login(){
   updateProgress();
 }
 
-/* BIO BREAK */
+/* ===== BIO BREAK ===== */
 function bioBreak(){
   clearInterval(idleTimer);
+  idleBox.classList.add("hidden");
+
   const logs=JSON.parse(localStorage.getItem(key("LOGS")));
   logs[logs.length-1].logout=now();
   localStorage.setItem(key("LOGS"),JSON.stringify(logs));
@@ -199,7 +310,7 @@ function bioBreak(){
   location.reload();
 }
 
-/* TASK SETUP */
+/* ===== TASK SETUP ===== */
 function setupTasks(){
   const carried=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
   const next=JSON.parse(localStorage.getItem(key("NEXT_TASKS"))||"[]");
@@ -222,41 +333,44 @@ function setupTasks(){
   reportBox.classList.add("hidden");
 }
 
-/* LOAD TASKS */
+/* ===== LOAD TASKS ===== */
 function loadTasks(){
   taskList.innerHTML="";
   extraList.innerHTML="";
+
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
   const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
 
   tasks.forEach(t=>{
-    const c=document.createElement("input");
-    c.type="checkbox";c.checked=t.done;
-    c.onchange=()=>{
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=t.done;
+    cb.onchange=()=>{
       if(!confirm("Confirm task completion?")){
-        c.checked=!c.checked;return;
+        cb.checked=!cb.checked;return;
       }
-      t.done=c.checked;
+      t.done=cb.checked;
       save(tasks,extras);
     };
-    taskList.append(c," "+t.name,document.createElement("br"));
+    taskList.append(cb," "+t.name,document.createElement("br"));
   });
 
   extras.forEach(e=>{
-    const c=document.createElement("input");
-    c.type="checkbox";c.checked=e.done;
-    c.onchange=()=>{
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=e.done;
+    cb.onchange=()=>{
       if(!confirm("Confirm extra work completion?")){
-        c.checked=!c.checked;return;
+        cb.checked=!cb.checked;return;
       }
-      e.done=c.checked;
+      e.done=cb.checked;
       save(tasks,extras);
     };
-    extraList.append(c," "+e.name,document.createElement("br"));
+    extraList.append(cb," "+e.name,document.createElement("br"));
   });
 }
 
-/* EXTRA */
+/* ===== EXTRA ===== */
 function addExtra(){
   const name=prompt("Extra work?");
   if(!name)return;
@@ -266,29 +380,32 @@ function addExtra(){
   loadTasks();
 }
 
-/* SAVE */
+/* ===== SAVE ===== */
 function save(tasks,extras){
   localStorage.setItem(key("TASKS"),JSON.stringify(tasks));
   localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
   updateProgress();
 }
 
-/* PROGRESS */
+/* ===== PROGRESS ===== */
 function calculate(){
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
   const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
   const done=tasks.filter(t=>t.done).length + extras.filter(e=>e.done).length;
-  const percent=tasks.length?Math.max(0,Math.round((done/tasks.length)*100-penalty)):0;
+  const percent=tasks.length
+    ? Math.max(0,Math.round((done/tasks.length)*100-penalty))
+    : 0;
   return {percent,assigned:tasks.length,extra:extras.length};
 }
 
 function updateProgress(){
   const p=calculate();
-  const angle=(Math.min(p.percent,300)/300)*180-90;
+  const angle=(Math.min(p.percent,300)/300)*180 - 90;
   needle.style.transform=`rotate(${angle}deg)`;
   livePercent.innerText=p.percent+"%";
   liveRating.innerText=getLabel(p.percent);
-  liveDetails.innerText=`Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${penalty}%`;
+  liveDetails.innerText=
+    `Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${penalty}%`;
 }
 
 function getLabel(p){
@@ -299,16 +416,18 @@ function getLabel(p){
   return"Fabulous";
 }
 
-/* DAY END */
+/* ===== DAY END ===== */
 function openDayEnd(){
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
 
   nextDayBox.innerHTML="<h3>Enter Next Day Tasks</h3>";
   for(let i=0;i<5;i++){
-    nextDayBox.innerHTML+=`<input id="nd${i}" style="width:100%;margin:6px 0">`;
+    nextDayBox.innerHTML+=
+      `<input id="nd${i}" style="width:100%;margin:6px 0">`;
   }
-  nextDayBox.innerHTML+=`<button onclick="finalDayEnd()">Submit</button>`;
+  nextDayBox.innerHTML+=
+    `<button onclick="finalDayEnd()">Submit</button>`;
   nextDayBox.classList.remove("hidden");
 }
 
@@ -349,12 +468,13 @@ function finalDayEnd(){
   dayBtn.disabled=true;
 }
 
-/* LOG TABLE */
+/* ===== LOG TABLE ===== */
 function renderLogs(){
   const logs=JSON.parse(localStorage.getItem(key("LOGS")));
   logTable.innerHTML="";
   logs.forEach(l=>{
-    logTable.innerHTML+=`<tr><td>${l.login}</td><td>${l.logout}</td><td>${l.reason}</td></tr>`;
+    logTable.innerHTML+=
+      `<tr><td>${l.login}</td><td>${l.logout}</td><td>${l.reason}</td></tr>`;
   });
 }
 </script>
