@@ -1,241 +1,155 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
 <meta charset="UTF-8">
-<title>Focus Dashboard</title>
+<title>User Dashboard</title>
 
 <style>
-*{box-sizing:border-box}
-html,body{
-  margin:0;
-  height:100%;
-  font-family:Segoe UI,system-ui,sans-serif;
-}
-body{
-  background:#020617;
-  color:#e5e7eb;
-}
-.app{
-  display:grid;
-  grid-template-columns:260px 1fr;
-  height:100vh;
-}
-
-/* SIDEBAR */
-.sidebar{
-  border-right:1px solid #1e293b;
-  padding:20px;
-}
-.sidebar h2{
-  margin:0 0 20px;
-  color:#38bdf8;
-  text-align:center;
-}
-.status{
-  padding:15px;
-  border:1px solid #334155;
-  border-radius:12px;
-  text-align:center;
-  margin-bottom:20px;
-}
-.sidebar button{
-  width:100%;
-  padding:14px;
-  margin-bottom:10px;
-  background:#020617;
-  color:#e5e7eb;
-  border:1px solid #1e293b;
-  border-radius:10px;
-  cursor:pointer;
-}
-
-/* MAIN */
-.main{
-  position:relative;
-  padding:30px;
-}
+body{background:#020617;color:#e5e7eb;font-family:Segoe UI;margin:0}
+.app{display:grid;grid-template-columns:260px 1fr;height:100vh}
+.sidebar{padding:20px;border-right:1px solid #1e293b}
+.main{padding:20px}
+button{width:100%;padding:10px;margin:6px 0;background:#020617;color:#fff;border:1px solid #334155}
+.task{display:flex;gap:8px;margin:6px 0}
 .hidden{display:none}
-
-/* BLOCKING POPUP */
-.overlay{
-  position:fixed;
-  inset:0;
-  background:rgba(0,0,0,.85);
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  z-index:999;
-}
-.popup{
-  background:#020617;
-  border:2px solid #38bdf8;
-  border-radius:16px;
-  padding:28px;
-  width:340px;
-  text-align:center;
-}
-.popup button{
-  width:100%;
-  padding:14px;
-  margin-top:12px;
-  border:none;
-  border-radius:12px;
-  font-weight:700;
-  cursor:pointer;
-}
-.study{background:#22c55e;color:#022c22}
-.distract{background:#ef4444;color:#450a0a}
 </style>
 </head>
 
 <body>
 <div class="app">
-
-  <!-- SIDEBAR -->
   <div class="sidebar">
-    <h2>FOCUS</h2>
-    <div id="status" class="status">Logged out</div>
-    <button id="loginBtn">Login</button>
-    <button id="bioBtn">Bio Break</button>
-    <button id="dayEndBtn">Day End</button>
-    <button id="historyBtn">History</button>
+    <h3>USER PANEL</h3>
+    <div id="status">Logged out</div>
+    <button onclick="login()">Login</button>
+    <button onclick="dayEnd()">Day End</button>
   </div>
 
-  <!-- MAIN -->
   <div class="main">
-    <h1>Dashboard</h1>
-    <p id="score">Score: 100%</p>
-
-    <div id="tasks" class="hidden">
-      <h3>Tasks</h3>
-      <p>No tasks yet</p>
-    </div>
-  </div>
-
-</div>
-
-<!-- POPUP -->
-<div id="overlay" class="overlay hidden">
-  <div class="popup">
-    <h3>Focus Check</h3>
-    <p>Are you studying?</p>
-    <button id="studyBtn" class="study">Studying</button>
-    <button id="distractBtn" class="distract">Distracted</button>
+    <h3>Today Tasks</h3>
+    <div id="taskList"></div>
+    <input id="newTask" placeholder="Add task">
+    <button onclick="addTask()">Add Task</button>
   </div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 import {
-  getAuth,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+  getFirestore, collection, addDoc, query, where, getDocs,
+  updateDoc, doc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-const firebaseConfig = {
-  apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
-  authDomain: "focus-dashboard-5965a.firebaseapp.com",
-  projectId: "focus-dashboard-5965a"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-
-/* DOM */
-const status = document.getElementById("status");
-const overlay = document.getElementById("overlay");
-const tasks = document.getElementById("tasks");
-const scoreText = document.getElementById("score");
+/* FIREBASE */
+const app = initializeApp({
+  apiKey:"AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
+  authDomain:"focus-dashboard-5965a.firebaseapp.com",
+  projectId:"focus-dashboard-5965a"
+});
+const auth=getAuth(app);
+const db=getFirestore(app);
 
 /* STATE */
-let score = 100;
-let missCount = 0;
-let focusInterval = null;
-let responseTimeout = null;
+let uid=null;
+let activeDayId=null;
+let tasks=[];
 
-/* CORE LOGIC */
-function showPopup(){
-  overlay.classList.remove("hidden");
-
-  responseTimeout = setTimeout(()=>{
-    missCount++;
-
-    if(missCount >= 3){
-      score = Math.max(score - 2,0);
-      scoreText.innerText = "Score: " + score + "%";
-      logoutUser();
-    }
-
-    overlay.classList.add("hidden");
-  },30000); // 30 sec to respond
+/* LOGIN */
+async function login(){
+  const email=prompt("Email");
+  const pass=prompt("Password");
+  const res=await signInWithEmailAndPassword(auth,email,pass);
+  uid=res.user.uid;
+  document.getElementById("status").innerText="Logged in";
+  await loadOrCreateDay();
 }
 
-function startCycle(){
-  showPopup();
-  focusInterval = setInterval(showPopup,30000); // every 30 sec
-}
+/* LOAD OR CREATE DAY */
+async function loadOrCreateDay(){
+  const q=query(
+    collection(db,"daily_tasks"),
+    where("uid","==",uid),
+    where("dayStatus","==","ACTIVE")
+  );
+  const snap=await getDocs(q);
 
-function stopCycle(){
-  clearInterval(focusInterval);
-  clearTimeout(responseTimeout);
-  overlay.classList.add("hidden");
-  missCount = 0;
-}
-
-function resetAfterResponse(){
-  clearTimeout(responseTimeout);
-  overlay.classList.add("hidden");
-  missCount = 0;
-}
-
-async function logoutUser(){
-  stopCycle();
-  await signOut(auth);
-}
-
-/* BUTTONS */
-loginBtn.onclick = async ()=>{
-  const email = prompt("Email");
-  const pass = prompt("Password");
-  if(!email || !pass) return;
-  try{
-    await signInWithEmailAndPassword(auth,email,pass);
-  }catch(e){
-    alert(e.message);
-  }
-};
-
-bioBtn.onclick = async ()=>{
-  await signOut(auth);
-};
-
-studyBtn.onclick = ()=>{
-  resetAfterResponse();
-};
-
-distractBtn.onclick = ()=>{
-  score = Math.max(score - 2,0);
-  scoreText.innerText = "Score: " + score + "%";
-  resetAfterResponse();
-};
-
-historyBtn.onclick = ()=>alert("History later");
-dayEndBtn.onclick = ()=>alert("Day end later");
-
-/* AUTH */
-onAuthStateChanged(auth,(user)=>{
-  if(user){
-    status.innerText = "Logged in";
-    tasks.classList.remove("hidden");
-    startCycle();
+  if(snap.empty){
+    const ref=await addDoc(collection(db,"daily_tasks"),{
+      uid,
+      dayStatus:"ACTIVE",
+      tasks:[],
+      createdAt:serverTimestamp(),
+      closedAt:null
+    });
+    activeDayId=ref.id;
+    tasks=[];
   }else{
-    status.innerText = "Logged out";
-    tasks.classList.add("hidden");
-    stopCycle();
+    activeDayId=snap.docs[0].id;
+    tasks=snap.docs[0].data().tasks;
   }
-});
-</script>
+  renderTasks();
+}
 
+/* RENDER */
+function renderTasks(){
+  const box=document.getElementById("taskList");
+  box.innerHTML="";
+  tasks.forEach((t,i)=>{
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=t.done;
+    cb.onchange=()=>{tasks[i].done=true;saveTasks()};
+    const d=document.createElement("div");
+    d.className="task";
+    d.append(cb,t.name);
+    box.appendChild(d);
+  });
+}
+
+/* SAVE TASKS */
+async function saveTasks(){
+  await updateDoc(doc(db,"daily_tasks",activeDayId),{tasks});
+}
+
+/* ADD TASK */
+function addTask(){
+  const v=document.getElementById("newTask").value.trim();
+  if(!v)return;
+  tasks.push({name:v,done:false});
+  saveTasks();
+  renderTasks();
+  document.getElementById("newTask").value="";
+}
+
+/* DAY END */
+async function dayEnd(){
+  if(!activeDayId)return;
+
+  const unfinished=tasks.filter(t=>!t.done);
+
+  // close today
+  await updateDoc(doc(db,"daily_tasks",activeDayId),{
+    dayStatus:"CLOSED",
+    closedAt:serverTimestamp()
+  });
+
+  // create next day
+  await addDoc(collection(db,"daily_tasks"),{
+    uid,
+    dayStatus:"ACTIVE",
+    tasks:unfinished,
+    createdAt:serverTimestamp(),
+    closedAt:null
+  });
+
+  alert("Day Ended. Next day prepared.");
+  location.reload();
+}
+
+/* expose */
+window.login=login;
+window.addTask=addTask;
+window.dayEnd=dayEnd;
+</script>
 </body>
 </html>
