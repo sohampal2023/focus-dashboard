@@ -3,199 +3,213 @@
 <head>
 <meta charset="UTF-8">
 <title>Focus Dashboard</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 *{box-sizing:border-box}
 html,body{
-  margin:0;
-  height:100%;
+  margin:0;height:100%;
   font-family:Segoe UI,system-ui,sans-serif;
 }
 body{
-  background:#020617;
+  background:linear-gradient(135deg,#0f172a,#020617);
   color:#e5e7eb;
 }
 .app{
   display:grid;
-  grid-template-columns:260px 1fr;
+  grid-template-columns:280px 1fr;
   height:100vh;
 }
 
 /* SIDEBAR */
 .sidebar{
-  background:#020617;
-  border-right:1px solid #1e293b;
   padding:20px;
-  z-index:10;
+  display:flex;
+  flex-direction:column;
+  gap:16px;
+  border-right:1px solid #1e293b;
 }
 .sidebar h2{
-  margin:0 0 20px;
-  color:#38bdf8;
   text-align:center;
+  color:#38bdf8;
+  margin:0;
 }
 .status{
-  padding:15px;
-  border:1px solid #334155;
-  border-radius:12px;
+  padding:20px;
+  border-radius:14px;
+  border:2px solid #334155;
   text-align:center;
-  margin-bottom:20px;
+  font-weight:700;
+  background:#020617;
 }
-.sidebar button{
+.nav button{
   width:100%;
-  padding:14px;
-  margin-bottom:10px;
+  padding:12px;
+  border-radius:10px;
+  border:1px solid #1e293b;
   background:#020617;
   color:#e5e7eb;
-  border:1px solid #1e293b;
-  border-radius:10px;
+  font-weight:600;
   cursor:pointer;
 }
 
 /* MAIN */
 .main{
-  position:relative;
-  padding:30px;
+  padding:25px;
+}
+.card{
+  background:#020617;
+  border:1px solid #1e293b;
+  border-radius:16px;
+  padding:20px;
+  margin-bottom:20px;
 }
 .hidden{display:none}
 
-/* POPUP (ONLY MAIN AREA) */
+/* POPUP */
 .overlay{
-  position:absolute;
+  position:fixed;
   inset:0;
-  background:rgba(0,0,0,.85);
+  background:rgba(0,0,0,.75);
   display:flex;
   align-items:center;
   justify-content:center;
-  z-index:5;
+  z-index:9999;
 }
 .popup{
   background:#020617;
   border:2px solid #38bdf8;
   border-radius:16px;
-  padding:28px;
-  width:340px;
+  padding:25px;
+  width:320px;
   text-align:center;
 }
 .popup button{
-  width:100%;
-  padding:14px;
-  margin-top:12px;
+  margin:10px;
+  padding:10px 16px;
   border:none;
-  border-radius:12px;
+  border-radius:10px;
   font-weight:700;
   cursor:pointer;
 }
-.study{background:#22c55e;color:#022c22}
-.distract{background:#ef4444;color:#450a0a}
+.study{background:#22c55e}
+.distract{background:#ef4444}
 </style>
 </head>
 
 <body>
+
 <div class="app">
-
-  <!-- SIDEBAR -->
   <div class="sidebar">
-    <h2>FOCUS</h2>
-    <div id="status" class="status">Logged out</div>
-    <button id="loginBtn">Login</button>
-    <button id="bioBtn">Bio Break</button>
-    <button id="dayEndBtn">Day End</button>
-    <button id="historyBtn">History</button>
+    <h2>FOCUS SYSTEM</h2>
+    <div id="status" class="status">Status: Logged out</div>
+    <div class="nav">
+      <button id="loginBtn">Login</button>
+      <button id="bioBtn">Bio Break</button>
+      <button id="dayEndBtn">Day End</button>
+    </div>
   </div>
 
-  <!-- MAIN -->
   <div class="main">
-    <h1>Dashboard</h1>
-    <p id="score">Score: 100%</p>
-
-    <div id="tasks" class="hidden">
-      <h3>Tasks</h3>
-      <p>No tasks yet</p>
+    <div id="tasksBox" class="card hidden">
+      <h3>Work Area</h3>
+      <p>Working session active.</p>
     </div>
 
-    <!-- POPUP -->
-    <div id="overlay" class="overlay hidden">
-      <div class="popup">
-        <h3>Focus Check</h3>
-        <p>Are you studying?</p>
-        <button id="studyBtn" class="study">Studying</button>
-        <button id="distractBtn" class="distract">Distracted</button>
-      </div>
-    </div>
-
+    <div id="reportBox" class="card hidden"></div>
   </div>
-
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-import {
-  getAuth,
-  signInWithEmailAndPassword,
-  signOut,
-  onAuthStateChanged
-} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+<!-- POPUP -->
+<div id="focusOverlay" class="overlay hidden">
+  <div class="popup">
+    <h3>Focus Check</h3>
+    <p>Are you studying or distracted?</p>
+    <button id="studyBtn" class="study">Studying</button>
+    <button id="distractBtn" class="distract">Distracted</button>
+    <p style="font-size:12px">No response in 1 minute = idle mark</p>
+  </div>
+</div>
 
-const firebaseConfig = {
-  apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
-  authDomain: "focus-dashboard-5965a.firebaseapp.com",
-  projectId: "focus-dashboard-5965a"
-};
+<!-- NORMAL SCRIPT (NO MODULE) -->
+<script>
+/* ===== STATE ===== */
+let loggedIn=false;
+let idleMarks=0;
+let score=100;
+let popupTimer=null;
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
+/* ===== DOM ===== */
+const status=document.getElementById("status");
+const tasksBox=document.getElementById("tasksBox");
+const reportBox=document.getElementById("reportBox");
+const overlay=document.getElementById("focusOverlay");
 
-/* DOM */
-const status = document.getElementById("status");
-const overlay = document.getElementById("overlay");
-const tasks = document.getElementById("tasks");
-const scoreText = document.getElementById("score");
+/* ===== HELPERS ===== */
+function timeNow(){
+  return new Date().toLocaleTimeString([],{
+    hour:"2-digit",minute:"2-digit"
+  });
+}
 
-/* STATE */
-let score = 100;
+/* ===== CORE FUNCTIONS ===== */
+function login(){
+  loggedIn=true;
+  status.innerText="Status: Logged in @ "+timeNow();
+  tasksBox.classList.remove("hidden");
+  startFocusPopup();
+}
 
-/* BUTTONS */
-loginBtn.onclick = async () => {
-  const email = prompt("Email");
-  const pass = prompt("Password");
-  if(!email || !pass) return;
-  try{
-    await signInWithEmailAndPassword(auth,email,pass);
-  }catch(e){
-    alert(e.message);
-  }
-};
+function bioBreak(){
+  loggedIn=false;
+  status.innerText="Status: Bio Break @ "+timeNow();
+  tasksBox.classList.add("hidden");
+  stopPopup();
+}
 
-bioBtn.onclick = async () => {
-  await signOut(auth);
-};
+function dayEnd(){
+  loggedIn=false;
+  tasksBox.classList.add("hidden");
+  reportBox.classList.remove("hidden");
+  reportBox.innerHTML=
+    "<h3>Day End</h3>"+
+    "Final Score: "+score+"%<br>"+
+    "Idle Marks: "+idleMarks;
+  status.innerText="Status: Day End – Thank you";
+  stopPopup();
+}
 
-studyBtn.onclick = () => {
+/* ===== POPUP LOGIC ===== */
+function startFocusPopup(){
+  stopPopup();
+  overlay.classList.remove("hidden");
+
+  popupTimer=setTimeout(()=>{
+    idleMarks++;
+    score=Math.max(score-2,0);
+    overlay.classList.add("hidden");
+  },60000);
+}
+
+function stopPopup(){
+  clearTimeout(popupTimer);
   overlay.classList.add("hidden");
-};
+}
 
-distractBtn.onclick = () => {
-  score -= 2;
-  scoreText.innerText = "Score: " + score + "%";
-  overlay.classList.add("hidden");
-};
+function studying(){
+  stopPopup();
+}
 
-historyBtn.onclick = () => alert("History later");
-dayEndBtn.onclick = () => alert("Day end later");
+function distracted(){
+  score=Math.max(score-2,0);
+  stopPopup();
+}
 
-/* AUTH */
-onAuthStateChanged(auth,(user)=>{
-  if(user){
-    status.innerText = "Logged in";
-    tasks.classList.remove("hidden");
-    overlay.classList.remove("hidden");   // ASK ONLY AFTER LOGIN
-  }else{
-    status.innerText = "Logged out";
-    tasks.classList.add("hidden");
-    overlay.classList.add("hidden");      // NEVER SHOW WHEN LOGGED OUT
-  }
-});
+/* ===== BUTTON BINDING (STABLE) ===== */
+document.getElementById("loginBtn").onclick=login;
+document.getElementById("bioBtn").onclick=bioBreak;
+document.getElementById("dayEndBtn").onclick=dayEnd;
+document.getElementById("studyBtn").onclick=studying;
+document.getElementById("distractBtn").onclick=distracted;
 </script>
 
 </body>
