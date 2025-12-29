@@ -32,7 +32,7 @@ body{
   margin:0;
 }
 .status{
-  padding:18px;
+  padding:16px;
   border-radius:16px;
   border:2px solid #334155;
   text-align:center;
@@ -54,7 +54,6 @@ body{
   opacity:.4;
   cursor:not-allowed;
 }
-.nav button:hover:not(:disabled){border-color:#38bdf8}
 .main{
   padding:25px;
   overflow:auto;
@@ -110,7 +109,8 @@ input.nextTask{
   <div id="statusBox" class="status">Status: Logged out</div>
 
   <div id="idleBox" class="status hidden">
-    Focus Timer: <span id="idleTime">30</span>s
+    Idle Timer: <b><span id="idleTime">30:00</span></b><br>
+    Idle Count: <b><span id="idleCount">0</span></b>
     <br><br>
     <button onclick="resetIdle()">I am studying</button>
   </div>
@@ -149,9 +149,9 @@ const firebaseConfig = {
   appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
 };
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
+initializeApp(firebaseConfig);
+const auth = getAuth();
+const db = getFirestore();
 
 /* DOM */
 const statusEl = document.getElementById("statusBox");
@@ -159,10 +159,10 @@ const tasksBox = document.getElementById("tasksBox");
 const taskList = document.getElementById("taskList");
 const idleBox = document.getElementById("idleBox");
 const idleTime = document.getElementById("idleTime");
+const idleCountEl = document.getElementById("idleCount");
 const dayEndBox = document.getElementById("dayEndBox");
 const reportBox = document.getElementById("reportBox");
 
-const loginBtn = document.getElementById("loginBtn");
 const bioBtn = document.getElementById("bioBtn");
 const dayEndBtn = document.getElementById("dayEndBtn");
 
@@ -170,7 +170,8 @@ const dayEndBtn = document.getElementById("dayEndBtn");
 const CURRENT_TASKS="CURRENT_TASKS";
 const SESSION_START="SESSION_START";
 const PRODUCTIVE_TIME="PRODUCTIVE_TIME";
-const IDLE_LIMIT=30;
+const IDLE_COUNT="IDLE_COUNT";
+const IDLE_LIMIT=1800; // 30 minutes
 
 /* STATE */
 let CURRENT_UID=null;
@@ -181,7 +182,7 @@ let lastActiveStamp=null;
 /* HELPERS */
 function ukey(k){return CURRENT_UID+"_"+k}
 
-/* LOGIN */
+/* LOGIN (RESET REPORT + IDLE) */
 window.login=async()=>{
   const email=prompt("Email");
   const pass=prompt("Password");
@@ -193,6 +194,11 @@ window.login=async()=>{
   const ref=doc(db,"users",CURRENT_UID);
   if(!(await getDoc(ref)).exists()) await setDoc(ref,{email});
 
+  /* RESET UI STATE */
+  reportBox.classList.add("hidden");
+  reportBox.innerHTML="";
+  dayEndBox.classList.add("hidden");
+
   if(!localStorage.getItem(ukey(CURRENT_TASKS))){
     localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify([
       {name:"Study core subject",done:false},
@@ -203,6 +209,9 @@ window.login=async()=>{
 
   localStorage.setItem(ukey(SESSION_START),Date.now());
   localStorage.setItem(ukey(PRODUCTIVE_TIME),"0");
+  localStorage.setItem(ukey(IDLE_COUNT),"0");
+
+  idleCountEl.innerText="0";
 
   statusEl.innerText="Status: Logged in";
   tasksBox.classList.remove("hidden");
@@ -215,16 +224,14 @@ window.login=async()=>{
   startIdleTimer();
 };
 
-/* TASKS WITH CONFIRMATION */
+/* TASKS (CONFIRMATION) */
 function loadTasks(){
   taskList.innerHTML="";
   const data=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
-
   data.forEach(t=>{
     const cb=document.createElement("input");
     cb.type="checkbox";
     cb.checked=t.done;
-
     cb.onchange=()=>{
       if(!confirm("Confirm task status change?")){
         cb.checked=!cb.checked;
@@ -233,7 +240,6 @@ function loadTasks(){
       t.done=cb.checked;
       localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(data));
     };
-
     const d=document.createElement("div");
     d.className="task";
     d.append(cb," "+t.name);
@@ -241,36 +247,42 @@ function loadTasks(){
   });
 }
 
-/* IDLE */
+/* IDLE TIMER */
 function startIdleTimer(){
   clearInterval(idleTimer);
   idleRemaining=IDLE_LIMIT;
-  idleTime.innerText=idleRemaining;
+  updateIdleTime();
   lastActiveStamp=Date.now();
 
   idleTimer=setInterval(()=>{
     idleRemaining--;
-    idleTime.innerText=idleRemaining;
+    updateIdleTime();
     if(idleRemaining<=0) idleLogout();
   },1000);
 }
 
+function updateIdleTime(){
+  const m=Math.floor(idleRemaining/60);
+  const s=idleRemaining%60;
+  idleTime.innerText=`${m}:${s.toString().padStart(2,"0")}`;
+}
+
 window.resetIdle=()=>{
-  const now=Date.now();
-  const prod=Math.floor((now-lastActiveStamp)/1000);
-  const prev=Number(localStorage.getItem(ukey(PRODUCTIVE_TIME))||0);
-  localStorage.setItem(ukey(PRODUCTIVE_TIME),prev+prod);
+  lastActiveStamp=Date.now();
   startIdleTimer();
 };
 
 async function idleLogout(){
   clearInterval(idleTimer);
+  let c=Number(localStorage.getItem(ukey(IDLE_COUNT))||0)+1;
+  localStorage.setItem(ukey(IDLE_COUNT),c);
+  idleCountEl.innerText=c;
   alert("Idle detected. Auto logout.");
   await signOut(auth);
   location.reload();
-}
+};
 
-/* DAY END – NEXT DAY TASKS FIRST */
+/* DAY END */
 window.openDayEnd=()=>{
   let html="<h3>Enter Next Day Tasks</h3>";
   for(let i=0;i<5;i++){
@@ -281,7 +293,7 @@ window.openDayEnd=()=>{
   dayEndBox.classList.remove("hidden");
 };
 
-/* FINAL LOCK AFTER REPORT */
+/* FINAL REPORT + LOCK */
 window.confirmDayEnd=async()=>{
   clearInterval(idleTimer);
 
@@ -291,22 +303,20 @@ window.confirmDayEnd=async()=>{
 
   const productive=Number(localStorage.getItem(ukey(PRODUCTIVE_TIME))||0);
   const total=Math.floor((Date.now()-Number(localStorage.getItem(ukey(SESSION_START))))/1000);
-  const productivePercent=total?Math.min(100,Math.round(productive/total*100)):0;
+  const productivePercent=total?100:0;
 
   const finalScore=Math.round(taskPercent*0.7+productivePercent*0.3);
   const grade=finalScore>=80?"EXCELLENT":finalScore>=60?"GOOD":finalScore>=40?"AVERAGE":"POOR";
 
   reportBox.innerHTML=`
     <h3>Report Card</h3>
-    Task Completion: ${taskPercent}%<br>
-    Productive Time: ${productivePercent}%<br><br>
+    Task Completion: ${taskPercent}%<br><br>
     <div class="progress">
       <div class="bar ${grade}" style="width:${finalScore}%">${finalScore}%</div>
     </div>
     Grade: <b>${grade}</b>
   `;
 
-  /* LOCK UI */
   tasksBox.classList.add("hidden");
   dayEndBox.classList.add("hidden");
   idleBox.classList.add("hidden");
