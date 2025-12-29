@@ -77,7 +77,6 @@ function login(){
   document.getElementById("bioBtn").disabled=false;
   document.getElementById("dayEndBtn").disabled=false;
 
-  /* log login */
   const logs=JSON.parse(localStorage.getItem(k(K_LOGS))||"[]");
   logs.push({login:now(),logout:"—",reason:"—"});
   localStorage.setItem(k(K_LOGS),JSON.stringify(logs));
@@ -143,17 +142,27 @@ function renderLogs(){
   });
 }
 
-/* ===== BIO BREAK ===== */
+/* ===== BIO BREAK (FIXED) ===== */
 function bioBreak(){
   const reason=prompt("Reason for Bio Break?");
   if(!reason) return;
 
   const logs=JSON.parse(localStorage.getItem(k(K_LOGS))||"[]");
-  logs[logs.length-1].logout=now();
-  logs[logs.length-1].reason=reason;
-  localStorage.setItem(k(K_LOGS),JSON.stringify(logs));
+  if(logs.length){
+    logs[logs.length-1].logout=now();
+    logs[logs.length-1].reason=reason;
+    localStorage.setItem(k(K_LOGS),JSON.stringify(logs));
+  }
 
-  renderLogs();
+  /* IMMEDIATE LOGOUT */
+  CURRENT_UID=null;
+
+  document.getElementById("statusBox").innerText="Status: Logged out";
+  document.getElementById("bioBtn").disabled=true;
+  document.getElementById("dayEndBtn").disabled=true;
+
+  document.getElementById("tasksBox").classList.add("hidden");
+  document.getElementById("logBox").classList.add("hidden");
 }
 
 /* ===== DAY END ===== */
@@ -174,10 +183,10 @@ function confirmDayEnd(){
     .filter(v=>v);
 
   if(inputs.length){
-    localStorage.setItem(k(K_NEXT),JSON.stringify(inputs));
+    localStorage.setItem(CURRENT_UID+"_"+K_NEXT,JSON.stringify(inputs));
   }
 
-  const tasks=JSON.parse(localStorage.getItem(k(K_TASKS))||"[]");
+  const tasks=JSON.parse(localStorage.getItem(CURRENT_UID+"_"+K_TASKS)||"[]");
   const done=tasks.filter(t=>t.done).length;
   const percent=Math.round(done/tasks.length*100);
 
@@ -187,9 +196,9 @@ function confirmDayEnd(){
     Completion: <b>${percent}%</b>`;
   report.classList.remove("hidden");
 
-  /* reset for next day */
-  localStorage.removeItem(k(K_TASKS));
-  localStorage.removeItem(k(K_LOGS));
+  /* RESET FOR NEXT DAY */
+  localStorage.removeItem(CURRENT_UID+"_"+K_TASKS);
+  localStorage.removeItem(CURRENT_UID+"_"+K_LOGS);
 
   document.getElementById("tasksBox").classList.add("hidden");
   document.getElementById("dayEndBox").classList.add("hidden");
