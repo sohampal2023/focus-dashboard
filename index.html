@@ -6,42 +6,49 @@
 
 <style>
 *{
-  box-sizing:border-box
+  box-sizing:border-box;
 }
+
 html,body{
   margin:0;
   height:100%;
-  font-family:Segoe UI,system-ui,sans-serif
+  font-family:Segoe UI,system-ui,sans-serif;
 }
+
 body{
   background:linear-gradient(135deg,#0f172a,#020617);
-  color:#e5e7eb
+  color:#e5e7eb;
 }
+
 .app{
   display:grid;
   grid-template-columns:280px 1fr;
-  height:100vh
+  height:100vh;
 }
+
 .sidebar{
   padding:20px;
   display:flex;
   flex-direction:column;
   gap:18px;
-  border-right:1px solid #1e293b
+  border-right:1px solid #1e293b;
 }
+
 .sidebar h2{
   text-align:center;
   color:#38bdf8;
-  margin:0
+  margin:0;
 }
+
 .status{
   padding:26px;
   border-radius:16px;
   border:2px solid #334155;
   text-align:center;
   font-weight:900;
-  background:#020617
+  background:#020617;
 }
+
 .nav button{
   width:100%;
   padding:14px;
@@ -51,74 +58,68 @@ body{
   background:#020617;
   color:#e5e7eb;
   font-weight:600;
-  cursor:pointer
+  cursor:pointer;
 }
+
 .nav button:hover{
-  border-color:#38bdf8
+  border-color:#38bdf8;
 }
+
 .main{
   padding:25px;
-  overflow:auto
+  overflow:auto;
 }
+
 .card{
   background:#020617;
   border:1px solid #1e293b;
   border-radius:16px;
   padding:20px;
-  margin-bottom:20px
+  margin-bottom:20px;
 }
+
 .hidden{
-  display:none
+  display:none;
 }
+
 .task{
   display:flex;
   gap:10px;
-  margin:8px 0
+  margin:8px 0;
 }
-.progress{
-  height:18px;
-  border-radius:10px;
-  overflow:hidden;
-  border:1px solid #1e293b
-}
-.bar{
-  height:100%;
-  font-size:11px;
-  font-weight:700;
-  text-align:center
-}
-.bar.EXCELLENT{background:#22c55e}
-.bar.GOOD{background:#84cc16}
-.bar.AVERAGE{background:#facc15}
-.bar.POOR{background:#ef4444}
+
 .history-item{
   padding:12px;
   border:1px solid #1e293b;
   border-left:5px solid #38bdf8;
   border-radius:12px;
-  margin-bottom:10px
+  margin-bottom:10px;
 }
+
 .admin-row{
   display:flex;
   justify-content:space-between;
   align-items:center;
-  gap:12px
+  gap:12px;
 }
+
 .admin-row button{
   padding:6px 12px;
   border-radius:8px;
   border:1px solid #334155;
   background:#020617;
   color:#e5e7eb;
-  cursor:pointer
+  cursor:pointer;
 }
+
 .admin-row button.terminate{
   border-color:#ef4444;
-  color:#ef4444
+  color:#ef4444;
 }
+
 .admin-row button.approve{
   border-color:#22c55e;
-  color:#22c55e
+  color:#22c55e;
 }
 </style>
 </head>
@@ -175,6 +176,7 @@ const db = getFirestore(app);
 /* ================= ROLES ================= */
 const ADMIN_EMAIL = "admin@study.com";
 
+/* ================= STATE ================= */
 let CURRENT_UID = null;
 let CURRENT_EMAIL = null;
 
@@ -196,26 +198,45 @@ const SESSIONS = "SESSIONS";
 const REPORTS = "REPORTS";
 
 /* ================= HELPERS ================= */
-const ukey = k => `${CURRENT_UID}_${k}`;
-const now = () => new Date();
-const stamp = () => new Date().toLocaleTimeString([],{
-  hour:"2-digit",minute:"2-digit"
-});
-const mins = (a,b) => Math.round((b-a)/60000);
+function ukey(k){
+  return CURRENT_UID + "_" + k;
+}
 
-/* ================= NEW DAY LOGIC ================= */
+function stamp(){
+  return new Date().toLocaleTimeString([],{
+    hour:"2-digit",
+    minute:"2-digit"
+  });
+}
+
+/* ================= STATE SAFETY ================= */
+function ensureUserState(){
+  if(!localStorage.getItem(ukey(CURRENT_TASKS))){
+    localStorage.setItem(ukey(CURRENT_TASKS), JSON.stringify([]));
+  }
+  if(!localStorage.getItem(ukey(SESSIONS))){
+    localStorage.setItem(ukey(SESSIONS), JSON.stringify([]));
+  }
+  if(!localStorage.getItem(ukey(REPORTS))){
+    localStorage.setItem(ukey(REPORTS), JSON.stringify([]));
+  }
+  if(!localStorage.getItem(ukey(DAY_STATUS))){
+    localStorage.setItem(ukey(DAY_STATUS), "ACTIVE");
+  }
+}
+
+/* ================= NEW DAY ================= */
 function startNewDayIfNeeded(){
-  const s = localStorage.getItem(ukey(DAY_STATUS));
-  if(s === "CLOSED"){
-    const n = JSON.parse(localStorage.getItem(ukey(NEXT_TASKS)) || "[]");
-    localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(n));
+  if(localStorage.getItem(ukey(DAY_STATUS)) === "CLOSED"){
+    const next = JSON.parse(localStorage.getItem(ukey(NEXT_TASKS)) || "[]");
+    localStorage.setItem(ukey(CURRENT_TASKS), JSON.stringify(next));
     localStorage.removeItem(ukey(NEXT_TASKS));
-    localStorage.setItem(ukey(DAY_STATUS),"ACTIVE");
+    localStorage.setItem(ukey(DAY_STATUS), "ACTIVE");
   }
 }
 
 /* ================= LOGIN ================= */
-window.login = async ()=>{
+window.login = async function(){
   const email = prompt("Email");
   const pass = prompt("Password");
   if(!email || !pass) return;
@@ -231,22 +252,25 @@ window.login = async ()=>{
     return;
   }
 
+  ensureUserState();
+  startNewDayIfNeeded();
+
   if(email === ADMIN_EMAIL){
     adminBtn.classList.remove("hidden");
   }
 
   status.innerText = "Status: Logged in @ " + stamp();
+  tasksBox.classList.remove("hidden");
 };
 
-/* ================= ADMIN PANEL ================= */
-window.openAdmin = async ()=>{
+/* ================= ADMIN ================= */
+window.openAdmin = async function(){
   if(CURRENT_EMAIL !== ADMIN_EMAIL) return;
 
   adminBox.classList.remove("hidden");
-  adminBox.innerHTML = "<h3>Admin Panel – User Control</h3>";
+  adminBox.innerHTML = "<h3>Admin – User Control</h3>";
 
   const snap = await getDocs(collection(db,"users"));
-
   snap.forEach(d=>{
     const u = d.data();
     if(u.email === ADMIN_EMAIL) return;
@@ -255,7 +279,7 @@ window.openAdmin = async ()=>{
     row.className = "history-item admin-row";
 
     const label = document.createElement("div");
-    label.innerText = `${u.email} — ${u.blocked ? "BLOCKED" : "ACTIVE"}`;
+    label.innerText = u.email + " — " + (u.blocked ? "BLOCKED" : "ACTIVE");
 
     const okBtn = document.createElement("button");
     okBtn.innerText = "OK";
@@ -279,7 +303,7 @@ window.openAdmin = async ()=>{
 };
 
 /* ================= BIO BREAK ================= */
-window.bioBreak = async ()=>{
+window.bioBreak = async function(){
   await signOut(auth);
   status.innerText = "Status: Bio Break @ " + stamp();
   tasksBox.classList.add("hidden");
