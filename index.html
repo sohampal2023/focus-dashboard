@@ -6,96 +6,20 @@
 
 <style>
 *{box-sizing:border-box}
-html,body{
-  margin:0;height:100%;
-  font-family:Segoe UI,system-ui,sans-serif;
-}
-body{
-  background:linear-gradient(135deg,#0f172a,#020617);
-  color:#e5e7eb;
-}
-.app{
-  display:grid;
-  grid-template-columns:280px 1fr;
-  height:100vh;
-}
-.sidebar{
-  padding:20px;
-  display:flex;
-  flex-direction:column;
-  gap:18px;
-  border-right:1px solid #1e293b;
-}
-.sidebar h2{
-  text-align:center;
-  color:#38bdf8;
-  margin:0;
-}
-.status{
-  padding:16px;
-  border-radius:16px;
-  border:2px solid #334155;
-  text-align:center;
-  font-weight:700;
-  background:#020617;
-}
-.nav button{
-  width:100%;
-  padding:14px;
-  margin-bottom:10px;
-  border-radius:12px;
-  border:1px solid #1e293b;
-  background:#020617;
-  color:#e5e7eb;
-  font-weight:600;
-  cursor:pointer;
-}
-.nav button:disabled{
-  opacity:.4;
-  cursor:not-allowed;
-}
-.main{
-  padding:25px;
-  overflow:auto;
-}
-.card{
-  background:#020617;
-  border:1px solid #1e293b;
-  border-radius:16px;
-  padding:20px;
-  margin-bottom:20px;
-}
+html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
+body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
+.app{display:grid;grid-template-columns:280px 1fr;height:100vh}
+.sidebar{padding:20px;display:flex;flex-direction:column;gap:18px;border-right:1px solid #1e293b}
+.sidebar h2{text-align:center;color:#38bdf8;margin:0}
+.status{padding:16px;border-radius:16px;border:2px solid #334155;text-align:center;font-weight:700;background:#020617}
+.nav button{width:100%;padding:14px;margin-bottom:10px;border-radius:12px;border:1px solid #1e293b;background:#020617;color:#e5e7eb;font-weight:600;cursor:pointer}
+.nav button:disabled{opacity:.4;cursor:not-allowed}
+.main{padding:25px;overflow:auto}
+.card{background:#020617;border:1px solid #1e293b;border-radius:16px;padding:20px;margin-bottom:20px}
 .hidden{display:none}
-.task{
-  display:flex;
-  gap:10px;
-  margin:10px 0;
-}
-.progress{
-  height:18px;
-  border-radius:10px;
-  overflow:hidden;
-  border:1px solid #1e293b;
-}
-.bar{
-  height:100%;
-  font-size:11px;
-  font-weight:700;
-  text-align:center;
-}
-.bar.EXCELLENT{background:#22c55e}
-.bar.GOOD{background:#84cc16}
-.bar.AVERAGE{background:#facc15}
-.bar.POOR{background:#ef4444}
-input.nextTask{
-  width:100%;
-  padding:8px;
-  margin:6px 0;
-  border-radius:8px;
-  border:1px solid #334155;
-  background:#020617;
-  color:#e5e7eb;
-}
+.task{display:flex;gap:10px;margin:10px 0}
+.log{font-size:13px;border-top:1px solid #334155;padding-top:8px;margin-top:8px}
+input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px solid #334155;background:#020617;color:#e5e7eb}
 </style>
 </head>
 
@@ -104,19 +28,11 @@ input.nextTask{
 
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
-
   <div id="statusBox" class="status">Status: Logged out</div>
 
-  <div id="idleBox" class="status hidden">
-    Idle Timer: <b><span id="idleTime">30:00</span></b><br>
-    Idle Count: <b><span id="idleCount">0</span></b>
-    <br><br>
-    <button onclick="resetIdle()">I am studying</button>
-  </div>
-
   <div class="nav">
-    <button id="loginBtn" onclick="login()">Login</button>
-    <button id="bioBtn" onclick="bioBreak()" disabled>Logout</button>
+    <button onclick="login()">Login</button>
+    <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
     <button id="dayEndBtn" onclick="openDayEnd()" disabled>Day End</button>
   </div>
 </div>
@@ -127,76 +43,57 @@ input.nextTask{
     <div id="taskList"></div>
   </div>
 
+  <div id="logBox" class="card hidden">
+    <h3>Login / Logout Log</h3>
+    <div id="logList"></div>
+  </div>
+
   <div id="dayEndBox" class="card hidden"></div>
   <div id="reportBox" class="card hidden"></div>
 </div>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
-
-/* FIREBASE */
-const firebaseConfig = {
-  apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
-  authDomain: "focus-dashboard-5965a.firebaseapp.com",
-  projectId: "focus-dashboard-5965a",
-  storageBucket: "focus-dashboard-5965a.firebasestorage.app",
-  messagingSenderId: "337204334808",
-  appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
-};
-
-initializeApp(firebaseConfig);
-const auth = getAuth();
-const db = getFirestore();
-
-/* DOM */
-const statusEl = document.getElementById("statusBox");
-const tasksBox = document.getElementById("tasksBox");
-const taskList = document.getElementById("taskList");
-const idleBox = document.getElementById("idleBox");
-const idleTime = document.getElementById("idleTime");
-const idleCountEl = document.getElementById("idleCount");
-const dayEndBox = document.getElementById("dayEndBox");
-const reportBox = document.getElementById("reportBox");
-
-const bioBtn = document.getElementById("bioBtn");
-const dayEndBtn = document.getElementById("dayEndBtn");
-
-/* CONSTANTS */
-const CURRENT_TASKS="CURRENT_TASKS";
-const NEXT_DAY_TASKS="NEXT_DAY_TASKS";
-const SESSION_START="SESSION_START";
-const PRODUCTIVE_TIME="PRODUCTIVE_TIME";
-const IDLE_COUNT="IDLE_COUNT";
-const IDLE_LIMIT=1800;
-
-/* STATE */
+<script>
+/* ===== STATE ===== */
 let CURRENT_UID=null;
-let idleTimer=null;
-let idleRemaining=IDLE_LIMIT;
 
-/* HELPERS */
-function ukey(k){return CURRENT_UID+"_"+k}
+/* ===== STORAGE KEYS ===== */
+const K_TASKS="TASKS";
+const K_NEXT="NEXT_TASKS";
+const K_LOGS="LOGS";
 
-/* LOGIN */
-window.login=async()=>{
+/* ===== HELPERS ===== */
+const k = x => CURRENT_UID+"_"+x;
+const now = () => new Date().toLocaleString();
+
+/* ===== LOGIN ===== */
+function login(){
   const email=prompt("Email");
-  const pass=prompt("Password");
-  if(!email||!pass)return;
+  if(!email) return;
 
-  const cred=await signInWithEmailAndPassword(auth,email,pass);
-  CURRENT_UID=cred.user.uid;
+  CURRENT_UID=email;
 
-  const ref=doc(db,"users",CURRENT_UID);
-  if(!(await getDoc(ref)).exists()) await setDoc(ref,{email});
+  document.getElementById("statusBox").innerText="Status: Logged in";
+  document.getElementById("bioBtn").disabled=false;
+  document.getElementById("dayEndBtn").disabled=false;
 
-  const prev=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
-  const next=JSON.parse(localStorage.getItem(ukey(NEXT_DAY_TASKS))||"[]");
+  /* log login */
+  const logs=JSON.parse(localStorage.getItem(k(K_LOGS))||"[]");
+  logs.push({login:now(),logout:"—",reason:"—"});
+  localStorage.setItem(k(K_LOGS),JSON.stringify(logs));
+
+  mergeTasks();
+  renderTasks();
+  renderLogs();
+}
+
+/* ===== TASK MERGE ===== */
+function mergeTasks(){
+  const prev=JSON.parse(localStorage.getItem(k(K_TASKS))||"[]");
+  const next=JSON.parse(localStorage.getItem(k(K_NEXT))||"[]");
 
   const merged=[
-    ...prev.filter(t=>!t.done).map(t=>({name:t.name,done:false})),
+    ...prev.filter(t=>!t.done),
     ...next.map(n=>({name:n,done:false}))
   ];
 
@@ -208,120 +105,98 @@ window.login=async()=>{
     );
   }
 
-  localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(merged));
-  localStorage.removeItem(ukey(NEXT_DAY_TASKS));
+  localStorage.setItem(k(K_TASKS),JSON.stringify(merged));
+  localStorage.removeItem(k(K_NEXT));
+}
 
-  localStorage.setItem(ukey(SESSION_START),Date.now());
-  localStorage.setItem(ukey(PRODUCTIVE_TIME),"0");
-  localStorage.setItem(ukey(IDLE_COUNT),"0");
+/* ===== TASK RENDER ===== */
+function renderTasks(){
+  const box=document.getElementById("tasksBox");
+  const list=document.getElementById("taskList");
+  box.classList.remove("hidden");
+  list.innerHTML="";
 
-  idleCountEl.innerText="0";
-
-  statusEl.innerText="Status: Logged in";
-  tasksBox.classList.remove("hidden");
-  idleBox.classList.remove("hidden");
-
-  bioBtn.disabled=false;
-  dayEndBtn.disabled=false;
-
-  loadTasks();
-  startIdleTimer();
-};
-
-/* TASKS */
-function loadTasks(){
-  taskList.innerHTML="";
-  const data=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
-  data.forEach(t=>{
+  const tasks=JSON.parse(localStorage.getItem(k(K_TASKS))||"[]");
+  tasks.forEach(t=>{
     const cb=document.createElement("input");
     cb.type="checkbox";
     cb.checked=t.done;
-    cb.onchange=()=>{
-      if(!confirm("Confirm task status change?")){
-        cb.checked=!cb.checked;
-        return;
-      }
-      t.done=cb.checked;
-      localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(data));
-    };
-    const d=document.createElement("div");
-    d.className="task";
-    d.append(cb," "+t.name);
-    taskList.appendChild(d);
+    cb.onchange=()=>{t.done=cb.checked;localStorage.setItem(k(K_TASKS),JSON.stringify(tasks))};
+    list.append(cb," "+t.name,document.createElement("br"));
   });
 }
 
-/* IDLE */
-function startIdleTimer(){
-  clearInterval(idleTimer);
-  idleRemaining=IDLE_LIMIT;
-  updateIdleTime();
-  idleTimer=setInterval(()=>{
-    idleRemaining--;
-    updateIdleTime();
-    if(idleRemaining<=0) idleLogout();
-  },1000);
-}
-function updateIdleTime(){
-  const m=Math.floor(idleRemaining/60);
-  const s=idleRemaining%60;
-  idleTime.innerText=`${m}:${String(s).padStart(2,"0")}`;
-}
-window.resetIdle=()=>startIdleTimer();
+/* ===== LOG RENDER ===== */
+function renderLogs(){
+  const box=document.getElementById("logBox");
+  const list=document.getElementById("logList");
+  box.classList.remove("hidden");
+  list.innerHTML="";
 
-async function idleLogout(){
-  clearInterval(idleTimer);
-  let c=Number(localStorage.getItem(ukey(IDLE_COUNT))||0)+1;
-  localStorage.setItem(ukey(IDLE_COUNT),c);
-  idleCountEl.innerText=c;
-  alert("Idle detected. Auto logout.");
-  await signOut(auth);
-  location.reload();
+  const logs=JSON.parse(localStorage.getItem(k(K_LOGS))||"[]");
+  logs.forEach(l=>{
+    list.innerHTML+=`<div class="log">
+      Login: ${l.login}<br>
+      Logout: ${l.logout}<br>
+      Reason: ${l.reason}
+    </div>`;
+  });
 }
 
-/* DAY END */
-window.openDayEnd=()=>{
+/* ===== BIO BREAK ===== */
+function bioBreak(){
+  const reason=prompt("Reason for Bio Break?");
+  if(!reason) return;
+
+  const logs=JSON.parse(localStorage.getItem(k(K_LOGS))||"[]");
+  logs[logs.length-1].logout=now();
+  logs[logs.length-1].reason=reason;
+  localStorage.setItem(k(K_LOGS),JSON.stringify(logs));
+
+  renderLogs();
+}
+
+/* ===== DAY END ===== */
+function openDayEnd(){
   let html="<h3>Enter Next Day Tasks</h3>";
   for(let i=0;i<5;i++){
     html+=`<input class="nextTask" placeholder="Next Day Task ${i+1}">`;
   }
   html+=`<br><button onclick="confirmDayEnd()">Submit</button>`;
-  dayEndBox.innerHTML=html;
-  dayEndBox.classList.remove("hidden");
-};
+  const box=document.getElementById("dayEndBox");
+  box.innerHTML=html;
+  box.classList.remove("hidden");
+}
 
-window.confirmDayEnd=async()=>{
-  clearInterval(idleTimer);
-
+function confirmDayEnd(){
   const inputs=[...document.querySelectorAll(".nextTask")]
     .map(i=>i.value.trim())
     .filter(v=>v);
 
-  if(inputs.length>0){
-    localStorage.setItem(ukey(NEXT_DAY_TASKS),JSON.stringify(inputs));
+  if(inputs.length){
+    localStorage.setItem(k(K_NEXT),JSON.stringify(inputs));
   }
 
-  reportBox.innerHTML="<h3>Report Card</h3>Day completed successfully.";
+  const tasks=JSON.parse(localStorage.getItem(k(K_TASKS))||"[]");
+  const done=tasks.filter(t=>t.done).length;
+  const percent=Math.round(done/tasks.length*100);
 
-  tasksBox.classList.add("hidden");
-  dayEndBox.classList.add("hidden");
-  idleBox.classList.add("hidden");
+  const report=document.getElementById("reportBox");
+  report.innerHTML=`<h3>Report Card</h3>
+    Tasks: ${done}/${tasks.length}<br>
+    Completion: <b>${percent}%</b>`;
+  report.classList.remove("hidden");
 
-  bioBtn.disabled=true;
-  dayEndBtn.disabled=true;
+  /* reset for next day */
+  localStorage.removeItem(k(K_TASKS));
+  localStorage.removeItem(k(K_LOGS));
 
-  reportBox.classList.remove("hidden");
-  statusEl.innerText="Status: Day End Completed";
-
-  /* NO AUTO LOGOUT HERE */
-};
-
-/* LOGOUT ONLY VIA BUTTON */
-window.bioBreak=async()=>{
-  clearInterval(idleTimer);
-  await signOut(auth);
-  location.reload();
-};
+  document.getElementById("tasksBox").classList.add("hidden");
+  document.getElementById("dayEndBox").classList.add("hidden");
+  document.getElementById("bioBtn").disabled=true;
+  document.getElementById("dayEndBtn").disabled=true;
+  document.getElementById("statusBox").innerText="Status: Day End Completed";
+}
 </script>
 </body>
 </html>
