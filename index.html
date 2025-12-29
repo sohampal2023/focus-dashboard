@@ -6,12 +6,11 @@
 
 <style>
 *{box-sizing:border-box}
-html,body{
-  margin:0;height:100%;
-  font-family:Segoe UI,system-ui,sans-serif;
-}
 body{
-  background:linear-gradient(135deg,#0f172a,#020617);
+  margin:0;
+  height:100vh;
+  font-family:Segoe UI,system-ui,sans-serif;
+  background:#020617;
   color:#e5e7eb;
 }
 .app{
@@ -21,80 +20,42 @@ body{
 }
 .sidebar{
   padding:20px;
-  display:flex;
-  flex-direction:column;
-  gap:18px;
   border-right:1px solid #1e293b;
 }
-.sidebar h2{
-  text-align:center;
-  color:#38bdf8;
-  margin:0;
-}
 .status{
-  padding:16px;
-  border-radius:16px;
-  border:2px solid #334155;
-  text-align:center;
-  font-weight:700;
-  background:#020617;
-}
-.nav button{
-  width:100%;
   padding:14px;
-  margin-bottom:10px;
+  border:1px solid #334155;
   border-radius:12px;
-  border:1px solid #1e293b;
+  margin-bottom:10px;
+  text-align:center;
+}
+button{
+  width:100%;
+  padding:12px;
+  margin-top:8px;
   background:#020617;
   color:#e5e7eb;
-  font-weight:600;
+  border:1px solid #334155;
+  border-radius:10px;
   cursor:pointer;
 }
-.nav button:disabled{
-  opacity:.4;
-  cursor:not-allowed;
-}
-.main{
-  padding:25px;
-  overflow:auto;
-}
+button:disabled{opacity:.4}
+.main{padding:20px}
 .card{
-  background:#020617;
-  border:1px solid #1e293b;
-  border-radius:16px;
+  border:1px solid #334155;
+  border-radius:14px;
   padding:20px;
   margin-bottom:20px;
 }
+.task{display:flex;gap:10px;margin:8px 0}
 .hidden{display:none}
-.task{
-  display:flex;
-  gap:10px;
-  margin:10px 0;
-}
-.progress{
-  height:18px;
-  border-radius:10px;
-  overflow:hidden;
-  border:1px solid #1e293b;
-}
-.bar{
-  height:100%;
-  font-size:11px;
-  font-weight:700;
-  text-align:center;
-}
-.bar.EXCELLENT{background:#22c55e}
-.bar.GOOD{background:#84cc16}
-.bar.AVERAGE{background:#facc15}
-.bar.POOR{background:#ef4444}
-input.nextTask{
+input{
   width:100%;
   padding:8px;
-  margin:6px 0;
-  border-radius:8px;
-  border:1px solid #334155;
   background:#020617;
   color:#e5e7eb;
+  border:1px solid #334155;
+  border-radius:8px;
 }
 </style>
 </head>
@@ -103,22 +64,10 @@ input.nextTask{
 <div class="app">
 
 <div class="sidebar">
-  <h2>FOCUS SYSTEM</h2>
-
-  <div id="statusBox" class="status">Status: Logged out</div>
-
-  <div id="idleBox" class="status hidden">
-    Idle Timer: <b><span id="idleTime">30:00</span></b><br>
-    Idle Count: <b><span id="idleCount">0</span></b>
-    <br><br>
-    <button onclick="resetIdle()">I am studying</button>
-  </div>
-
-  <div class="nav">
-    <button id="loginBtn" onclick="login()">Login</button>
-    <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
-    <button id="dayEndBtn" onclick="openDayEnd()" disabled>Day End</button>
-  </div>
+  <h3>FOCUS SYSTEM</h3>
+  <div id="status" class="status">Logged out</div>
+  <button onclick="login()">Login</button>
+  <button id="dayEndBtn" onclick="openDayEnd()" disabled>Day End</button>
 </div>
 
 <div class="main">
@@ -136,49 +85,33 @@ input.nextTask{
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import {
+  getFirestore, doc, getDoc, setDoc, updateDoc,
+  collection, addDoc, serverTimestamp
+} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
 /* FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
   authDomain: "focus-dashboard-5965a.firebaseapp.com",
-  projectId: "focus-dashboard-5965a",
-  storageBucket: "focus-dashboard-5965a.firebasestorage.app",
-  messagingSenderId: "337204334808",
-  appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
+  projectId: "focus-dashboard-5965a"
 };
 
 initializeApp(firebaseConfig);
 const auth = getAuth();
 const db = getFirestore();
 
+/* STATE */
+let UID = null;
+let currentTasks = [];
+
 /* DOM */
-const statusEl = document.getElementById("statusBox");
-const tasksBox = document.getElementById("tasksBox");
+const statusEl = document.getElementById("status");
 const taskList = document.getElementById("taskList");
-const idleBox = document.getElementById("idleBox");
-const idleTime = document.getElementById("idleTime");
-const idleCountEl = document.getElementById("idleCount");
+const tasksBox = document.getElementById("tasksBox");
 const dayEndBox = document.getElementById("dayEndBox");
 const reportBox = document.getElementById("reportBox");
-
-const bioBtn = document.getElementById("bioBtn");
 const dayEndBtn = document.getElementById("dayEndBtn");
-
-/* CONSTANTS */
-const CURRENT_TASKS="CURRENT_TASKS";
-const SESSION_START="SESSION_START";
-const PRODUCTIVE_TIME="PRODUCTIVE_TIME";
-const IDLE_COUNT="IDLE_COUNT";
-const IDLE_LIMIT=1800;
-
-/* STATE */
-let CURRENT_UID=null;
-let idleTimer=null;
-let idleRemaining=IDLE_LIMIT;
-
-/* HELPERS */
-function ukey(k){return CURRENT_UID+"_"+k}
 
 /* LOGIN */
 window.login = async ()=>{
@@ -188,56 +121,62 @@ window.login = async ()=>{
 
   try{
     const cred = await signInWithEmailAndPassword(auth,email,pass);
-    CURRENT_UID = cred.user.uid;
+    UID = cred.user.uid;
 
-    const ref = doc(db,"users",CURRENT_UID);
-    if(!(await getDoc(ref)).exists()){
-      await setDoc(ref,{ email });
+    const ref = doc(db,"users",UID);
+    const snap = await getDoc(ref);
+
+    if(!snap.exists()){
+      await setDoc(ref,{
+        email,
+        currentTasks:[
+          {name:"Study core subject",done:false},
+          {name:"Revise notes",done:false}
+        ],
+        dayClosed:false,
+        idleCount:0,
+        sessionStart:Date.now()
+      });
     }
 
-    if(!localStorage.getItem(ukey(CURRENT_TASKS))){
-      localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify([
-        {name:"Study core subject",done:false},
-        {name:"Revise notes",done:false},
-        {name:"Practice questions",done:false}
-      ]));
+    const data = (await getDoc(ref)).data();
+
+    if(data.dayClosed){
+      const carry = data.currentTasks.filter(t=>!t.done);
+      await updateDoc(ref,{
+        currentTasks:carry,
+        dayClosed:false,
+        sessionStart:Date.now()
+      });
+      currentTasks = carry;
+    }else{
+      currentTasks = data.currentTasks;
     }
 
-    localStorage.setItem(ukey(SESSION_START),Date.now());
-    localStorage.setItem(ukey(PRODUCTIVE_TIME),"0");
-    localStorage.setItem(ukey(IDLE_COUNT),"0");
-
-    idleCountEl.innerText="0";
-    statusEl.innerText="Status: Logged in";
-
+    renderTasks();
+    statusEl.innerText="Logged in";
     tasksBox.classList.remove("hidden");
-    idleBox.classList.remove("hidden");
-    bioBtn.disabled=false;
     dayEndBtn.disabled=false;
 
-    loadTasks();
-    startIdleTimer();
-
-  }catch(err){
-    alert("Login failed:\n" + err.message);
+  }catch(e){
+    alert("Login failed:\n"+e.message);
   }
 };
 
 /* TASKS */
-function loadTasks(){
+function renderTasks(){
   taskList.innerHTML="";
-  const data=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
-  data.forEach(t=>{
+  currentTasks.forEach((t,i)=>{
     const cb=document.createElement("input");
     cb.type="checkbox";
     cb.checked=t.done;
-    cb.onchange=()=>{
-      if(!confirm("Confirm task status change?")){
+    cb.onchange=async()=>{
+      if(!confirm("Confirm change?")){
         cb.checked=!cb.checked;
         return;
       }
-      t.done=cb.checked;
-      localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(data));
+      t.done = cb.checked;
+      await updateDoc(doc(db,"users",UID),{ currentTasks });
     };
     const d=document.createElement("div");
     d.className="task";
@@ -246,56 +185,39 @@ function loadTasks(){
   });
 }
 
-/* IDLE TIMER */
-function startIdleTimer(){
-  clearInterval(idleTimer);
-  idleRemaining=IDLE_LIMIT;
-  updateIdleTime();
-
-  idleTimer=setInterval(()=>{
-    idleRemaining--;
-    updateIdleTime();
-    if(idleRemaining<=0) idleLogout();
-  },1000);
-}
-
-function updateIdleTime(){
-  const m=Math.floor(idleRemaining/60);
-  const s=idleRemaining%60;
-  idleTime.innerText=`${m}:${s.toString().padStart(2,"0")}`;
-}
-
-window.resetIdle=()=>startIdleTimer();
-
-async function idleLogout(){
-  clearInterval(idleTimer);
-  alert("Idle detected. Auto logout.");
-  await signOut(auth);
-  location.reload();
-}
-
 /* DAY END */
-window.openDayEnd=()=>{
-  let html="<h3>Enter Next Day Tasks</h3>";
+window.openDayEnd = ()=>{
+  let html="<h3>Next Day Tasks</h3>";
   for(let i=0;i<5;i++){
-    html+=`<input class="nextTask" placeholder="Next Day Task ${i+1}">`;
+    html+=`<input class="nextTask" placeholder="Task ${i+1}">`;
   }
   html+=`<br><button onclick="confirmDayEnd()">Submit</button>`;
   dayEndBox.innerHTML=html;
   dayEndBox.classList.remove("hidden");
 };
 
-window.confirmDayEnd=async()=>{
-  clearInterval(idleTimer);
-  await signOut(auth);
-  location.reload();
-};
+window.confirmDayEnd = async ()=>{
+  const done=currentTasks.filter(t=>t.done).length;
+  const percent=Math.round(done/currentTasks.length*100);
+  const grade=percent>=80?"EXCELLENT":percent>=60?"GOOD":percent>=40?"AVERAGE":"POOR";
 
-/* BIO BREAK */
-window.bioBreak=async()=>{
-  clearInterval(idleTimer);
+  await addDoc(collection(db,"users",UID,"reports"),{
+    tasks:currentTasks,
+    taskPercent:percent,
+    grade,
+    createdAt:serverTimestamp()
+  });
+
+  await updateDoc(doc(db,"users",UID),{
+    dayClosed:true
+  });
+
+  reportBox.innerHTML=`<h3>Report</h3>${percent}% - ${grade}`;
+  reportBox.classList.remove("hidden");
+  tasksBox.classList.add("hidden");
+  dayEndBox.classList.add("hidden");
+
   await signOut(auth);
-  location.reload();
 };
 </script>
 </body>
