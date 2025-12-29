@@ -37,13 +37,12 @@ input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px 
   <div id="statusBox" class="status">Status: Logged out</div>
 
   <div id="idleBox" class="status hidden">
-    Idle Timer: <b><span id="idleTime">30:00</span></b><br>
-    Idle Count: <b><span id="idleCount">0</span></b><br><br>
+    Idle Timer: <b><span id="idleTime">30:00</span></b><br><br>
     <button onclick="resetIdle()">I am studying</button>
   </div>
 
   <div class="nav">
-    <button onclick="login()">Login</button>
+    <button id="loginBtn" onclick="login()">Login</button>
     <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
     <button id="dayEndBtn" onclick="openDayEnd()" disabled>Day End</button>
   </div>
@@ -59,78 +58,49 @@ input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px 
     <button onclick="addExtraTask()">+ Add Extra Work</button>
   </div>
 
-  <div id="logBox" class="card hidden">
-    <h3>Login / Logout Log</h3>
-    <ol id="logList"></ol>
-  </div>
-
   <div id="dayEndBox" class="card hidden"></div>
   <div id="reportBox" class="card hidden"></div>
 </div>
 </div>
 
 <script>
-/* ===== STATE ===== */
 let UID=null;
 let idleTimer=null;
 let idleRemaining=1800;
 
-/* ===== KEYS ===== */
 const K_TASKS="TASKS";
 const K_EXTRA="EXTRA_TASKS";
 const K_NEXT="NEXT_TASKS";
-const K_IDLE="IDLE_COUNT";
-const K_LOG="LOGS";
-const BONUS_PER_EXTRA=5;
+const BONUS=5;
 const key=k=>UID+"_"+k;
 
-/* ===== TIME ===== */
 const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
 
-/* ===== LOGIN ===== */
+/* LOGIN */
 function login(){
-  const email=prompt("Email");
-  if(!email)return;
-  UID=email;
+  UID=prompt("Email");
+  if(!UID)return;
 
-  /* hide old report */
+  // reset UI
   reportBox.classList.add("hidden");
   reportBox.innerHTML="";
+  tasksBox.classList.remove("hidden");
+  dayEndBox.classList.add("hidden");
 
   statusBox.innerText="Status: Logged in";
+
+  loginBtn.disabled=true;
   bioBtn.disabled=false;
   dayEndBtn.disabled=false;
+
   idleBox.classList.remove("hidden");
-
-  localStorage.setItem(key(K_IDLE),"0");
-
-  /* log login */
-  const logs=JSON.parse(localStorage.getItem(key(K_LOG))||"[]");
-  logs.push({login:new Date().toLocaleString(),logout:"—"});
-  localStorage.setItem(key(K_LOG),JSON.stringify(logs));
+  startIdle();
 
   mergeTasks();
   loadTasks();
-  renderLogs();
-  startIdle();
 }
 
-/* ===== LOG LIST ===== */
-function renderLogs(){
-  const box=document.getElementById("logBox");
-  const list=document.getElementById("logList");
-  box.classList.remove("hidden");
-  list.innerHTML="";
-
-  const logs=JSON.parse(localStorage.getItem(key(K_LOG))||"[]");
-  logs.forEach(l=>{
-    const li=document.createElement("li");
-    li.innerText=`Login: ${l.login} | Logout: ${l.logout}`;
-    list.appendChild(li);
-  });
-}
-
-/* ===== MERGE TASKS ===== */
+/* TASK MERGE */
 function mergeTasks(){
   const prev=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
   const next=JSON.parse(localStorage.getItem(key(K_NEXT))||"[]");
@@ -153,9 +123,8 @@ function mergeTasks(){
   localStorage.setItem(key(K_EXTRA),"[]");
 }
 
-/* ===== TASK UI ===== */
+/* TASK UI */
 function loadTasks(){
-  tasksBox.classList.remove("hidden");
   taskList.innerHTML="";
   extraList.innerHTML="";
 
@@ -191,9 +160,8 @@ function loadTasks(){
   });
 }
 
-/* ===== EXTRA WORK ===== */
 function addExtraTask(){
-  const name=prompt("Extra work description?");
+  const name=prompt("Extra work?");
   if(!name)return;
   const extras=JSON.parse(localStorage.getItem(key(K_EXTRA))||"[]");
   extras.push({name,done:false});
@@ -201,22 +169,20 @@ function addExtraTask(){
   loadTasks();
 }
 
-/* ===== IDLE ===== */
+/* IDLE */
 function startIdle(){
   clearInterval(idleTimer);
   idleRemaining=1800;
-  updateIdle();
+  idleTime.innerText=fmt(idleRemaining);
   idleTimer=setInterval(()=>{
     idleRemaining--;
-    updateIdle();
-    if(idleRemaining<=0) idleLogout();
+    idleTime.innerText=fmt(idleRemaining);
+    if(idleRemaining<=0) location.reload();
   },1000);
 }
-function updateIdle(){idleTime.innerText=fmt(idleRemaining)}
 function resetIdle(){startIdle()}
-function idleLogout(){alert("Idle logout");location.reload()}
 
-/* ===== DAY END ===== */
+/* DAY END */
 function openDayEnd(){
   let html="<h3>Enter Next Day Tasks</h3>";
   for(let i=0;i<5;i++){
@@ -230,7 +196,6 @@ function openDayEnd(){
 function confirmDayEnd(){
   clearInterval(idleTimer);
   idleRemaining=0;
-  idleTime.innerText="0:00";
   idleBox.classList.add("hidden");
 
   const next=[...document.querySelectorAll(".nextTask")]
@@ -244,16 +209,16 @@ function confirmDayEnd(){
   localStorage.setItem(key(K_TASKS),JSON.stringify(undone));
 
   const doneCount=tasks.length-undone.length;
-  const basePct=Math.round(doneCount/tasks.length*100);
-  const extraDone=extras.filter(e=>e.done).length;
-  const final=Math.min(100,basePct+extraDone*BONUS_PER_EXTRA);
+  const base=Math.round(doneCount/tasks.length*100);
+  const bonus=extras.filter(e=>e.done).length*BONUS;
+  const final=Math.min(100,base+bonus);
 
   const grade=final>=80?"EXCELLENT":final>=60?"GOOD":final>=40?"AVERAGE":"POOR";
 
   reportBox.innerHTML=`
     <h3>Report Card</h3>
-    Done Tasks: ${doneCount}/${tasks.length}<br>
-    Extra Work Done: ${extraDone}<br><br>
+    Done: ${doneCount}/${tasks.length}<br>
+    Extra Done: ${extras.filter(e=>e.done).length}<br><br>
     <div class="progress">
       <div class="bar ${grade}" style="width:${final}%">${final}%</div>
     </div>
@@ -263,15 +228,17 @@ function confirmDayEnd(){
 
   tasksBox.classList.add("hidden");
   dayEndBox.classList.add("hidden");
+
+  // lock buttons
+  bioBtn.disabled=true;
+  dayEndBtn.disabled=true;
+  loginBtn.disabled=false;
+
+  statusBox.innerText="Status: Day End Completed";
 }
 
-/* ===== BIO BREAK ===== */
+/* BIO BREAK */
 function bioBreak(){
-  const logs=JSON.parse(localStorage.getItem(key(K_LOG))||"[]");
-  if(logs.length){
-    logs[logs.length-1].logout=new Date().toLocaleString();
-    localStorage.setItem(key(K_LOG),JSON.stringify(logs));
-  }
   location.reload();
 }
 </script>
