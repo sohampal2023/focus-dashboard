@@ -137,7 +137,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   </table>
 </div>
 
-<!-- NEXT DAY TASKS -->
 <div id="nextDayBox" class="card hidden">
   <h3>Enter Next Day Tasks</h3>
   <div id="nextInputs"></div>
@@ -159,7 +158,7 @@ let penalty=0;
 const now=()=>new Date().toLocaleString();
 const key=k=>UID+"_"+k;
 
-/* IDLE */
+/* ---------- IDLE ---------- */
 function startIdle(){
   clearInterval(idleTimer);
   idleRemaining=1800;
@@ -192,10 +191,14 @@ function autoLogout(){
   location.reload();
 }
 
-/* LOGIN */
+/* ---------- LOGIN ---------- */
 function login(){
   UID=prompt("Email");
   if(!UID)return;
+
+  if(localStorage.getItem(key("DAY_ENDED"))==="1"){
+    localStorage.removeItem(key("DAY_ENDED"));
+  }
 
   if(localStorage.getItem(key("ASK_REASON"))==="1"){
     const logs=JSON.parse(localStorage.getItem(key("LOGS")));
@@ -222,7 +225,7 @@ function login(){
   updateProgress();
 }
 
-/* BIO */
+/* ---------- BIO ---------- */
 function bioBreak(){
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
@@ -233,7 +236,7 @@ function bioBreak(){
   location.reload();
 }
 
-/* TASK SETUP */
+/* ---------- TASK SETUP ---------- */
 function setupTasks(){
   const carried=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
   const next=JSON.parse(localStorage.getItem(key("NEXT_TASKS"))||"[]");
@@ -256,7 +259,7 @@ function setupTasks(){
   reportBox.classList.add("hidden");
 }
 
-/* TASK UI */
+/* ---------- TASK UI ---------- */
 function loadTasks(){
   taskList.innerHTML="";
   extraList.innerHTML="";
@@ -301,7 +304,7 @@ function save(tasks,extras){
   updateProgress();
 }
 
-/* PROGRESS */
+/* ---------- PROGRESS ---------- */
 function calculate(){
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
   const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
@@ -324,11 +327,11 @@ function getLabel(p){
   if(p<40)return"Poor";
   if(p<60)return"Average";
   if(p<80)return"Good";
-  if(p<100)return"Excellent";
+  if(p<=100)return"Excellent";
   return"Fabulous";
 }
 
-/* DAY END */
+/* ---------- DAY END ---------- */
 function openDayEnd(){
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
@@ -355,6 +358,7 @@ function finalDayEnd(){
   localStorage.setItem(key("TASKS"),JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"),JSON.stringify([]));
   localStorage.removeItem(key("LOGS"));
+  localStorage.setItem(key("DAY_ENDED"),"1");
 
   reportBox.innerHTML=`
     <h3>Daily Report</h3>
@@ -378,7 +382,7 @@ function finalDayEnd(){
   dayBtn.disabled=true;
 }
 
-/* LOG TABLE */
+/* ---------- LOG TABLE ---------- */
 function renderLogs(){
   const logs=JSON.parse(localStorage.getItem(key("LOGS")));
   logTable.innerHTML="";
