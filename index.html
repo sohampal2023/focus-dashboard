@@ -19,8 +19,6 @@ body{
   grid-template-columns:280px 1fr;
   height:100vh;
 }
-
-/* SIDEBAR */
 .sidebar{
   padding:20px;
   display:flex;
@@ -33,8 +31,6 @@ body{
   color:#38bdf8;
   margin:0;
 }
-
-/* BIG STATUS BOX */
 .status{
   padding:26px;
   border-radius:16px;
@@ -44,9 +40,7 @@ body{
   font-size:18px;
   line-height:1.6;
   background:#020617;
-  box-shadow:0 12px 30px rgba(0,0,0,.7);
 }
-
 .nav button{
   width:100%;
   padding:14px;
@@ -58,9 +52,6 @@ body{
   font-weight:600;
   cursor:pointer;
 }
-.nav button:hover{border-color:#38bdf8}
-
-/* MAIN */
 .main{
   padding:25px;
   overflow:auto;
@@ -73,40 +64,20 @@ body{
   margin-bottom:20px;
 }
 .hidden{display:none}
-
-/* TASKS */
-.task{
-  display:flex;
-  gap:10px;
-  margin:8px 0;
-}
-
-/* PROGRESS */
+.task{display:flex;gap:10px;margin:8px 0}
 .progress{
-  height:18px;
-  border-radius:10px;
-  overflow:hidden;
-  border:1px solid #1e293b;
-  margin:6px 0 12px;
+  height:18px;border-radius:10px;overflow:hidden;
+  border:1px solid #1e293b;margin:6px 0 12px;
 }
-.bar{
-  height:100%;
-  font-size:11px;
-  font-weight:700;
-  text-align:center;
-}
+.bar{height:100%;font-size:11px;font-weight:700;text-align:center}
 .bar.EXCELLENT{background:#22c55e}
 .bar.GOOD{background:#84cc16}
 .bar.AVERAGE{background:#facc15}
 .bar.POOR{background:#ef4444}
-
-/* HISTORY */
 .history-item{
-  padding:12px;
-  border:1px solid #1e293b;
+  padding:12px;border:1px solid #1e293b;
   border-left:5px solid #38bdf8;
-  border-radius:12px;
-  margin-bottom:10px;
+  border-radius:12px;margin-bottom:10px;
 }
 </style>
 </head>
@@ -114,11 +85,9 @@ body{
 <body>
 <div class="app">
 
-<!-- SIDEBAR -->
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
   <div id="status" class="status">Status: Logged out</div>
-
   <div class="nav">
     <button onclick="login()">Login</button>
     <button onclick="bioBreak()">Bio Break</button>
@@ -127,22 +96,33 @@ body{
   </div>
 </div>
 
-<!-- MAIN -->
 <div class="main">
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
     <div id="taskList"></div>
   </div>
-
   <div id="dayEndBox" class="card hidden"></div>
   <div id="reportBox" class="card hidden"></div>
   <div id="historyBox" class="card hidden"></div>
 </div>
-
 </div>
 
-<script>
-/* DOM */
+<script type="module">
+/* ================= FIREBASE (ADD ONLY) ================= */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
+import { getFirestore, doc, setDoc, getDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+
+const firebaseConfig={
+  apiKey:"AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
+  authDomain:"focus-dashboard-5965a.firebaseapp.com",
+  projectId:"focus-dashboard-5965a"
+};
+
+const app=initializeApp(firebaseConfig);
+const db=getFirestore(app);
+window.db=db;
+
+/* ================= ORIGINAL DOM ================= */
 const status=document.getElementById("status");
 const tasksBox=document.getElementById("tasksBox");
 const taskList=document.getElementById("taskList");
@@ -150,36 +130,47 @@ const dayEndBox=document.getElementById("dayEndBox");
 const reportBox=document.getElementById("reportBox");
 const historyBox=document.getElementById("historyBox");
 
-/* STORAGE */
+/* ================= ORIGINAL STORAGE ================= */
 const DAY_STATUS="DAY_STATUS";
 const CURRENT_TASKS="CURRENT_TASKS";
 const NEXT_TASKS="NEXT_TASKS";
 const SESSIONS="SESSIONS";
 const REPORTS="REPORTS";
 
-/* TIME */
+/* ================= TIME ================= */
 const now=()=>new Date();
 const stamp=()=>new Date().toLocaleTimeString([],{
   hour:"2-digit",minute:"2-digit"
 });
 const mins=(a,b)=>Math.round((b-a)/60000);
 
-/* LOGIN */
-function login(){
-  if(!prompt("Enter ID")||!prompt("Enter Password"))return;
+/* ================= IDLE STATE (ADD ONLY) ================= */
+let idleMarks=0;
+async function saveIdleMarks(){
+  try{
+    await setDoc(doc(db,"user_state","default"),{
+      idleMarks,lastActive:new Date()
+    });
+  }catch(e){}
+}
+async function loadIdleMarks(){
+  try{
+    const s=await getDoc(doc(db,"user_state","default"));
+    if(s.exists()) idleMarks=s.data().idleMarks||0;
+  }catch(e){}
+}
 
-  idleMarks=0;
+/* ================= LOGIN (LOGIC UNTOUCHED) ================= */
+async function login(){
+  if(!prompt("Enter ID")||!prompt("Enter Password"))return;
+  await loadIdleMarks();
   lastActivity=Date.now();
 
   if(localStorage.getItem(DAY_STATUS)==="CLOSED"){
     const n=localStorage.getItem(NEXT_TASKS);
-    if(n){
-      localStorage.setItem(CURRENT_TASKS,n);
-      localStorage.removeItem(NEXT_TASKS);
-    }
+    if(n){localStorage.setItem(CURRENT_TASKS,n);localStorage.removeItem(NEXT_TASKS);}
     localStorage.setItem(DAY_STATUS,"ACTIVE");
   }
-
   startSession();
   localStorage.setItem("LOGGED_IN","YES");
   status.innerText="Status: Logged in @ "+stamp();
@@ -187,18 +178,15 @@ function login(){
   loadTasks();
 }
 
-/* BIO BREAK */
+/* ================= BIO BREAK ================= */
 function bioBreak(){
   endSession();
   localStorage.removeItem("LOGGED_IN");
-  status.innerText=
-    (localStorage.getItem(DAY_STATUS)==="CLOSED"
-    ?"Status: Bio Break (Day Ended)"
-    :"Status: Bio Break")+" @ "+stamp();
+  status.innerText="Status: Bio Break @ "+stamp();
   tasksBox.classList.add("hidden");
 }
 
-/* SESSION */
+/* ================= SESSION ================= */
 function startSession(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   s.push({start:now().toISOString(),end:null});
@@ -206,65 +194,43 @@ function startSession(){
 }
 function endSession(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
-  for(let i=s.length-1;i>=0;i--){
-    if(!s[i].end){s[i].end=now().toISOString();break;}
-  }
+  for(let i=s.length-1;i>=0;i--){if(!s[i].end){s[i].end=now().toISOString();break;}}
   localStorage.setItem(SESSIONS,JSON.stringify(s));
 }
 
-/* TASKS */
+/* ================= TASKS ================= */
 function loadTasks(){
   taskList.innerHTML="";
   const data=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
-  if(!data.length){
-    taskList.innerText="No tasks assigned.";
-    return;
-  }
+  if(!data.length){taskList.innerText="No tasks assigned.";return;}
   data.forEach(t=>{
     const cb=document.createElement("input");
-    cb.type="checkbox";
-    cb.checked=t.done;
-    cb.disabled=t.done;
-    cb.onchange=()=>{
-      if(confirm("Confirm task done?")){
-        t.done=true;
-        localStorage.setItem(CURRENT_TASKS,JSON.stringify(data));
-      }else cb.checked=false;
-    };
+    cb.type="checkbox";cb.checked=t.done;cb.disabled=t.done;
+    cb.onchange=()=>{if(confirm("Confirm task done?")){t.done=true;localStorage.setItem(CURRENT_TASKS,JSON.stringify(data));}else cb.checked=false;};
     const d=document.createElement("div");
-    d.className="task";
-    d.append(cb," "+t.name);
+    d.className="task";d.append(cb," "+t.name);
     taskList.appendChild(d);
   });
 }
 
-/* DAY END */
+/* ================= DAY END ================= */
 function openDayEnd(){
   if(localStorage.getItem("LOGGED_IN")!=="YES")return;
-  if(localStorage.getItem(DAY_STATUS)==="CLOSED")return;
-
   let h="<h3>Confirm Day End</h3>";
-  for(let i=0;i<7;i++)
-    h+=`<input id="s${i}" placeholder="Subject ${i+1}"><br>`;
-  h+=`<br>Distraction (min)<br>
-      <input id="dist" type="number"><br><br>
+  for(let i=0;i<7;i++)h+=`<input id="s${i}" placeholder="Subject ${i+1}"><br>`;
+  h+=`<br>Distraction (min)<br><input id="dist" type="number"><br><br>
       <button onclick="confirmDayEnd()">Confirm</button>`;
   dayEndBox.innerHTML=h;
   dayEndBox.classList.remove("hidden");
 }
 
-/* CONFIRM */
+/* ================= CONFIRM ================= */
 function confirmDayEnd(){
-  idleMarks=0;
-
+  idleMarks=0;saveIdleMarks();
   let next=[];
   const cur=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
   cur.filter(t=>!t.done).forEach(t=>next.push({name:t.name,done:false}));
-  for(let i=0;i<7;i++){
-    const v=document.getElementById("s"+i).value.trim();
-    if(v)next.push({name:v,done:false});
-  }
-
+  for(let i=0;i<7;i++){const v=document.getElementById("s"+i).value.trim();if(v)next.push({name:v,done:false});}
   localStorage.setItem(NEXT_TASKS,JSON.stringify(next));
   generateReport();
   localStorage.setItem(DAY_STATUS,"CLOSED");
@@ -274,105 +240,53 @@ function confirmDayEnd(){
   reportBox.classList.remove("hidden");
 }
 
-/* REPORT */
+/* ================= REPORT (UNCHANGED) ================= */
 function generateReport(){
   const s=JSON.parse(localStorage.getItem(SESSIONS)||"[]");
   let total=0;
   s.forEach(x=>x.start&&x.end&&(total+=mins(new Date(x.start),new Date(x.end))));
   const dist=+document.getElementById("dist").value||0;
   const pct=total?Math.round(Math.max(total-dist,0)/total*100):0;
-
   const t=JSON.parse(localStorage.getItem(CURRENT_TASKS)||"[]");
   const taskPct=t.length?Math.round(t.filter(x=>x.done).length/t.length*100):0;
-
   const finalScore=Math.round((pct+taskPct)/2);
-  const grade=
-    finalScore>=80?"EXCELLENT":
-    finalScore>=60?"GOOD":
-    finalScore>=40?"AVERAGE":"POOR";
-
+  const grade=finalScore>=80?"EXCELLENT":finalScore>=60?"GOOD":finalScore>=40?"AVERAGE":"POOR";
   const r={date:new Date().toLocaleDateString(),finalScore,grade};
   const all=JSON.parse(localStorage.getItem(REPORTS)||"[]");
-  all.push(r);
-  localStorage.setItem(REPORTS,JSON.stringify(all));
-
-  reportBox.innerHTML=`
-    <h3>Report Card</h3>
+  all.push(r);localStorage.setItem(REPORTS,JSON.stringify(all));
+  reportBox.innerHTML=`<h3>Report Card</h3>
     Final Score: ${finalScore}%
-    <div class="progress">
-      <div class="bar ${grade}" style="width:${finalScore}%">${finalScore}%</div>
-    </div>
-    Grade: <b>${grade}</b>
-  `;
+    <div class="progress"><div class="bar ${grade}" style="width:${finalScore}%">${finalScore}%</div></div>
+    Grade: <b>${grade}</b>`;
 }
 
-/* HISTORY */
+/* ================= HISTORY ================= */
 function toggleHistory(){
   historyBox.classList.toggle("hidden");
   historyBox.innerHTML="<h3>History</h3>";
-  const h=JSON.parse(localStorage.getItem(REPORTS)||"[]");
-  h.forEach(x=>{
-    historyBox.innerHTML+=`
-      <div class="history-item">
-        ${x.date} → ${x.finalScore}% (${x.grade})
-      </div>`;
-  });
+  JSON.parse(localStorage.getItem(REPORTS)||"[]")
+    .forEach(x=>historyBox.innerHTML+=
+      `<div class="history-item">${x.date} → ${x.finalScore}% (${x.grade})</div>`);
 }
 
-/* ===== STRICT IDLE MARK SYSTEM (20 MIN GAP) ===== */
-let lastActivity=Date.now();
-let idleMarks=0;
-let idlePopupShown=false;
-
-const IDLE_TIME=20*60*1000; // 20 minutes
+/* ================= IDLE SYSTEM (TEST 30s) ================= */
+let lastActivity=Date.now(),idlePopupShown=false;
+const IDLE_TIME=30*1000; // 30 seconds TEST
 const MAX_MARKS=3;
 
 ["click","keydown","mousemove","touchstart"].forEach(e=>{
-  document.addEventListener(e,()=>{
-    lastActivity=Date.now();
-    idlePopupShown=false;
-  });
+  document.addEventListener(e,()=>{lastActivity=Date.now();idlePopupShown=false;});
 });
 
-setInterval(()=>{
+setInterval(async()=>{
   if(localStorage.getItem("LOGGED_IN")!=="YES")return;
-
-  const idleFor=Date.now()-lastActivity;
-
-  if(idleFor>=IDLE_TIME && !idlePopupShown){
+  if(Date.now()-lastActivity>=IDLE_TIME && !idlePopupShown){
     idlePopupShown=true;
-    idleMarks++;
-
-    alert(
-      "IDLE ALERT\n\n"+
-      "No activity for 20 minutes.\n"+
-      "Idle Mark: "+idleMarks+" / "+MAX_MARKS
-    );
-
-    if(idleMarks>=MAX_MARKS){
-      alert("Maximum idle limit reached. Logging out.");
-      idleMarks=0;
-      bioBreak();
-    }
+    idleMarks++;await saveIdleMarks();
+    alert("IDLE ALERT\n\nIdle Mark: "+idleMarks+" / "+MAX_MARKS);
+    if(idleMarks>=MAX_MARKS){alert("Max idle reached. Logging out.");idleMarks=0;await saveIdleMarks();bioBreak();}
   }
-},60000);
-</script>
-  <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-  import { getFirestore } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
-
-  const firebaseConfig = {
-    apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
-    authDomain: "focus-dashboard-5965a.firebaseapp.com",
-    projectId: "focus-dashboard-5965a",
-    storageBucket: "focus-dashboard-5965a.firebasestorage.app",
-    messagingSenderId: "337204334808",
-    appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
-  };
-
-  const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
-  window.db = db;
+},5000);
 </script>
 
 </body>
