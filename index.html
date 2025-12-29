@@ -53,7 +53,6 @@ input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px 
 
 <div class="main">
 
-  <!-- TASKS -->
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
     <div id="taskList"></div>
@@ -63,7 +62,6 @@ input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px 
     <button onclick="addExtraTask()">+ Add Extra Work</button>
   </div>
 
-  <!-- LOG TABLE -->
   <div id="logBox" class="card hidden">
     <h3>Login / Logout Log</h3>
     <table>
@@ -188,7 +186,6 @@ function loadTasks(){
 function renderLogs(){
   logBox.classList.remove("hidden");
   logTable.innerHTML="";
-
   const logs=JSON.parse(localStorage.getItem(key(K_LOGS))||"[]");
   logs.forEach((l,i)=>{
     const tr=document.createElement("tr");
@@ -245,6 +242,9 @@ function confirmDayEnd(){
   const undone=tasks.filter(t=>!t.done);
   localStorage.setItem(key(K_TASKS),JSON.stringify(undone));
 
+  /* 🔥 LOGS CLEARED HERE (NEW) */
+  localStorage.removeItem(key(K_LOGS));
+
   const doneCount=tasks.length-undone.length;
   const base=Math.round(doneCount/tasks.length*100);
   const bonus=extras.filter(e=>e.done).length*BONUS;
@@ -273,7 +273,7 @@ function confirmDayEnd(){
   statusBox.innerText="Status: Day End Completed";
 }
 
-/* BIO BREAK (ADD REASON) */
+/* BIO BREAK */
 function bioBreak(){
   const reason=prompt("Reason for Bio Break?");
   if(!reason)return;
