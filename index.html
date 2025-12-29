@@ -5,27 +5,20 @@
 <title>Focus Dashboard</title>
 
 <style>
-*{
-  box-sizing:border-box;
-}
-
+*{box-sizing:border-box}
 html,body{
-  margin:0;
-  height:100%;
+  margin:0;height:100%;
   font-family:Segoe UI,system-ui,sans-serif;
 }
-
 body{
   background:linear-gradient(135deg,#0f172a,#020617);
   color:#e5e7eb;
 }
-
 .app{
   display:grid;
   grid-template-columns:280px 1fr;
   height:100vh;
 }
-
 .sidebar{
   padding:20px;
   display:flex;
@@ -33,13 +26,11 @@ body{
   gap:18px;
   border-right:1px solid #1e293b;
 }
-
 .sidebar h2{
   text-align:center;
   color:#38bdf8;
   margin:0;
 }
-
 .status{
   padding:26px;
   border-radius:16px;
@@ -48,7 +39,6 @@ body{
   font-weight:900;
   background:#020617;
 }
-
 .nav button{
   width:100%;
   padding:14px;
@@ -60,16 +50,11 @@ body{
   font-weight:600;
   cursor:pointer;
 }
-
-.nav button:hover{
-  border-color:#38bdf8;
-}
-
+.nav button:hover{border-color:#38bdf8}
 .main{
   padding:25px;
   overflow:auto;
 }
-
 .card{
   background:#020617;
   border:1px solid #1e293b;
@@ -77,58 +62,34 @@ body{
   padding:20px;
   margin-bottom:20px;
 }
-
-.hidden{
-  display:none;
-}
-
+.hidden{display:none}
 .task{
   display:flex;
   gap:10px;
   margin:8px 0;
 }
-
 .progress{
   height:18px;
   border-radius:10px;
   overflow:hidden;
   border:1px solid #1e293b;
 }
-
 .bar{
   height:100%;
   font-size:11px;
   font-weight:700;
   text-align:center;
 }
-
 .bar.EXCELLENT{background:#22c55e}
 .bar.GOOD{background:#84cc16}
 .bar.AVERAGE{background:#facc15}
 .bar.POOR{background:#ef4444}
-
 .history-item{
   padding:12px;
   border:1px solid #1e293b;
   border-left:5px solid #38bdf8;
   border-radius:12px;
   margin-bottom:10px;
-}
-
-.admin-row{
-  display:flex;
-  justify-content:space-between;
-  align-items:center;
-  gap:12px;
-}
-
-.admin-row button{
-  padding:6px 12px;
-  border-radius:8px;
-  border:1px solid #334155;
-  background:#020617;
-  color:#e5e7eb;
-  cursor:pointer;
 }
 </style>
 </head>
@@ -145,7 +106,6 @@ body{
     <button onclick="bioBreak()">Bio Break</button>
     <button onclick="openDayEnd()">Day End</button>
     <button onclick="toggleHistory()">History</button>
-    <button id="adminBtn" class="hidden" onclick="openAdmin()">Admin Panel</button>
   </div>
 </div>
 
@@ -157,12 +117,8 @@ body{
   </div>
 
   <div id="dayEndBox" class="card hidden"></div>
-
   <div id="reportBox" class="card hidden"></div>
-
   <div id="historyBox" class="card hidden"></div>
-
-  <div id="adminBox" class="card hidden"></div>
 
 </div>
 </div>
@@ -170,9 +126,9 @@ body{
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-/* ================= FIREBASE ================= */
+/* FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
   authDomain: "focus-dashboard-5965a.firebaseapp.com",
@@ -186,188 +142,128 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-/* ================= CONSTANTS ================= */
-const ADMIN_EMAIL = "admin@study.com";
+/* CONSTANTS */
+const DAY_STATUS="DAY_STATUS";
+const CURRENT_TASKS="CURRENT_TASKS";
+const REPORTS="REPORTS";
 
-const DAY_STATUS = "DAY_STATUS";
-const CURRENT_TASKS = "CURRENT_TASKS";
-const NEXT_TASKS = "NEXT_TASKS";
-const REPORTS = "REPORTS";
+/* STATE */
+let CURRENT_UID=null;
 
-/* ================= STATE ================= */
-let CURRENT_UID = null;
-let CURRENT_EMAIL = null;
-
-/* ================= HELPERS ================= */
-function ukey(k){
-  return CURRENT_UID + "_" + k;
-}
-
+/* HELPERS */
+function ukey(k){return CURRENT_UID+"_"+k}
 function stamp(){
   return new Date().toLocaleTimeString([],{
-    hour:"2-digit",
-    minute:"2-digit"
+    hour:"2-digit",minute:"2-digit"
   });
 }
 
-/* ================= STATE INIT ================= */
+/* INIT */
 function ensureUserState(){
-  if(!localStorage.getItem(ukey(CURRENT_TASKS))){
-    localStorage.setItem(ukey(CURRENT_TASKS), JSON.stringify([]));
-  }
-
-  if(!localStorage.getItem(ukey(REPORTS))){
-    localStorage.setItem(ukey(REPORTS), JSON.stringify([]));
-  }
-
-  if(!localStorage.getItem(ukey(DAY_STATUS))){
-    localStorage.setItem(ukey(DAY_STATUS), "ACTIVE");
-  }
+  if(!localStorage.getItem(ukey(CURRENT_TASKS)))
+    localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify([]));
+  if(!localStorage.getItem(ukey(REPORTS)))
+    localStorage.setItem(ukey(REPORTS),JSON.stringify([]));
+  if(!localStorage.getItem(ukey(DAY_STATUS)))
+    localStorage.setItem(ukey(DAY_STATUS),"ACTIVE");
 }
 
-/* ================= SEED TASKS ================= */
+/* SEED */
 function seedInitialTasksIfEmpty(){
-  const cur = JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS)) || "[]");
-
-  if(cur.length === 0){
-    const seed = [
-      { name:"Study core subject", done:false },
-      { name:"Revise notes", done:false },
-      { name:"Practice questions", done:false }
-    ];
-
-    localStorage.setItem(
-      ukey(CURRENT_TASKS),
-      JSON.stringify(seed)
-    );
+  const cur=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
+  if(cur.length===0){
+    localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify([
+      {name:"Study core subject",done:false},
+      {name:"Revise notes",done:false},
+      {name:"Practice questions",done:false}
+    ]));
   }
 }
 
-/* ================= LOGIN ================= */
-window.login = async function(){
-  const email = prompt("Email");
-  const pass = prompt("Password");
-  if(!email || !pass) return;
+/* REALTIME SYNC */
+async function syncTasks(){
+  const ref=doc(db,"users",CURRENT_UID);
+  await updateDoc(ref,{
+    liveTasks:JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))),
+    lastUpdated:new Date(),
+    expiresAt:new Date(Date.now()+7*86400000)
+  });
+}
 
-  const cred = await signInWithEmailAndPassword(auth,email,pass);
-  CURRENT_UID = cred.user.uid;
-  CURRENT_EMAIL = email;
+/* LOGIN */
+window.login=async function(){
+  const email=prompt("Email");
+  const pass=prompt("Password");
+  if(!email||!pass)return;
 
-  const userRef = doc(db,"users",CURRENT_UID);
-  const snap = await getDoc(userRef);
+  const cred=await signInWithEmailAndPassword(auth,email,pass);
+  CURRENT_UID=cred.user.uid;
 
+  const ref=doc(db,"users",CURRENT_UID);
+  const snap=await getDoc(ref);
   if(!snap.exists()){
-    await setDoc(userRef,{
-      email: email,
-      blocked:false,
-      reports:[]
-    });
-  }
-
-  if(snap.exists() && snap.data().blocked === true){
-    alert("Your account is blocked by admin.");
-    await signOut(auth);
-    return;
+    await setDoc(ref,{email});
   }
 
   ensureUserState();
   seedInitialTasksIfEmpty();
 
-  if(email === ADMIN_EMAIL){
-    adminBtn.classList.remove("hidden");
-  }
-
-  status.innerText = "Status: Logged in @ " + stamp();
+  status.innerText="Status: Logged in @ "+stamp();
   tasksBox.classList.remove("hidden");
-
   loadTasks();
 };
 
-/* ================= TASKS ================= */
+/* TASKS */
 function loadTasks(){
-  taskList.innerHTML = "";
-  const data = JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS)) || "[]");
-
-  if(!data.length){
-    taskList.innerText = "No tasks assigned.";
-    return;
-  }
-
+  taskList.innerHTML="";
+  const data=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
   data.forEach(t=>{
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = t.done;
-
-    cb.onchange = function(){
-      t.done = cb.checked;
-      localStorage.setItem(ukey(CURRENT_TASKS), JSON.stringify(data));
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=t.done;
+    cb.onchange=async()=>{
+      t.done=cb.checked;
+      localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(data));
+      await syncTasks();
     };
-
-    const d = document.createElement("div");
-    d.className = "task";
+    const d=document.createElement("div");
+    d.className="task";
     d.append(cb," "+t.name);
     taskList.appendChild(d);
   });
 }
 
-/* ================= DAY END ================= */
-window.openDayEnd = function(){
-  let h = "<h3>Confirm Day End</h3>";
-
-  for(let i=0;i<7;i++){
-    h += `<input id="s${i}" placeholder="Next Day Task ${i+1}"><br>`;
-  }
-
-  h += `
-    <br>
-    <button onclick="confirmDayEnd()">Confirm</button>
-  `;
-
-  dayEndBox.innerHTML = h;
+/* DAY END */
+window.openDayEnd=function(){
+  let h="<h3>Confirm Day End</h3>";
+  for(let i=0;i<7;i++)
+    h+=`<input placeholder="Next Day Task ${i+1}"><br>`;
+  h+=`<br><button onclick="confirmDayEnd()">Confirm</button>`;
+  dayEndBox.innerHTML=h;
   dayEndBox.classList.remove("hidden");
 };
 
-/* ================= CONFIRM DAY END ================= */
-window.confirmDayEnd = async function(){
-
-  const reportData = generateReport();
-
-  const userRef = doc(db,"users",CURRENT_UID);
-  const snap = await getDoc(userRef);
-  const reps = snap.data().reports || [];
-  reps.push(reportData);
-
-  await updateDoc(userRef,{
-    reports: reps
+window.confirmDayEnd=async function(){
+  const report=generateReport();
+  const ref=doc(db,"users",CURRENT_UID);
+  const snap=await getDoc(ref);
+  const reps=snap.data().reports||[];
+  reps.push(report);
+  await updateDoc(ref,{
+    reports:reps,
+    expiresAt:new Date(Date.now()+7*86400000)
   });
-
-  status.innerText = "Status: Day End – Thank you";
-
-  dayEndBox.classList.add("hidden");
-  reportBox.classList.remove("hidden");
-
   await signOut(auth);
+  location.reload();
 };
 
-/* ================= REPORT ================= */
+/* REPORT */
 function generateReport(){
-
-  const tasks = JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS)) || "[]");
-
-  let score = 0;
-
-  if(tasks.length > 0){
-    const done = tasks.filter(t=>t.done).length;
-    score = Math.round((done / tasks.length) * 100);
-  }
-
-  const grade =
-    score >= 80 ? "EXCELLENT" :
-    score >= 60 ? "GOOD" :
-    score >= 40 ? "AVERAGE" :
-    "POOR";
-
-  reportBox.innerHTML = `
+  const tasks=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
+  const done=tasks.filter(t=>t.done).length;
+  const score=tasks.length?Math.round(done/tasks.length*100):0;
+  const grade=score>=80?"EXCELLENT":score>=60?"GOOD":score>=40?"AVERAGE":"POOR";
+  reportBox.innerHTML=`
     <h3>Report Card</h3>
     ${score}%
     <div class="progress">
@@ -375,64 +271,26 @@ function generateReport(){
     </div>
     Grade: <b>${grade}</b>
   `;
-
-  return {
-    date: new Date().toLocaleDateString(),
-    finalScore: score,
-    grade: grade
-  };
+  return{date:new Date().toLocaleDateString(),finalScore:score,grade};
 }
 
-/* ================= HISTORY ================= */
-window.toggleHistory = function(){
+/* HISTORY */
+window.toggleHistory=function(){
   historyBox.classList.toggle("hidden");
-  historyBox.innerHTML = "<h3>History</h3>";
-
-  const h = JSON.parse(localStorage.getItem(ukey(REPORTS)) || "[]");
+  historyBox.innerHTML="<h3>History</h3>";
+  const h=JSON.parse(localStorage.getItem(ukey(REPORTS))||"[]");
   h.forEach(x=>{
-    historyBox.innerHTML += `
+    historyBox.innerHTML+=`
       <div class="history-item">
         ${x.date} → ${x.finalScore}% (${x.grade})
-      </div>
-    `;
+      </div>`;
   });
 };
 
-/* ================= ADMIN ================= */
-window.openAdmin = async function(){
-  if(CURRENT_EMAIL !== ADMIN_EMAIL) return;
-
-  adminBox.classList.remove("hidden");
-  adminBox.innerHTML = "<h3>Admin – User Reports</h3>";
-
-  const snap = await getDocs(collection(db,"users"));
-
-  snap.forEach(d=>{
-    const u = d.data();
-    const reps = Array.isArray(u.reports) ? u.reports : [];
-
-    if(reps.length === 0){
-      adminBox.innerHTML += `
-        <div class="history-item">
-          ${u.email} → No reports yet
-        </div>
-      `;
-    }else{
-      reps.forEach(r=>{
-        adminBox.innerHTML += `
-          <div class="history-item">
-            ${u.email} → ${r.date} → ${r.finalScore}% (${r.grade})
-          </div>
-        `;
-      });
-    }
-  });
-};
-
-/* ================= BIO BREAK ================= */
-window.bioBreak = async function(){
+/* BIO BREAK */
+window.bioBreak=async function(){
   await signOut(auth);
-  status.innerText = "Status: Bio Break @ " + stamp();
+  status.innerText="Status: Bio Break @ "+stamp();
   tasksBox.classList.add("hidden");
 };
 </script>
