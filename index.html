@@ -137,7 +137,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   </table>
 </div>
 
-<!-- NEXT DAY TASKS (RESTORED OLD STYLE) -->
+<!-- NEXT DAY TASKS -->
 <div id="nextDayBox" class="card hidden">
   <h3>Enter Next Day Tasks</h3>
   <div id="nextInputs"></div>
@@ -370,6 +370,8 @@ function finalDayEnd(){
   taskBox.classList.add("hidden");
   logBox.classList.add("hidden");
   nextDayBox.classList.add("hidden");
+
+  statusBox.innerText="Day End – Thank you";
 
   loginBtn.disabled=false;
   bioBtn.disabled=true;
