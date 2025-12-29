@@ -116,7 +116,7 @@ input.nextTask{
 
   <div class="nav">
     <button id="loginBtn" onclick="login()">Login</button>
-    <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
+    <button id="bioBtn" onclick="bioBreak()" disabled>Logout</button>
     <button id="dayEndBtn" onclick="openDayEnd()" disabled>Day End</button>
   </div>
 </div>
@@ -192,7 +192,6 @@ window.login=async()=>{
   const ref=doc(db,"users",CURRENT_UID);
   if(!(await getDoc(ref)).exists()) await setDoc(ref,{email});
 
-  /* ---- MERGE CARRY FORWARD + NEXT DAY ---- */
   const prev=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
   const next=JSON.parse(localStorage.getItem(ukey(NEXT_DAY_TASKS))||"[]");
 
@@ -314,10 +313,10 @@ window.confirmDayEnd=async()=>{
   reportBox.classList.remove("hidden");
   statusEl.innerText="Status: Day End Completed";
 
-  await signOut(auth);
+  /* NO AUTO LOGOUT HERE */
 };
 
-/* BIO */
+/* LOGOUT ONLY VIA BUTTON */
 window.bioBreak=async()=>{
   clearInterval(idleTimer);
   await signOut(auth);
