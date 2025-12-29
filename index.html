@@ -6,51 +6,93 @@
 
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
-body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
-
-.app{display:grid;grid-template-columns:280px 1fr;height:100vh}
+html,body{
+  margin:0;height:100%;
+  font-family:Segoe UI,system-ui,sans-serif;
+}
+body{
+  background:linear-gradient(135deg,#0f172a,#020617);
+  color:#e5e7eb;
+}
+.app{
+  display:grid;
+  grid-template-columns:280px 1fr;
+  height:100vh;
+}
 
 /* SIDEBAR */
-.sidebar{padding:20px;display:flex;flex-direction:column;gap:18px;border-right:1px solid #1e293b}
-.sidebar h2{text-align:center;color:#38bdf8;margin:0}
-.status{padding:26px;border-radius:16px;border:2px solid #334155;text-align:center;font-weight:900;font-size:18px;background:#020617}
-
+.sidebar{
+  padding:20px;
+  display:flex;
+  flex-direction:column;
+  gap:18px;
+  border-right:1px solid #1e293b;
+}
+.sidebar h2{
+  text-align:center;
+  color:#38bdf8;
+  margin:0;
+}
+.status{
+  padding:26px;
+  border-radius:16px;
+  border:2px solid #334155;
+  text-align:center;
+  font-weight:900;
+  font-size:18px;
+  background:#020617;
+}
 .nav button{
-  width:100%;padding:14px;margin-bottom:10px;border-radius:12px;
-  border:1px solid #1e293b;background:#020617;color:#e5e7eb;
-  font-weight:600;cursor:pointer
+  width:100%;
+  padding:14px;
+  margin-bottom:10px;
+  border-radius:12px;
+  border:1px solid #1e293b;
+  background:#020617;
+  color:#e5e7eb;
+  font-weight:600;
+  cursor:pointer;
 }
 
 /* MAIN */
-.main{padding:25px;overflow:auto}
-.card{background:#020617;border:1px solid #1e293b;border-radius:16px;padding:20px;margin-bottom:20px}
+.main{
+  padding:25px;
+  overflow:auto;
+}
+.card{
+  background:#020617;
+  border:1px solid #1e293b;
+  border-radius:16px;
+  padding:20px;
+  margin-bottom:20px;
+}
 .hidden{display:none}
-
-/* TASK */
-.task{display:flex;gap:10px;margin:8px 0}
-
-/* PROGRESS */
-.progress{height:18px;border-radius:10px;overflow:hidden;border:1px solid #1e293b}
-.bar{height:100%;font-size:11px;font-weight:700;text-align:center}
-.bar.EXCELLENT{background:#22c55e}
-.bar.GOOD{background:#84cc16}
-.bar.AVERAGE{background:#facc15}
-.bar.POOR{background:#ef4444}
 
 /* POPUP */
 .overlay{
-  position:fixed;inset:0;background:rgba(0,0,0,.8);
-  display:flex;align-items:center;justify-content:center;z-index:1000
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.8);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  z-index:999;
 }
 .popup{
-  background:#020617;border:2px solid #38bdf8;border-radius:16px;
-  padding:30px;width:380px;text-align:center
+  background:#020617;
+  border:2px solid #38bdf8;
+  border-radius:16px;
+  padding:30px;
+  width:380px;
+  text-align:center;
 }
-.popup h3{margin-top:0}
 .popup button{
-  padding:12px 18px;border:none;border-radius:10px;
-  font-weight:700;cursor:pointer;margin:10px
+  padding:12px 20px;
+  margin:10px;
+  border:none;
+  border-radius:10px;
+  font-weight:700;
+  cursor:pointer;
 }
 .study{background:#22c55e}
 .distract{background:#ef4444}
@@ -76,14 +118,15 @@ body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
 <div class="main">
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
-    <div id="taskList"></div>
+    <p>No tasks yet</p>
   </div>
   <div id="reportBox" class="card hidden"></div>
   <div id="historyBox" class="card hidden"></div>
 </div>
+
 </div>
 
-<!-- POPUP -->
+<!-- FOCUS POPUP -->
 <div id="focusOverlay" class="overlay hidden">
   <div class="popup">
     <h3>Focus Check</h3>
@@ -97,41 +140,46 @@ body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
 <script type="module">
 /* ================= FIREBASE ================= */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
-from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
+import {
+  getAuth,
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 
-const firebaseConfig={
-  apiKey:"AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
-  authDomain:"focus-dashboard-5965a.firebaseapp.com",
-  projectId:"focus-dashboard-5965a"
+const firebaseConfig = {
+  apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
+  authDomain: "focus-dashboard-5965a.firebaseapp.com",
+  projectId: "focus-dashboard-5965a"
 };
 
-const app=initializeApp(firebaseConfig);
-const auth=getAuth(app);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
 
 /* ================= DOM ================= */
-const status=document.getElementById("status");
-const tasksBox=document.getElementById("tasksBox");
-const taskList=document.getElementById("taskList");
-const reportBox=document.getElementById("reportBox");
-const historyBox=document.getElementById("historyBox");
-const overlay=document.getElementById("focusOverlay");
+const status = document.getElementById("status");
+const tasksBox = document.getElementById("tasksBox");
+const overlay = document.getElementById("focusOverlay");
 
 /* ================= STATE ================= */
-let idleMarks=0;
-let score=100;
-let popupTimer=null;
+let score = 100;
+let idleMarks = 0;
+let popupTimer = null;
 
 /* ================= HELPERS ================= */
-const stamp=()=>new Date().toLocaleTimeString([],{
-  hour:"2-digit",minute:"2-digit"
-});
+function stamp(){
+  return new Date().toLocaleTimeString([],{
+    hour:"2-digit",
+    minute:"2-digit"
+  });
+}
 
-/* ================= LOGIN ================= */
+/* ================= CORE LOGIC ================= */
 async function login(){
-  const email=prompt("Enter email");
-  const pass=prompt("Enter password");
-  if(!email||!pass) return;
+  const email = prompt("Enter email");
+  const pass = prompt("Enter password");
+  if(!email || !pass) return;
+
   try{
     await signInWithEmailAndPassword(auth,email,pass);
   }catch(e){
@@ -143,41 +191,64 @@ async function bioBreak(){
   await signOut(auth);
 }
 
-function showPopup(){
+function showFocusPopup(){
   overlay.classList.remove("hidden");
-  popupTimer=setTimeout(()=>{
+  popupTimer = setTimeout(()=>{
     idleMarks++;
     overlay.classList.add("hidden");
   },60000);
 }
 
-function focusResponse(study){
+function focusResponse(isStudying){
   clearTimeout(popupTimer);
   overlay.classList.add("hidden");
-  if(!study){
-    score=Math.max(score-2,0);
+
+  if(!isStudying){
+    score = Math.max(score - 2, 0);
   }
 }
 
 /* ================= AUTH STATE ================= */
-onAuthStateChanged(auth,user=>{
+onAuthStateChanged(auth,(user)=>{
   if(user){
-    status.innerText="Status: Logged in @ "+stamp();
+    status.innerText = "Status: Logged in @ " + stamp();
     tasksBox.classList.remove("hidden");
-    showPopup();
+    showFocusPopup();
   }else{
-    status.innerText="Status: Logged out";
+    status.innerText = "Status: Logged out";
     tasksBox.classList.add("hidden");
   }
 });
 
-/* ================= FIX BUTTONS ================= */
-document.getElementById("loginBtn").addEventListener("click",login);
-document.getElementById("bioBtn").addEventListener("click",bioBreak);
-document.getElementById("studyBtn").addEventListener("click",()=>focusResponse(true));
-document.getElementById("distractBtn").addEventListener("click",()=>focusResponse(false));
-document.getElementById("historyBtn").addEventListener("click",()=>{
-  historyBox.classList.toggle("hidden");
+/* ================= GLOBAL EVENT DELEGATION ================= */
+/* THIS IS THE FIX — buttons will NEVER break again */
+
+document.addEventListener("click",(e)=>{
+
+  if(e.target.id === "loginBtn"){
+    login();
+  }
+
+  if(e.target.id === "bioBtn"){
+    bioBreak();
+  }
+
+  if(e.target.id === "studyBtn"){
+    focusResponse(true);
+  }
+
+  if(e.target.id === "distractBtn"){
+    focusResponse(false);
+  }
+
+  if(e.target.id === "historyBtn"){
+    alert("History view coming next");
+  }
+
+  if(e.target.id === "dayEndBtn"){
+    alert("Day End logic next step");
+  }
+
 });
 </script>
 
