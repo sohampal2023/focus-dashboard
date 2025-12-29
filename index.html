@@ -24,6 +24,9 @@ body{background:linear-gradient(135deg,#0f172a,#020617);color:#e5e7eb}
 .GOOD{background:#84cc16}
 .AVERAGE{background:#facc15}
 .POOR{background:#ef4444}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{border:1px solid #334155;padding:6px;text-align:left}
+th{background:#020617}
 input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px solid #334155;background:#020617;color:#e5e7eb}
 </style>
 </head>
@@ -49,6 +52,8 @@ input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px 
 </div>
 
 <div class="main">
+
+  <!-- TASKS -->
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
     <div id="taskList"></div>
@@ -56,6 +61,21 @@ input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px 
     <h4>Extra Work (Bonus)</h4>
     <div id="extraList"></div>
     <button onclick="addExtraTask()">+ Add Extra Work</button>
+  </div>
+
+  <!-- LOG TABLE -->
+  <div id="logBox" class="card hidden">
+    <h3>Login / Logout Log</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>Login Time</th>
+          <th>Logout Time</th>
+        </tr>
+      </thead>
+      <tbody id="logTable"></tbody>
+    </table>
   </div>
 
   <div id="dayEndBox" class="card hidden"></div>
@@ -71,9 +91,9 @@ let idleRemaining=1800;
 const K_TASKS="TASKS";
 const K_EXTRA="EXTRA_TASKS";
 const K_NEXT="NEXT_TASKS";
+const K_LOGS="LOGS";
 const BONUS=5;
 const key=k=>UID+"_"+k;
-
 const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
 
 /* LOGIN */
@@ -81,14 +101,10 @@ function login(){
   UID=prompt("Email");
   if(!UID)return;
 
-  // reset UI
   reportBox.classList.add("hidden");
   reportBox.innerHTML="";
-  tasksBox.classList.remove("hidden");
-  dayEndBox.classList.add("hidden");
 
   statusBox.innerText="Status: Logged in";
-
   loginBtn.disabled=true;
   bioBtn.disabled=false;
   dayEndBtn.disabled=false;
@@ -96,17 +112,23 @@ function login(){
   idleBox.classList.remove("hidden");
   startIdle();
 
+  // log login
+  const logs=JSON.parse(localStorage.getItem(key(K_LOGS))||"[]");
+  logs.push({login:new Date().toLocaleString(),logout:"—"});
+  localStorage.setItem(key(K_LOGS),JSON.stringify(logs));
+
   mergeTasks();
   loadTasks();
+  renderLogs();
 }
 
-/* TASK MERGE */
+/* PRESERVE DONE STATE */
 function mergeTasks(){
   const prev=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
   const next=JSON.parse(localStorage.getItem(key(K_NEXT))||"[]");
 
   const merged=[
-    ...prev.map(t=>({name:t.name,done:false})),
+    ...prev,                    // ← keep done state
     ...next.map(n=>({name:n,done:false}))
   ];
 
@@ -121,6 +143,8 @@ function mergeTasks(){
   localStorage.setItem(key(K_TASKS),JSON.stringify(merged));
   localStorage.removeItem(key(K_NEXT));
   localStorage.setItem(key(K_EXTRA),"[]");
+
+  tasksBox.classList.remove("hidden");
 }
 
 /* TASK UI */
@@ -160,6 +184,20 @@ function loadTasks(){
   });
 }
 
+/* LOG TABLE */
+function renderLogs(){
+  logBox.classList.remove("hidden");
+  logTable.innerHTML="";
+
+  const logs=JSON.parse(localStorage.getItem(key(K_LOGS))||"[]");
+  logs.forEach((l,i)=>{
+    const tr=document.createElement("tr");
+    tr.innerHTML=`<td>${i+1}</td><td>${l.login}</td><td>${l.logout}</td>`;
+    logTable.appendChild(tr);
+  });
+}
+
+/* EXTRA WORK */
 function addExtraTask(){
   const name=prompt("Extra work?");
   if(!name)return;
@@ -195,7 +233,6 @@ function openDayEnd(){
 
 function confirmDayEnd(){
   clearInterval(idleTimer);
-  idleRemaining=0;
   idleBox.classList.add("hidden");
 
   const next=[...document.querySelectorAll(".nextTask")]
@@ -229,7 +266,6 @@ function confirmDayEnd(){
   tasksBox.classList.add("hidden");
   dayEndBox.classList.add("hidden");
 
-  // lock buttons
   bioBtn.disabled=true;
   dayEndBtn.disabled=true;
   loginBtn.disabled=false;
@@ -239,6 +275,11 @@ function confirmDayEnd(){
 
 /* BIO BREAK */
 function bioBreak(){
+  const logs=JSON.parse(localStorage.getItem(key(K_LOGS))||"[]");
+  if(logs.length){
+    logs[logs.length-1].logout=new Date().toLocaleString();
+    localStorage.setItem(key(K_LOGS),JSON.stringify(logs));
+  }
   location.reload();
 }
 </script>
