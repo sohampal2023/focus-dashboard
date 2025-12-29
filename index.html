@@ -2,124 +2,186 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>User Focus Dashboard</title>
+<title>Focus Dashboard</title>
 
 <style>
-body{margin:0;font-family:Segoe UI;background:#020617;color:#e5e7eb}
-.app{display:grid;grid-template-columns:280px 1fr;height:100vh}
-.sidebar{padding:20px;border-right:1px solid #1e293b}
-.main{padding:20px}
-button{padding:10px;width:100%;margin:6px 0;background:#020617;color:#fff;border:1px solid #334155}
-.status{padding:14px;border:2px solid #334155;border-radius:10px;margin-bottom:10px}
-.task{display:flex;gap:8px;margin:6px 0}
+*{box-sizing:border-box}
+body{
+  margin:0;
+  font-family:Segoe UI,system-ui,sans-serif;
+  background:#020617;
+  color:#e5e7eb;
+}
+.app{
+  display:grid;
+  grid-template-columns:280px 1fr;
+  height:100vh;
+}
+.sidebar{
+  padding:20px;
+  border-right:1px solid #1e293b;
+}
+.status{
+  padding:20px;
+  border:2px solid #334155;
+  border-radius:14px;
+  font-weight:700;
+  margin-bottom:10px;
+}
+button{
+  width:100%;
+  padding:12px;
+  margin:6px 0;
+  background:#020617;
+  color:#fff;
+  border:1px solid #334155;
+  cursor:pointer;
+}
+.main{
+  padding:20px;
+}
+.task{
+  display:flex;
+  gap:10px;
+  margin:8px 0;
+}
 .hidden{display:none}
-.overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center}
-.popup{background:#020617;border:2px solid #38bdf8;padding:20px;border-radius:14px;width:320px;text-align:center}
-.popup button{width:auto;margin:8px}
+
+/* POPUP */
+.overlay{
+  position:fixed;
+  inset:0;
+  background:rgba(0,0,0,.8);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.popup{
+  background:#020617;
+  border:2px solid #38bdf8;
+  padding:25px;
+  border-radius:16px;
+  width:320px;
+  text-align:center;
+}
+.popup button{
+  width:auto;
+  padding:10px 18px;
+  margin:10px;
+}
 </style>
 </head>
 
 <body>
+
 <div class="app">
+  <div class="sidebar">
+    <h3>FOCUS SYSTEM</h3>
+    <div id="status" class="status">Status: Logged out</div>
+    <button onclick="login()">Login</button>
+    <button onclick="bioBreak()">Bio Break</button>
+    <button onclick="dayEnd()">Day End</button>
+  </div>
 
-<div class="sidebar">
-  <h3>USER PANEL</h3>
-  <div id="status" class="status">Logged out</div>
-  <button onclick="login()">Login</button>
-  <button onclick="bioBreak()">Bio Break</button>
-  <button onclick="dayEnd()">Day End</button>
-</div>
-
-<div class="main">
-  <h3>Assigned Work</h3>
-  <div id="taskList"></div>
-  <input id="newTask" placeholder="Next day task">
-  <button onclick="addTask()">Add Task</button>
-  <div id="reportBox" class="hidden"></div>
-</div>
-
-</div>
-
-<div id="focusOverlay" class="overlay hidden">
-  <div class="popup">
-    <h4>Focus Check</h4>
-    <p>Studying or distracted?</p>
-    <button onclick="focusResponse(true)">Studying</button>
-    <button onclick="focusResponse(false)">Distracted</button>
+  <div class="main">
+    <h3>Assigned Tasks</h3>
+    <div id="taskList"></div>
+    <input id="newTask" placeholder="Next day task">
+    <button onclick="addTask()">Add Task</button>
+    <div id="reportBox" class="hidden"></div>
   </div>
 </div>
 
+<!-- Focus Popup -->
+<div id="focusOverlay" class="overlay hidden">
+  <div class="popup">
+    <h3>Focus Check</h3>
+    <p>Studying or distracted?</p>
+    <button onclick="focusResponse(true)">Studying</button>
+    <button onclick="focusResponse(false)">Distracted</button>
+    <p style="font-size:12px">No response in 1 minute → idle mark</p>
+  </div>
+</div>
+
+<!-- Firebase (STABLE COMPAT SDK) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
 <script>
-/* FIREBASE */
+/* ================= FIREBASE ================= */
 firebase.initializeApp({
-  apiKey:"AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
-  authDomain:"focus-dashboard-5965a.firebaseapp.com",
-  projectId:"focus-dashboard-5965a"
+  apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
+  authDomain: "focus-dashboard-5965a.firebaseapp.com",
+  projectId: "focus-dashboard-5965a"
 });
-const auth=firebase.auth();
-const db=firebase.firestore();
+const auth = firebase.auth();
+const db = firebase.firestore();
 
-/* STATE */
-let uid=null;
-let sessionId=null;
-let tasks=[];
-let popupMiss=0;
-let score=100;
-let popupTimer=null;
-let lastLoginTime=null;
+/* ================= STATE ================= */
+let uid = null;
+let sessionId = null;
+let tasks = [];
+let popupMiss = 0;
+let score = 100;
+let popupTimer = null;
+let loggedIn = false;
 
-/* HELPERS */
-const now=()=>firebase.firestore.FieldValue.serverTimestamp();
-const statusBox=document.getElementById("status");
+/* ================= HELPERS ================= */
+const statusBox = document.getElementById("status");
+const taskList = document.getElementById("taskList");
 
-/* LOGIN */
+/* ================= LOGIN ================= */
 async function login(){
-  const email=prompt("Email");
-  const pass=prompt("Password");
-  const res=await auth.signInWithEmailAndPassword(email,pass);
-  uid=res.user.uid;
-  statusBox.innerText="Logged in";
-  await loadOrCreateSession();
-  showPopup();
+  const email = prompt("Email");
+  const pass = prompt("Password");
+  if(!email || !pass) return;
+
+  const res = await auth.signInWithEmailAndPassword(email, pass);
+  uid = res.user.uid;
+  loggedIn = true;
+
+  statusBox.innerText = "Status: Logged in";
+  await createOrLoadSession();
+  startFocusCycle();
 }
 
-/* LOAD SESSION */
-async function loadOrCreateSession(){
-  const q=await db.collection("daily_sessions")
+/* ================= SESSION ================= */
+async function createOrLoadSession(){
+  const snap = await db.collection("daily_sessions")
     .where("uid","==",uid)
     .where("status","==","ACTIVE")
     .get();
 
-  if(q.empty){
-    const ref=await db.collection("daily_sessions").add({
-      uid,loginAt:now(),status:"ACTIVE",score:100,popupMiss:0
+  if(snap.empty){
+    const ref = await db.collection("daily_sessions").add({
+      uid,
+      loginAt: firebase.firestore.FieldValue.serverTimestamp(),
+      status:"ACTIVE",
+      popupMiss:0,
+      score:100
     });
-    sessionId=ref.id;
-    tasks=[];
+    sessionId = ref.id;
+    tasks = [];
   }else{
-    sessionId=q.docs[0].id;
-    const t=await db.collection("daily_tasks")
+    sessionId = snap.docs[0].id;
+    const t = await db.collection("daily_tasks")
       .where("sessionId","==",sessionId).get();
-    tasks=t.empty?[]:t.docs[0].data().tasks;
+    tasks = t.empty ? [] : t.docs[0].data().tasks;
   }
   renderTasks();
 }
 
-/* TASKS */
+/* ================= TASKS ================= */
 function renderTasks(){
-  const box=document.getElementById("taskList");
-  box.innerHTML="";
+  taskList.innerHTML="";
   tasks.forEach((t,i)=>{
-    const cb=document.createElement("input");
+    const cb = document.createElement("input");
     cb.type="checkbox";
     cb.checked=t.done;
     cb.disabled=t.done;
     cb.onchange=()=>{
-      if(confirm("Confirm task done?")){
+      if(confirm("Confirm task completed?")){
         tasks[i].done=true;
         saveTasks();
       }else cb.checked=false;
@@ -127,13 +189,14 @@ function renderTasks(){
     const d=document.createElement("div");
     d.className="task";
     d.append(cb,t.name);
-    box.appendChild(d);
+    taskList.appendChild(d);
   });
 }
 
 async function saveTasks(){
-  const snap=await db.collection("daily_tasks")
+  const snap = await db.collection("daily_tasks")
     .where("sessionId","==",sessionId).get();
+
   if(snap.empty){
     await db.collection("daily_tasks").add({uid,sessionId,tasks});
   }else{
@@ -144,56 +207,97 @@ async function saveTasks(){
 
 function addTask(){
   const v=document.getElementById("newTask").value.trim();
-  if(!v)return;
+  if(!v) return;
   tasks.push({name:v,done:false});
   saveTasks();
   document.getElementById("newTask").value="";
 }
 
-/* FOCUS POPUP */
+/* ================= FOCUS POPUP ================= */
+function startFocusCycle(){
+  if(!loggedIn) return;
+
+  popupTimer=setTimeout(()=>{
+    showPopup();
+  },30000); // test: 30s
+}
+
 function showPopup(){
+  if(!loggedIn) return;
   document.getElementById("focusOverlay").classList.remove("hidden");
+
   popupTimer=setTimeout(()=>{
     popupMiss++;
+    score -= 2;
+    hidePopup();
     if(popupMiss>=3){
-      score-=2;
+      alert("3 idle misses. Auto logout.");
       bioBreak();
+    }else{
+      startFocusCycle();
     }
-    document.getElementById("focusOverlay").classList.add("hidden");
   },60000);
 }
 
-function focusResponse(ok){
+function hidePopup(){
   clearTimeout(popupTimer);
   document.getElementById("focusOverlay").classList.add("hidden");
-  if(!ok)score-=2;
 }
 
-/* BIO BREAK */
+function focusResponse(ok){
+  hidePopup();
+  if(!ok){
+    popupMiss++;
+    score -= 2;
+    if(popupMiss>=3){
+      alert("3 idle misses. Auto logout.");
+      bioBreak();
+      return;
+    }
+  }
+  startFocusCycle();
+}
+
+/* ================= BIO BREAK ================= */
 async function bioBreak(){
-  clearTimeout(popupTimer);
+  hidePopup();
+  loggedIn=false;
   await auth.signOut();
-  statusBox.innerText="Bio Break";
+  statusBox.innerText="Status: Bio Break";
 }
 
-/* DAY END */
+/* ================= DAY END ================= */
 async function dayEnd(){
+  if(!loggedIn) return;
+
   const done=tasks.filter(t=>t.done).length;
   const total=tasks.length;
   const pct=total?Math.round(done/total*100):0;
 
   await db.collection("daily_sessions").doc(sessionId).update({
-    status:"CLOSED",score,popupMiss,dayEndAt:now()
+    status:"CLOSED",
+    popupMiss,
+    score,
+    dayEndAt: firebase.firestore.FieldValue.serverTimestamp()
   });
 
   document.getElementById("reportBox").innerHTML=
-    `<h3>Report</h3>
+    `<h3>Report Card</h3>
      Tasks: ${done}/${total}<br>
      Completion: ${pct}%<br>
      Score: ${score}%`;
 
   document.getElementById("reportBox").classList.remove("hidden");
+  bioBreak();
 }
+
+/* ================= EXPOSE (CRITICAL FIX) ================= */
+window.login=login;
+window.bioBreak=bioBreak;
+window.dayEnd=dayEnd;
+window.addTask=addTask;
+window.focusResponse=focusResponse;
 </script>
+
 </body>
 </html>
