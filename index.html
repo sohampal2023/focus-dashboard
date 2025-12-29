@@ -149,7 +149,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <script>
 let UID = null;
 let idleTimer = null;
-let targetTime = null; // Stores the exact time when timer ends
+let targetTime = null;
 let penalty = 0;
 
 const now = () => new Date().toLocaleString();
@@ -158,21 +158,17 @@ const key = k => UID + "_" + k;
 /* 🔒 HARD IDLE TIMER – SYSTEM CLOCK BASED */
 function startIdle() {
   clearInterval(idleTimer);
-  
-  // Set the target time to 30 minutes (1800 seconds) from NOW
-  targetTime = Date.now() + (1800 * 1000);
+  targetTime = Date.now() + (1800 * 1000); // 30 minutes
   
   idleBox.classList.remove("hidden");
   updateIdle();
 
   idleTimer = setInterval(() => {
-    // Calculate remaining time by comparing Target Time vs Current System Time
     const current = Date.now();
     const remainingSeconds = Math.ceil((targetTime - current) / 1000);
 
     updateIdle(remainingSeconds);
 
-    // Only Logout if time is actually up
     if (remainingSeconds <= 0) {
       autoLogout();
     }
@@ -180,11 +176,9 @@ function startIdle() {
 }
 
 function updateIdle(seconds) {
-  // If seconds argument is missing, calculate it manually
   if (seconds === undefined && targetTime) {
       seconds = Math.ceil((targetTime - Date.now()) / 1000);
   }
-  // Prevent negative numbers in display
   let displaySeconds = seconds > 0 ? seconds : 0;
   
   idleTime.innerText =
@@ -193,7 +187,6 @@ function updateIdle(seconds) {
 }
 
 function resetIdle() {
-  // Reset the target time to 30 mins from now
   targetTime = Date.now() + (1800 * 1000);
   updateIdle();
 }
@@ -212,14 +205,26 @@ function autoLogout() {
   location.reload();
 }
 
-/* LOGIN */
+/* LOGIN – UPDATED TO ASK FOR REASON */
 function login() {
   UID = prompt("Email");
   if (!UID) return;
 
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+
+  // CHECK PREVIOUS BREAK REASON
+  if (logs.length) {
+    const lastLog = logs[logs.length - 1];
+    // If the last reason was "Pending" (from Bio Break button), ask user now
+    if (lastLog.reason === "Pending") {
+      const userReason = prompt("Reason for previous break?", "Bio Break");
+      lastLog.reason = userReason || "Bio Break"; // Default if empty
+    }
+  }
+
   localStorage.removeItem(key("DAY_ENDED"));
 
-  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  // Add NEW session
   logs.push({ login: now(), logout: "-", reason: "-" });
   localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 
@@ -229,14 +234,14 @@ function login() {
   dayBtn.disabled = false;
 
   penalty = 0;
-  startIdle(); // Starts the clock sync timer
+  startIdle();
   setupTasks();
   loadTasks();
   renderLogs();
   updateProgress();
 }
 
-/* BIO BREAK */
+/* BIO BREAK – UPDATED TO SET PENDING STATUS */
 function bioBreak() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
@@ -244,7 +249,7 @@ function bioBreak() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
     logs[logs.length - 1].logout = now();
-    logs[logs.length - 1].reason = "Bio break";
+    logs[logs.length - 1].reason = "Pending"; // Marks it to ask on next login
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
   location.reload();
@@ -331,7 +336,6 @@ function calculate() {
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
   const done = tasks.filter(t => t.done).length +
     extras.filter(e => e.done).length;
-  // Note: Penalty calculation simplified as idleMiss is removed
   const percent = tasks.length ?
     Math.max(0, Math.round((done / tasks.length) * 100 - penalty)) : 0;
   return { percent, assigned: tasks.length, extra: extras.length };
