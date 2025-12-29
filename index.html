@@ -16,8 +16,6 @@ body{
   background:linear-gradient(135deg,#020617,#0f172a);
   color:#e5e7eb;
 }
-
-/* APP LAYOUT */
 .app{
   display:grid;
   grid-template-columns:260px 1fr;
@@ -31,18 +29,16 @@ body{
   padding:22px;
   display:flex;
   flex-direction:column;
-  gap:20px;
+  gap:18px;
 }
 .sidebar h2{
   margin:0;
   text-align:center;
   color:#38bdf8;
-  letter-spacing:1px;
 }
 .status{
-  padding:18px;
+  padding:16px;
   border-radius:14px;
-  background:#020617;
   border:2px solid #334155;
   text-align:center;
   font-weight:700;
@@ -56,14 +52,12 @@ body{
   color:#e5e7eb;
   font-weight:600;
   cursor:pointer;
-  transition:.2s;
 }
 .nav button:hover{
-  background:#020617;
   border-color:#38bdf8;
 }
 
-/* MAIN AREA */
+/* MAIN */
 .main{
   padding:30px;
   overflow:auto;
@@ -72,11 +66,7 @@ body{
   display:flex;
   justify-content:space-between;
   align-items:center;
-  margin-bottom:25px;
-}
-.header h1{
-  margin:0;
-  font-size:26px;
+  margin-bottom:20px;
 }
 .score{
   padding:12px 18px;
@@ -85,18 +75,12 @@ body{
   background:#020617;
   font-weight:700;
 }
-
-/* CARDS */
 .card{
   background:#020617;
   border:1px solid #1e293b;
   border-radius:16px;
   padding:20px;
   margin-bottom:20px;
-}
-.card h3{
-  margin-top:0;
-  color:#38bdf8;
 }
 .hidden{display:none}
 
@@ -113,14 +97,10 @@ body{
 .popup{
   width:360px;
   background:#020617;
-  border-radius:18px;
   border:2px solid #38bdf8;
+  border-radius:18px;
   padding:28px;
   text-align:center;
-}
-.popup h3{
-  margin-top:0;
-  color:#38bdf8;
 }
 .popup button{
   width:100%;
@@ -149,7 +129,6 @@ body{
 <div class="sidebar">
   <h2>FOCUS</h2>
   <div id="status" class="status">Logged out</div>
-
   <div class="nav">
     <button id="loginBtn">Login</button>
     <button id="bioBtn">Bio Break</button>
@@ -169,9 +148,6 @@ body{
     <h3>Assigned Tasks</h3>
     <p>No tasks assigned yet.</p>
   </div>
-
-  <div id="reportBox" class="card hidden"></div>
-  <div id="historyBox" class="card hidden"></div>
 </div>
 
 </div>
@@ -180,15 +156,14 @@ body{
 <div id="focusOverlay" class="overlay hidden">
   <div class="popup">
     <h3>Focus Check</h3>
-    <p>What are you doing right now?</p>
-    <button class="study" id="studyBtn">Studying</button>
-    <button class="distract" id="distractBtn">Distracted</button>
-    <small>No response in 1 minute → idle mark</small>
+    <p>Are you studying right now?</p>
+    <button id="studyBtn" class="study">Studying</button>
+    <button id="distractBtn" class="distract">Distracted</button>
+    <small>No response in 1 minute → idle</small>
   </div>
 </div>
 
 <script type="module">
-/* ================= FIREBASE ================= */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import {
   getAuth,
@@ -206,18 +181,18 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 
-/* ================= DOM ================= */
+/* DOM */
 const status = document.getElementById("status");
 const tasksBox = document.getElementById("tasksBox");
 const overlay = document.getElementById("focusOverlay");
 const scoreBox = document.getElementById("scoreBox");
 
-/* ================= STATE ================= */
+/* STATE */
 let score = 100;
-let idleMarks = 0;
 let popupTimer = null;
+let focusAnswered = false;
 
-/* ================= HELPERS ================= */
+/* HELPERS */
 function stamp(){
   return new Date().toLocaleTimeString([],{
     hour:"2-digit",
@@ -228,10 +203,10 @@ function updateScore(){
   scoreBox.innerText = "Score: " + score + "%";
 }
 
-/* ================= CORE ================= */
+/* CORE */
 async function login(){
-  const email = prompt("Email");
-  const pass = prompt("Password");
+  const email = prompt("Enter email");
+  const pass = prompt("Enter password");
   if(!email || !pass) return;
   try{
     await signInWithEmailAndPassword(auth,email,pass);
@@ -244,22 +219,24 @@ async function bioBreak(){
 }
 
 function showFocusPopup(){
+  focusAnswered = false;
   overlay.classList.remove("hidden");
   popupTimer = setTimeout(()=>{
-    idleMarks++;
     overlay.classList.add("hidden");
   },60000);
 }
+
 function focusResponse(isStudying){
-  clearTimeout(popupTimer);
+  if(popupTimer) clearTimeout(popupTimer);
   overlay.classList.add("hidden");
+  focusAnswered = true;
   if(!isStudying){
-    score = Math.max(score - 2, 0);
+    score = Math.max(score - 2,0);
     updateScore();
   }
 }
 
-/* ================= AUTH ================= */
+/* AUTH */
 onAuthStateChanged(auth,(user)=>{
   if(user){
     status.innerText = "Logged in @ " + stamp();
@@ -271,15 +248,16 @@ onAuthStateChanged(auth,(user)=>{
   }
 });
 
-/* ================= EVENTS ================= */
+/* EVENTS */
 document.addEventListener("click",(e)=>{
   if(e.target.id==="loginBtn") login();
   if(e.target.id==="bioBtn") bioBreak();
   if(e.target.id==="studyBtn") focusResponse(true);
   if(e.target.id==="distractBtn") focusResponse(false);
-  if(e.target.id==="historyBtn") alert("History module next");
-  if(e.target.id==="dayEndBtn") alert("Day End logic next");
+  if(e.target.id==="historyBtn") alert("History coming next");
+  if(e.target.id==="dayEndBtn") alert("Day End coming next");
 });
 </script>
+
 </body>
 </html>
