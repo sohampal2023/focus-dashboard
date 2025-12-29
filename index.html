@@ -11,6 +11,7 @@ body{
   background:#020617;
   color:#e5e7eb;
 }
+.hidden{display:none}
 header{
   padding:16px;
   border-bottom:1px solid #334155;
@@ -27,14 +28,12 @@ input,button{
   border:1px solid #334155;
   color:#fff;
 }
-button{cursor:pointer}
 .task{
   display:flex;
   gap:10px;
   margin:6px 0;
 }
 .done{opacity:.6}
-.hidden{display:none}
 
 /* POPUP */
 #overlay{
@@ -65,7 +64,7 @@ button{cursor:pointer}
 
 <div id="loginBox">
   <input id="email" placeholder="Email">
-  <input id="password" type="password" placeholder="Password">
+  <input id="password" type="password">
   <button onclick="login()">Login</button>
 </div>
 
@@ -83,7 +82,7 @@ button{cursor:pointer}
 
 </main>
 
-<!-- Focus Popup -->
+<!-- POPUP -->
 <div id="overlay" class="hidden">
   <div id="popup">
     <h3>Focus Check</h3>
@@ -110,6 +109,10 @@ firebase.initializeApp({
 const auth = firebase.auth();
 const db = firebase.database();
 
+/* ========= HARD GATES ========= */
+let manualLoginDone = false;   // 🔒 CRITICAL
+let loggedIn = false;
+
 /* ========= STATE ========= */
 let uid = null;
 let sessionId = null;
@@ -117,50 +120,55 @@ let tasks = [];
 let popupMiss = 0;
 let score = 100;
 
-let focusDelayTimer = null;   // 30 sec timer
-let focusResponseTimer = null; // 60 sec timer
-let loggedIn = false;
+let focusDelayTimer = null;
+let focusResponseTimer = null;
+
+/* ========= FORCE CLEAN STATE ON LOAD ========= */
+auth.signOut();                 // 🔥 KILLS RESTORED SESSION
+clearAllTimers();
+overlay.classList.add("hidden");
 
 /* ========= LOGIN ========= */
 async function login(){
-  clearAllTimers();                 // 🔒 critical
+  clearAllTimers();
+
   const res = await auth.signInWithEmailAndPassword(
     email.value.trim(),
     password.value.trim()
   );
 
-  uid = res.user.uid;
+  manualLoginDone = true;      // 🔒 unlocks focus system
   loggedIn = true;
+  uid = res.user.uid;
 
   status.innerText = "Logged in";
   loginBox.classList.add("hidden");
   app.classList.remove("hidden");
 
   await loadOrCreateSession();
-
-  startFocusDelay();                // ✅ START ONLY HERE
+  startFocusDelay();           // ✅ ONLY PLACE IT STARTS
 }
 
 /* ========= SESSION ========= */
 async function loadOrCreateSession(){
   const snap = await db.ref("sessions/"+uid).once("value");
 
-  if(!snap.exists() || snap.val().status === "CLOSED"){
+  if(!snap.exists() || snap.val().status==="CLOSED"){
     sessionId = Date.now();
     await db.ref("sessions/"+uid).set({
       sessionId,
       loginAt: firebase.database.ServerValue.TIMESTAMP,
-      status: "ACTIVE",
-      popupMiss: 0,
-      score: 100
+      status:"ACTIVE",
+      popupMiss:0,
+      score:100
     });
-    tasks = [];
-  } else {
-    sessionId = snap.val().sessionId;
-    popupMiss = snap.val().popupMiss;
-    score = snap.val().score;
-    const t = await db.ref("tasks/"+uid+"/"+sessionId).once("value");
-    tasks = t.exists() ? t.val() : [];
+    tasks=[];
+  }else{
+    sessionId=snap.val().sessionId;
+    popupMiss=snap.val().popupMiss;
+    score=snap.val().score;
+    const t=await db.ref("tasks/"+uid+"/"+sessionId).once("value");
+    tasks=t.exists()?t.val():[];
   }
   renderTasks();
 }
@@ -174,10 +182,10 @@ function renderTasks(){
     cb.checked=t.done;
     cb.disabled=t.done;
     cb.onchange=()=>{
-      if(confirm("Confirm task completed?")){
+      if(confirm("Confirm completed?")){
         tasks[i].done=true;
         saveTasks();
-      } else cb.checked=false;
+      }else cb.checked=false;
     };
     const d=document.createElement("div");
     d.className="task"+(t.done?" done":"");
@@ -185,83 +193,65 @@ function renderTasks(){
     taskList.appendChild(d);
   });
 }
-
 async function saveTasks(){
   await db.ref("tasks/"+uid+"/"+sessionId).set(tasks);
-  renderTasks();
 }
-
 function addTask(){
   const v=taskInput.value.trim();
-  if(!v) return;
+  if(!v)return;
   tasks.push({name:v,done:false});
   saveTasks();
+  renderTasks();
   taskInput.value="";
 }
 
-/* ========= FOCUS (FIXED) ========= */
+/* ========= FOCUS (BULLETPROOF) ========= */
 function startFocusDelay(){
+  if(!manualLoginDone) return;   // 🔒 FINAL GUARD
   clearAllTimers();
-  focusDelayTimer = setTimeout(showPopup, 30000); // ✅ 30s AFTER LOGIN
+  focusDelayTimer=setTimeout(showPopup,30000);
 }
-
 function showPopup(){
-  if(!loggedIn) return;
-
+  if(!manualLoginDone || !loggedIn) return;
   overlay.classList.remove("hidden");
-
-  focusResponseTimer = setTimeout(()=>{
-    registerMiss();
-  }, 60000);
+  focusResponseTimer=setTimeout(registerMiss,60000);
 }
-
 function focusAnswer(ok){
   overlay.classList.add("hidden");
   clearAllTimers();
-
   if(!ok) registerMiss();
   startFocusDelay();
 }
-
 function registerMiss(){
   overlay.classList.add("hidden");
   popupMiss++;
-  score -= 2;
-
-  db.ref("sessions/"+uid).update({popupMiss, score});
+  score-=2;
+  db.ref("sessions/"+uid).update({popupMiss,score});
   startFocusDelay();
 }
 
 /* ========= DAY END ========= */
 async function dayEnd(){
   clearAllTimers();
-  loggedIn = false;
-
-  const done = tasks.filter(t=>t.done).length;
-  const total = tasks.length;
-  const pct = total ? Math.round(done/total*100) : 0;
+  manualLoginDone=false;
+  loggedIn=false;
 
   await db.ref("sessions/"+uid).update({
     status:"CLOSED",
     popupMiss,
     score,
-    dayEndAt: firebase.database.ServerValue.TIMESTAMP
+    dayEndAt:firebase.database.ServerValue.TIMESTAMP
   });
 
-  report.innerHTML = `
-    <h3>Report</h3>
-    Tasks: ${done}/${total}<br>
-    Completion: ${pct}%<br>
-    Score: ${score}%
-  `;
+  report.innerHTML=`<b>Day Ended</b><br>Score: ${score}%`;
 }
 
 /* ========= TIMER SAFETY ========= */
 function clearAllTimers(){
   clearTimeout(focusDelayTimer);
   clearTimeout(focusResponseTimer);
-  focusDelayTimer = null;
-  focusResponseTimer = null;
+  focusDelayTimer=null;
+  focusResponseTimer=null;
 }
 </script>
 
