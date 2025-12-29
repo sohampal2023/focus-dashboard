@@ -312,7 +312,7 @@ async function idleLogout(){
 /* DAY END */
 window.openDayEnd=()=>{
   let html="<h3>Enter Next Day Tasks</h3>";
-  for(let i=0;i<5;i++){
+  for(let i=0;i<10;i++){
     html+=`<input class="nextTask" placeholder="Next Day Task ${i+1}">`;
   }
   html+=`<br><button onclick="confirmDayEnd()">Submit</button>`;
