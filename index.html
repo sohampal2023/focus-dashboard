@@ -37,17 +37,6 @@ button:disabled{opacity:.4}
 }
 .hidden{display:none}
 
-/* INPUT */
-.nextInput{
-  width:100%;
-  padding:10px;
-  margin:6px 0;
-  border-radius:8px;
-  border:1px solid #334155;
-  background:#020617;
-  color:#e5e7eb;
-}
-
 /* SPEEDOMETER */
 .speedo{
   width:300px;height:150px;border-radius:300px 300px 0 0;
@@ -89,7 +78,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
   <div id="idleBox" class="idleBox hidden">
     Idle Time Left:
-    <b><span id="idleTime">00:10</span></b><br><br>
+    <b><span id="idleTime">30:00</span></b><br><br>
     <button onclick="resetIdle()">I am studying</button>
   </div>
 
@@ -137,12 +126,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   </table>
 </div>
 
-<div id="nextDayBox" class="card hidden">
-  <h3>Enter Next Day Tasks</h3>
-  <div id="nextInputs"></div>
-  <button onclick="finalDayEnd()">Submit</button>
-</div>
-
+<div id="nextDayBox" class="card hidden"></div>
 <div id="reportBox" class="card hidden"></div>
 
 </div>
@@ -152,61 +136,74 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 let UID=null;
 let idleTimer=null;
 let idleRemaining=1800;
-let idleMiss=0;
+let warningPlayed=false;
 let penalty=0;
 
 const now=()=>new Date().toLocaleString();
 const key=k=>UID+"_"+k;
 
-/* ---------- IDLE ---------- */
+/* 🔊 Beep sound */
+function playBeep(){
+  const ctx=new (window.AudioContext||window.webkitAudioContext)();
+  const osc=ctx.createOscillator();
+  const gain=ctx.createGain();
+  osc.type="sine";
+  osc.frequency.value=880;
+  gain.gain.value=0.1;
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start();
+  setTimeout(()=>{osc.stop();ctx.close()},300);
+}
+
+/* IDLE */
 function startIdle(){
   clearInterval(idleTimer);
   idleRemaining=1800;
-  idleMiss=0;
+  warningPlayed=false;
   idleBox.classList.remove("hidden");
   updateIdle();
+
   idleTimer=setInterval(()=>{
     idleRemaining--;
     updateIdle();
-    if(idleRemaining>0 && idleRemaining%30===0){
-      idleMiss++;
-      if(idleMiss>=2){penalty+=2;updateProgress()}
-      if(idleMiss>=3) autoLogout();
+
+    if(idleRemaining===60 && !warningPlayed){
+      playBeep();
+      warningPlayed=true;
+    }
+
+    if(idleRemaining<=0){
+      autoLogout();
     }
   },1000);
 }
+
 function updateIdle(){
   idleTime.innerText=
     Math.floor(idleRemaining/60)+":"+
     String(idleRemaining%60).padStart(2,"0");
 }
-function resetIdle(){startIdle()}
+
+function resetIdle(){
+  startIdle();
+}
+
 function autoLogout(){
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
+
   const logs=JSON.parse(localStorage.getItem(key("LOGS")));
   logs[logs.length-1].logout=now();
+  logs[logs.length-1].reason="Idle timeout";
   localStorage.setItem(key("LOGS"),JSON.stringify(logs));
-  localStorage.setItem(key("ASK_REASON"),"1");
   location.reload();
 }
 
-/* ---------- LOGIN ---------- */
+/* LOGIN */
 function login(){
   UID=prompt("Email");
   if(!UID)return;
-
-  if(localStorage.getItem(key("DAY_ENDED"))==="1"){
-    localStorage.removeItem(key("DAY_ENDED"));
-  }
-
-  if(localStorage.getItem(key("ASK_REASON"))==="1"){
-    const logs=JSON.parse(localStorage.getItem(key("LOGS")));
-    logs[logs.length-1].reason=
-      prompt("Reason for last logout?")||"Idle timeout";
-    localStorage.setItem(key("LOGS"),JSON.stringify(logs));
-    localStorage.removeItem(key("ASK_REASON"));
-  }
 
   const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
   logs.push({login:now(),logout:"-",reason:"-"});
@@ -217,7 +214,6 @@ function login(){
   bioBtn.disabled=false;
   dayBtn.disabled=false;
 
-  penalty=0;
   startIdle();
   setupTasks();
   loadTasks();
@@ -225,41 +221,34 @@ function login(){
   updateProgress();
 }
 
-/* ---------- BIO ---------- */
+/* BIO */
 function bioBreak(){
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
+
   const logs=JSON.parse(localStorage.getItem(key("LOGS")));
   logs[logs.length-1].logout=now();
+  logs[logs.length-1].reason="Bio break";
   localStorage.setItem(key("LOGS"),JSON.stringify(logs));
-  localStorage.setItem(key("ASK_REASON"),"1");
   location.reload();
 }
 
-/* ---------- TASK SETUP ---------- */
+/* TASK SETUP */
 function setupTasks(){
-  const carried=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
-  const next=JSON.parse(localStorage.getItem(key("NEXT_TASKS"))||"[]");
-
-  let merged=[...carried,...next.map(n=>({name:n,done:false}))];
-  if(!merged.length){
-    merged=[
+  const tasks=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
+  if(!tasks.length){
+    localStorage.setItem(key("TASKS"),JSON.stringify([
       {name:"Study",done:false},
       {name:"Revise",done:false},
       {name:"Practice",done:false}
-    ];
+    ]));
   }
-
-  localStorage.setItem(key("TASKS"),JSON.stringify(merged));
-  localStorage.removeItem(key("NEXT_TASKS"));
   localStorage.setItem(key("EXTRA"),JSON.stringify([]));
-
   taskBox.classList.remove("hidden");
   logBox.classList.remove("hidden");
-  reportBox.classList.add("hidden");
 }
 
-/* ---------- TASK UI ---------- */
+/* TASK UI */
 function loadTasks(){
   taskList.innerHTML="";
   extraList.innerHTML="";
@@ -268,28 +257,33 @@ function loadTasks(){
 
   tasks.forEach(t=>{
     const cb=document.createElement("input");
-    cb.type="checkbox";cb.checked=t.done;
+    cb.type="checkbox";
+    cb.checked=t.done;
     cb.onchange=()=>{
       if(!confirm("Confirm task completion?")){
         cb.checked=!cb.checked;return;
       }
-      t.done=cb.checked;save(tasks,extras);
+      t.done=cb.checked;
+      save(tasks,extras);
     };
     taskList.append(cb," "+t.name,document.createElement("br"));
   });
 
   extras.forEach(e=>{
     const cb=document.createElement("input");
-    cb.type="checkbox";cb.checked=e.done;
+    cb.type="checkbox";
+    cb.checked=e.done;
     cb.onchange=()=>{
       if(!confirm("Confirm extra work completion?")){
         cb.checked=!cb.checked;return;
       }
-      e.done=cb.checked;save(tasks,extras);
+      e.done=cb.checked;
+      save(tasks,extras);
     };
     extraList.append(cb," "+e.name,document.createElement("br"));
   });
 }
+
 function addExtra(){
   const name=prompt("Extra work?");
   if(!name)return;
@@ -298,21 +292,20 @@ function addExtra(){
   localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
   loadTasks();
 }
+
 function save(tasks,extras){
   localStorage.setItem(key("TASKS"),JSON.stringify(tasks));
   localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
   updateProgress();
 }
 
-/* ---------- PROGRESS ---------- */
+/* PROGRESS */
 function calculate(){
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
   const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
-  const done=tasks.filter(t=>t.done).length+
-              extras.filter(e=>e.done).length;
-  const percent=tasks.length?
-    Math.max(0,Math.round((done/tasks.length)*100-penalty)):0;
-  return{percent,assigned:tasks.length,extra:extras.length};
+  const done=tasks.filter(t=>t.done).length+extras.filter(e=>e.done).length;
+  const percent=tasks.length?Math.round((done/tasks.length)*100):0;
+  return{percent,assigned:tasks.length};
 }
 function updateProgress(){
   const p=calculate();
@@ -320,8 +313,6 @@ function updateProgress(){
     `rotate(${(Math.min(p.percent,300)/300)*180-90}deg)`;
   livePercent.innerText=p.percent+"%";
   liveRating.innerText=getLabel(p.percent);
-  liveDetails.innerText=
-    `Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${penalty}%`;
 }
 function getLabel(p){
   if(p<40)return"Poor";
@@ -331,60 +322,9 @@ function getLabel(p){
   return"Fabulous";
 }
 
-/* ---------- DAY END ---------- */
-function openDayEnd(){
-  clearInterval(idleTimer);
-  idleBox.classList.add("hidden");
-
-  nextInputs.innerHTML="";
-  for(let i=0;i<5;i++){
-    nextInputs.innerHTML+=
-      `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i+1}">`;
-  }
-  nextDayBox.classList.remove("hidden");
-}
-function finalDayEnd(){
-  const next=[];
-  for(let i=0;i<5;i++){
-    const v=document.getElementById("nd"+i).value.trim();
-    if(v)next.push(v);
-  }
-  localStorage.setItem(key("NEXT_TASKS"),JSON.stringify(next));
-
-  const p=calculate();
-  const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
-  const carry=tasks.filter(t=>!t.done);
-
-  localStorage.setItem(key("TASKS"),JSON.stringify(carry));
-  localStorage.setItem(key("EXTRA"),JSON.stringify([]));
-  localStorage.removeItem(key("LOGS"));
-  localStorage.setItem(key("DAY_ENDED"),"1");
-
-  reportBox.innerHTML=`
-    <h3>Daily Report</h3>
-    <div class="percent">${p.percent}%</div>
-    <div class="rating">${getLabel(p.percent)}</div>
-    <div class="details">
-      Assigned: ${tasks.length} |
-      Carry Forward: ${carry.length} |
-      Penalty: -${penalty}%
-    </div>`;
-  reportBox.classList.remove("hidden");
-
-  taskBox.classList.add("hidden");
-  logBox.classList.add("hidden");
-  nextDayBox.classList.add("hidden");
-
-  statusBox.innerText="Day End – Thank you";
-
-  loginBtn.disabled=false;
-  bioBtn.disabled=true;
-  dayBtn.disabled=true;
-}
-
-/* ---------- LOG TABLE ---------- */
+/* LOG TABLE */
 function renderLogs(){
-  const logs=JSON.parse(localStorage.getItem(key("LOGS")));
+  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||[]);
   logTable.innerHTML="";
   logs.forEach(l=>{
     logTable.innerHTML+=
