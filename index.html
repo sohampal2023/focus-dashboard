@@ -155,6 +155,13 @@ let idleRemaining=1800;
 let idleMiss=0;
 let penalty=0;
 
+/* ✅ TAB VISIBILITY FLAG */
+let tabActive=true;
+
+document.addEventListener("visibilitychange",()=>{
+  tabActive=!document.hidden;
+});
+
 const now=()=>new Date().toLocaleString();
 const key=k=>UID+"_"+k;
 
@@ -165,22 +172,33 @@ function startIdle(){
   idleMiss=0;
   idleBox.classList.remove("hidden");
   updateIdle();
+
   idleTimer=setInterval(()=>{
+    if(!tabActive) return;   // ✅ pause idle when tab/app inactive
+
     idleRemaining--;
     updateIdle();
+
     if(idleRemaining>0 && idleRemaining%30===0){
       idleMiss++;
-      if(idleMiss>=2){penalty+=2;updateProgress()}
-      if(idleMiss>=3) autoLogout();
+      if(idleMiss>=2){
+        penalty+=2;
+        updateProgress();
+      }
+      if(idleMiss>=3){
+        autoLogout();
+      }
     }
   },1000);
 }
+
 function updateIdle(){
   idleTime.innerText=
     Math.floor(idleRemaining/60)+":"+
     String(idleRemaining%60).padStart(2,"0");
 }
 function resetIdle(){startIdle()}
+
 function autoLogout(){
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
@@ -294,6 +312,7 @@ function loadTasks(){
     extraList.append(cb," "+e.name,document.createElement("br"));
   });
 }
+
 function addExtra(){
   const name=prompt("Extra work?");
   if(!name)return;
@@ -302,6 +321,7 @@ function addExtra(){
   localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
   loadTasks();
 }
+
 function save(tasks,extras){
   localStorage.setItem(key("TASKS"),JSON.stringify(tasks));
   localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
@@ -347,6 +367,7 @@ function openDayEnd(){
   }
   nextDayBox.classList.remove("hidden");
 }
+
 function finalDayEnd(){
   const next=[];
   for(let i=0;i<5;i++){
@@ -362,11 +383,8 @@ function finalDayEnd(){
   localStorage.setItem(key("TASKS"),JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"),JSON.stringify([]));
 
-  /* ✅ CLEAR LOGS COMPLETELY */
   localStorage.removeItem(key("LOGS"));
   logTable.innerHTML="";
-
-  localStorage.setItem(key("DAY_ENDED"),"1");
 
   reportBox.innerHTML=`
     <h3>Daily Report</h3>
