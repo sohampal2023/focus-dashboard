@@ -80,7 +80,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <body>
 <div class="app">
 
-<!-- SIDEBAR -->
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
   <div id="statusBox" class="status">Logged out</div>
@@ -89,7 +88,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
 </div>
 
-<!-- MAIN -->
 <div class="main">
 
 <!-- TASK VIEW -->
@@ -147,7 +145,6 @@ function login(){
   UID=prompt("Email");
   if(!UID)return;
 
-  // ask reason if required
   if(localStorage.getItem(key("ASK_REASON"))==="1"){
     const logs=JSON.parse(localStorage.getItem(key("LOGS")));
     const r=prompt("Reason for last logout?");
@@ -156,7 +153,6 @@ function login(){
     localStorage.removeItem(key("ASK_REASON"));
   }
 
-  // add new login row
   const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
   logs.push({login:now(),logout:"-",reason:"-"});
   localStorage.setItem(key("LOGS"),JSON.stringify(logs));
@@ -169,7 +165,7 @@ function login(){
   setupTasks();
   loadTasks();
   renderLogs();
-  updateSpeedo();
+  updateProgress();
 }
 
 /* BIO BREAK */
@@ -181,7 +177,7 @@ function bioBreak(){
   location.reload();
 }
 
-/* SETUP TASKS FOR DAY */
+/* SETUP TASKS */
 function setupTasks(){
   const carried=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
   const next=JSON.parse(localStorage.getItem(key("NEXT_TASKS"))||"[]");
@@ -251,26 +247,37 @@ function addExtra(){
   loadTasks();
 }
 
-/* SAVE + SPEEDO */
+/* SAVE + UPDATE */
 function save(tasks,extras){
   localStorage.setItem(key("TASKS"),JSON.stringify(tasks));
   localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
-  updateSpeedo();
+  updateProgress();
 }
 
-/* SPEEDO */
-function updateSpeedo(){
+/* SINGLE SOURCE OF TRUTH */
+function calculateProgress(){
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
   const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
+  const doneAssigned=tasks.filter(t=>t.done).length;
+  const doneExtra=extras.filter(e=>e.done).length;
+  const assigned=tasks.length;
 
-  const done=tasks.filter(t=>t.done).length + extras.filter(e=>e.done).length;
-  const percent=Math.round((done/tasks.length)*100);
-  const angle=(Math.min(percent,300)/300)*180 - 90;
+  const totalDone=doneAssigned+doneExtra;
+  const percent=assigned?Math.round((totalDone/assigned)*100):0;
+
+  return {percent,assigned,doneAssigned,doneExtra,totalDone};
+}
+
+/* UPDATE SPEEDO + TEXT */
+function updateProgress(){
+  const p=calculateProgress();
+  const angle=(Math.min(p.percent,300)/300)*180 - 90;
 
   needle.style.transform=`rotate(${angle}deg)`;
-  livePercent.innerText=percent+"%";
-  liveRating.innerText=getLabel(percent);
-  liveDetails.innerText=`Assigned: ${tasks.length} | Extra: ${extras.length}`;
+  livePercent.innerText=p.percent+"%";
+  liveRating.innerText=getLabel(p.percent);
+  liveDetails.innerText=
+    `Assigned: ${p.assigned} | Done: ${p.doneAssigned} | Extra: ${p.doneExtra}`;
 }
 
 function getLabel(p){
@@ -285,9 +292,11 @@ function getLabel(p){
 function openDayEnd(){
   nextDayBox.innerHTML="<h3>Enter Next Day Tasks</h3>";
   for(let i=0;i<5;i++){
-    nextDayBox.innerHTML+=`<input id="nd${i}" style="width:100%;margin:6px 0">`;
+    nextDayBox.innerHTML+=
+      `<input id="nd${i}" style="width:100%;margin:6px 0">`;
   }
-  nextDayBox.innerHTML+=`<button onclick="finalDayEnd()">Submit</button>`;
+  nextDayBox.innerHTML+=
+    `<button onclick="finalDayEnd()">Submit</button>`;
   nextDayBox.classList.remove("hidden");
 }
 
@@ -300,24 +309,22 @@ function finalDayEnd(){
   }
   localStorage.setItem(key("NEXT_TASKS"),JSON.stringify(next));
 
+  const p=calculateProgress();
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
-  const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
 
-  const undone=tasks.filter(t=>!t.done);
-  localStorage.setItem(key("TASKS"),JSON.stringify(undone));
+  const carry=tasks.filter(t=>!t.done);
+  localStorage.setItem(key("TASKS"),JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"),JSON.stringify([]));
-
-  const doneCount=tasks.filter(t=>t.done).length;
-  const percent=Math.round((doneCount/tasks.length)*100);
 
   reportBox.innerHTML=`
     <h3>Daily Report</h3>
-    <div class="percent">${percent}%</div>
-    <div class="rating">${getLabel(percent)}</div>
+    <div class="percent">${p.percent}%</div>
+    <div class="rating">${getLabel(p.percent)}</div>
     <div class="details">
-      Assigned: ${tasks.length} |
-      Done: ${doneCount} |
-      Carry Forward: ${undone.length}
+      Assigned: ${p.assigned} |
+      Done: ${p.doneAssigned} |
+      Extra: ${p.doneExtra} |
+      Carry Forward: ${carry.length}
     </div>
   `;
   reportBox.classList.remove("hidden");
@@ -338,7 +345,8 @@ function renderLogs(){
   const logs=JSON.parse(localStorage.getItem(key("LOGS")));
   logTable.innerHTML="";
   logs.forEach(l=>{
-    logTable.innerHTML+=`<tr><td>${l.login}</td><td>${l.logout}</td><td>${l.reason}</td></tr>`;
+    logTable.innerHTML+=
+      `<tr><td>${l.login}</td><td>${l.logout}</td><td>${l.reason}</td></tr>`;
   });
 }
 </script>
