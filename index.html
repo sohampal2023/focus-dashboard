@@ -3,62 +3,90 @@
 <head>
 <meta charset="UTF-8">
 <title>Focus Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 *{box-sizing:border-box}
 html,body{
-  margin:0;height:100%;
+  margin:0;
+  height:100%;
   font-family:Segoe UI,system-ui,sans-serif;
 }
 body{
-  background:linear-gradient(135deg,#0f172a,#020617);
+  background:linear-gradient(135deg,#020617,#0f172a);
   color:#e5e7eb;
 }
+
+/* APP LAYOUT */
 .app{
   display:grid;
-  grid-template-columns:280px 1fr;
+  grid-template-columns:260px 1fr;
   height:100vh;
 }
 
 /* SIDEBAR */
 .sidebar{
-  padding:20px;
+  background:#020617;
+  border-right:1px solid #1e293b;
+  padding:22px;
   display:flex;
   flex-direction:column;
-  gap:18px;
-  border-right:1px solid #1e293b;
+  gap:20px;
 }
 .sidebar h2{
+  margin:0;
   text-align:center;
   color:#38bdf8;
-  margin:0;
+  letter-spacing:1px;
 }
 .status{
-  padding:26px;
-  border-radius:16px;
+  padding:18px;
+  border-radius:14px;
+  background:#020617;
   border:2px solid #334155;
   text-align:center;
-  font-weight:900;
-  font-size:18px;
-  background:#020617;
+  font-weight:700;
 }
 .nav button{
   width:100%;
   padding:14px;
-  margin-bottom:10px;
   border-radius:12px;
   border:1px solid #1e293b;
   background:#020617;
   color:#e5e7eb;
   font-weight:600;
   cursor:pointer;
+  transition:.2s;
+}
+.nav button:hover{
+  background:#020617;
+  border-color:#38bdf8;
 }
 
-/* MAIN */
+/* MAIN AREA */
 .main{
-  padding:25px;
+  padding:30px;
   overflow:auto;
 }
+.header{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  margin-bottom:25px;
+}
+.header h1{
+  margin:0;
+  font-size:26px;
+}
+.score{
+  padding:12px 18px;
+  border-radius:12px;
+  border:1px solid #1e293b;
+  background:#020617;
+  font-weight:700;
+}
+
+/* CARDS */
 .card{
   background:#020617;
   border:1px solid #1e293b;
@@ -66,36 +94,51 @@ body{
   padding:20px;
   margin-bottom:20px;
 }
+.card h3{
+  margin-top:0;
+  color:#38bdf8;
+}
 .hidden{display:none}
 
 /* POPUP */
 .overlay{
   position:fixed;
   inset:0;
-  background:rgba(0,0,0,.8);
+  background:rgba(0,0,0,.85);
   display:flex;
   align-items:center;
   justify-content:center;
-  z-index:999;
+  z-index:1000;
 }
 .popup{
+  width:360px;
   background:#020617;
+  border-radius:18px;
   border:2px solid #38bdf8;
-  border-radius:16px;
-  padding:30px;
-  width:380px;
+  padding:28px;
   text-align:center;
 }
+.popup h3{
+  margin-top:0;
+  color:#38bdf8;
+}
 .popup button{
-  padding:12px 20px;
-  margin:10px;
+  width:100%;
+  padding:14px;
+  margin-top:12px;
   border:none;
-  border-radius:10px;
+  border-radius:12px;
+  font-size:16px;
   font-weight:700;
   cursor:pointer;
 }
-.study{background:#22c55e}
-.distract{background:#ef4444}
+.study{background:#22c55e;color:#022c22}
+.distract{background:#ef4444;color:#450a0a}
+.popup small{
+  display:block;
+  margin-top:10px;
+  opacity:.7;
+}
 </style>
 </head>
 
@@ -104,8 +147,9 @@ body{
 
 <!-- SIDEBAR -->
 <div class="sidebar">
-  <h2>FOCUS SYSTEM</h2>
-  <div id="status" class="status">Status: Logged out</div>
+  <h2>FOCUS</h2>
+  <div id="status" class="status">Logged out</div>
+
   <div class="nav">
     <button id="loginBtn">Login</button>
     <button id="bioBtn">Bio Break</button>
@@ -116,10 +160,16 @@ body{
 
 <!-- MAIN -->
 <div class="main">
+  <div class="header">
+    <h1>Dashboard</h1>
+    <div id="scoreBox" class="score">Score: 100%</div>
+  </div>
+
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
-    <p>No tasks yet</p>
+    <p>No tasks assigned yet.</p>
   </div>
+
   <div id="reportBox" class="card hidden"></div>
   <div id="historyBox" class="card hidden"></div>
 </div>
@@ -130,10 +180,10 @@ body{
 <div id="focusOverlay" class="overlay hidden">
   <div class="popup">
     <h3>Focus Check</h3>
-    <p>Are you studying or distracted?</p>
+    <p>What are you doing right now?</p>
     <button class="study" id="studyBtn">Studying</button>
     <button class="distract" id="distractBtn">Distracted</button>
-    <p style="font-size:12px">No response in 1 minute → idle mark</p>
+    <small>No response in 1 minute → idle mark</small>
   </div>
 </div>
 
@@ -160,6 +210,7 @@ const auth = getAuth(app);
 const status = document.getElementById("status");
 const tasksBox = document.getElementById("tasksBox");
 const overlay = document.getElementById("focusOverlay");
+const scoreBox = document.getElementById("scoreBox");
 
 /* ================= STATE ================= */
 let score = 100;
@@ -173,20 +224,21 @@ function stamp(){
     minute:"2-digit"
   });
 }
+function updateScore(){
+  scoreBox.innerText = "Score: " + score + "%";
+}
 
-/* ================= CORE LOGIC ================= */
+/* ================= CORE ================= */
 async function login(){
-  const email = prompt("Enter email");
-  const pass = prompt("Enter password");
+  const email = prompt("Email");
+  const pass = prompt("Password");
   if(!email || !pass) return;
-
   try{
     await signInWithEmailAndPassword(auth,email,pass);
   }catch(e){
     alert(e.message);
   }
 }
-
 async function bioBreak(){
   await signOut(auth);
 }
@@ -198,59 +250,36 @@ function showFocusPopup(){
     overlay.classList.add("hidden");
   },60000);
 }
-
 function focusResponse(isStudying){
   clearTimeout(popupTimer);
   overlay.classList.add("hidden");
-
   if(!isStudying){
     score = Math.max(score - 2, 0);
+    updateScore();
   }
 }
 
-/* ================= AUTH STATE ================= */
+/* ================= AUTH ================= */
 onAuthStateChanged(auth,(user)=>{
   if(user){
-    status.innerText = "Status: Logged in @ " + stamp();
+    status.innerText = "Logged in @ " + stamp();
     tasksBox.classList.remove("hidden");
     showFocusPopup();
   }else{
-    status.innerText = "Status: Logged out";
+    status.innerText = "Logged out";
     tasksBox.classList.add("hidden");
   }
 });
 
-/* ================= GLOBAL EVENT DELEGATION ================= */
-/* THIS IS THE FIX — buttons will NEVER break again */
-
+/* ================= EVENTS ================= */
 document.addEventListener("click",(e)=>{
-
-  if(e.target.id === "loginBtn"){
-    login();
-  }
-
-  if(e.target.id === "bioBtn"){
-    bioBreak();
-  }
-
-  if(e.target.id === "studyBtn"){
-    focusResponse(true);
-  }
-
-  if(e.target.id === "distractBtn"){
-    focusResponse(false);
-  }
-
-  if(e.target.id === "historyBtn"){
-    alert("History view coming next");
-  }
-
-  if(e.target.id === "dayEndBtn"){
-    alert("Day End logic next step");
-  }
-
+  if(e.target.id==="loginBtn") login();
+  if(e.target.id==="bioBtn") bioBreak();
+  if(e.target.id==="studyBtn") focusResponse(true);
+  if(e.target.id==="distractBtn") focusResponse(false);
+  if(e.target.id==="historyBtn") alert("History module next");
+  if(e.target.id==="dayEndBtn") alert("Day End logic next");
 });
 </script>
-
 </body>
 </html>
