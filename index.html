@@ -130,16 +130,6 @@ body{
   color:#e5e7eb;
   cursor:pointer;
 }
-
-.admin-row button.terminate{
-  border-color:#ef4444;
-  color:#ef4444;
-}
-
-.admin-row button.approve{
-  border-color:#22c55e;
-  color:#22c55e;
-}
 </style>
 </head>
 
@@ -182,6 +172,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebas
 import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc, updateDoc, getDocs, collection } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
+/* ================= FIREBASE ================= */
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
   authDomain: "focus-dashboard-5965a.firebaseapp.com",
@@ -195,8 +186,15 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
 
+/* ================= CONSTANTS ================= */
 const ADMIN_EMAIL = "admin@study.com";
 
+const DAY_STATUS = "DAY_STATUS";
+const CURRENT_TASKS = "CURRENT_TASKS";
+const NEXT_TASKS = "NEXT_TASKS";
+const REPORTS = "REPORTS";
+
+/* ================= STATE ================= */
 let CURRENT_UID = null;
 let CURRENT_EMAIL = null;
 
@@ -212,8 +210,37 @@ function stamp(){
   });
 }
 
-function mins(a,b){
-  return Math.round((b-a)/60000);
+/* ================= STATE INIT ================= */
+function ensureUserState(){
+  if(!localStorage.getItem(ukey(CURRENT_TASKS))){
+    localStorage.setItem(ukey(CURRENT_TASKS), JSON.stringify([]));
+  }
+
+  if(!localStorage.getItem(ukey(REPORTS))){
+    localStorage.setItem(ukey(REPORTS), JSON.stringify([]));
+  }
+
+  if(!localStorage.getItem(ukey(DAY_STATUS))){
+    localStorage.setItem(ukey(DAY_STATUS), "ACTIVE");
+  }
+}
+
+/* ================= SEED TASKS ================= */
+function seedInitialTasksIfEmpty(){
+  const cur = JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS)) || "[]");
+
+  if(cur.length === 0){
+    const seed = [
+      { name:"Study core subject", done:false },
+      { name:"Revise notes", done:false },
+      { name:"Practice questions", done:false }
+    ];
+
+    localStorage.setItem(
+      ukey(CURRENT_TASKS),
+      JSON.stringify(seed)
+    );
+  }
 }
 
 /* ================= LOGIN ================= */
@@ -232,8 +259,8 @@ window.login = async function(){
   if(!snap.exists()){
     await setDoc(userRef,{
       email: email,
-      blocked: false,
-      reports: []
+      blocked:false,
+      reports:[]
     });
   }
 
@@ -243,19 +270,23 @@ window.login = async function(){
     return;
   }
 
+  ensureUserState();
+  seedInitialTasksIfEmpty();
+
   if(email === ADMIN_EMAIL){
     adminBtn.classList.remove("hidden");
   }
 
   status.innerText = "Status: Logged in @ " + stamp();
   tasksBox.classList.remove("hidden");
+
   loadTasks();
 };
 
 /* ================= TASKS ================= */
 function loadTasks(){
   taskList.innerHTML = "";
-  const data = JSON.parse(localStorage.getItem(ukey("CURRENT_TASKS")) || "[]");
+  const data = JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS)) || "[]");
 
   if(!data.length){
     taskList.innerText = "No tasks assigned.";
@@ -266,21 +297,15 @@ function loadTasks(){
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = t.done;
-    cb.disabled = t.done;
 
     cb.onchange = function(){
-      if(confirm("Confirm task done?")){
-        t.done = true;
-        localStorage.setItem(ukey("CURRENT_TASKS"), JSON.stringify(data));
-      }else{
-        cb.checked = false;
-      }
+      t.done = cb.checked;
+      localStorage.setItem(ukey(CURRENT_TASKS), JSON.stringify(data));
     };
 
     const d = document.createElement("div");
     d.className = "task";
     d.append(cb," "+t.name);
-
     taskList.appendChild(d);
   });
 }
@@ -288,14 +313,16 @@ function loadTasks(){
 /* ================= DAY END ================= */
 window.openDayEnd = function(){
   let h = "<h3>Confirm Day End</h3>";
+
   for(let i=0;i<7;i++){
     h += `<input id="s${i}" placeholder="Next Day Task ${i+1}"><br>`;
   }
+
   h += `
-    <br>Distraction (minutes)<br>
-    <input id="dist" type="number"><br><br>
+    <br>
     <button onclick="confirmDayEnd()">Confirm</button>
   `;
+
   dayEndBox.innerHTML = h;
   dayEndBox.classList.remove("hidden");
 };
@@ -307,11 +334,11 @@ window.confirmDayEnd = async function(){
 
   const userRef = doc(db,"users",CURRENT_UID);
   const snap = await getDoc(userRef);
-  const reports = snap.data().reports || [];
-  reports.push(reportData);
+  const reps = snap.data().reports || [];
+  reps.push(reportData);
 
   await updateDoc(userRef,{
-    reports: reports
+    reports: reps
   });
 
   status.innerText = "Status: Day End – Thank you";
@@ -325,8 +352,20 @@ window.confirmDayEnd = async function(){
 /* ================= REPORT ================= */
 function generateReport(){
 
-  const score = 50;
-  const grade = "AVERAGE";
+  const tasks = JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS)) || "[]");
+
+  let score = 0;
+
+  if(tasks.length > 0){
+    const done = tasks.filter(t=>t.done).length;
+    score = Math.round((done / tasks.length) * 100);
+  }
+
+  const grade =
+    score >= 80 ? "EXCELLENT" :
+    score >= 60 ? "GOOD" :
+    score >= 40 ? "AVERAGE" :
+    "POOR";
 
   reportBox.innerHTML = `
     <h3>Report Card</h3>
@@ -347,6 +386,16 @@ function generateReport(){
 /* ================= HISTORY ================= */
 window.toggleHistory = function(){
   historyBox.classList.toggle("hidden");
+  historyBox.innerHTML = "<h3>History</h3>";
+
+  const h = JSON.parse(localStorage.getItem(ukey(REPORTS)) || "[]");
+  h.forEach(x=>{
+    historyBox.innerHTML += `
+      <div class="history-item">
+        ${x.date} → ${x.finalScore}% (${x.grade})
+      </div>
+    `;
+  });
 };
 
 /* ================= ADMIN ================= */
@@ -357,17 +406,26 @@ window.openAdmin = async function(){
   adminBox.innerHTML = "<h3>Admin – User Reports</h3>";
 
   const snap = await getDocs(collection(db,"users"));
+
   snap.forEach(d=>{
     const u = d.data();
-    if(!u.reports) return;
+    const reps = Array.isArray(u.reports) ? u.reports : [];
 
-    u.reports.forEach(r=>{
+    if(reps.length === 0){
       adminBox.innerHTML += `
         <div class="history-item">
-          ${u.email} → ${r.date} → ${r.finalScore}% (${r.grade})
+          ${u.email} → No reports yet
         </div>
       `;
-    });
+    }else{
+      reps.forEach(r=>{
+        adminBox.innerHTML += `
+          <div class="history-item">
+            ${u.email} → ${r.date} → ${r.finalScore}% (${r.grade})
+          </div>
+        `;
+      });
+    }
   });
 };
 
