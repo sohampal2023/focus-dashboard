@@ -168,7 +168,7 @@ const key=k=>UID+"_"+k;
 /* IDLE */
 function startIdle(){
   clearInterval(idleTimer);
-  idleRemaining=1800;
+  idleRemaining=1800000;
   idleMiss=0;
   idleBox.classList.remove("hidden");
   updateIdle();
