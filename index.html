@@ -50,7 +50,11 @@ body{
   font-weight:600;
   cursor:pointer;
 }
-.nav button:hover{border-color:#38bdf8}
+.nav button:disabled{
+  opacity:.4;
+  cursor:not-allowed;
+}
+.nav button:hover:not(:disabled){border-color:#38bdf8}
 .main{
   padding:25px;
   overflow:auto;
@@ -112,9 +116,9 @@ input.nextTask{
   </div>
 
   <div class="nav">
-    <button onclick="login()">Login</button>
-    <button onclick="bioBreak()">Bio Break</button>
-    <button onclick="openDayEnd()">Day End</button>
+    <button id="loginBtn" onclick="login()">Login</button>
+    <button id="bioBtn" onclick="bioBreak()">Bio Break</button>
+    <button id="dayEndBtn" onclick="openDayEnd()">Day End</button>
   </div>
 </div>
 
@@ -158,6 +162,10 @@ const idleTime = document.getElementById("idleTime");
 const dayEndBox = document.getElementById("dayEndBox");
 const reportBox = document.getElementById("reportBox");
 
+const loginBtn = document.getElementById("loginBtn");
+const bioBtn = document.getElementById("bioBtn");
+const dayEndBtn = document.getElementById("dayEndBtn");
+
 /* CONSTANTS */
 const CURRENT_TASKS="CURRENT_TASKS";
 const SESSION_START="SESSION_START";
@@ -200,6 +208,9 @@ window.login=async()=>{
   tasksBox.classList.remove("hidden");
   idleBox.classList.remove("hidden");
 
+  bioBtn.disabled=false;
+  dayEndBtn.disabled=false;
+
   loadTasks();
   startIdleTimer();
 };
@@ -209,14 +220,13 @@ function loadTasks(){
   taskList.innerHTML="";
   const data=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
 
-  data.forEach((t,idx)=>{
+  data.forEach(t=>{
     const cb=document.createElement("input");
     cb.type="checkbox";
     cb.checked=t.done;
 
     cb.onchange=()=>{
-      const ok=confirm("Confirm task status change?");
-      if(!ok){
+      if(!confirm("Confirm task status change?")){
         cb.checked=!cb.checked;
         return;
       }
@@ -271,6 +281,7 @@ window.openDayEnd=()=>{
   dayEndBox.classList.remove("hidden");
 };
 
+/* FINAL LOCK AFTER REPORT */
 window.confirmDayEnd=async()=>{
   clearInterval(idleTimer);
 
@@ -294,7 +305,17 @@ window.confirmDayEnd=async()=>{
     </div>
     Grade: <b>${grade}</b>
   `;
+
+  /* LOCK UI */
+  tasksBox.classList.add("hidden");
+  dayEndBox.classList.add("hidden");
+  idleBox.classList.add("hidden");
+
+  bioBtn.disabled=true;
+  dayEndBtn.disabled=true;
+
   reportBox.classList.remove("hidden");
+  statusEl.innerText="Status: Day End Completed";
 
   await signOut(auth);
 };
