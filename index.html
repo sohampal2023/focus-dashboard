@@ -32,11 +32,11 @@ body{
   margin:0;
 }
 .status{
-  padding:20px;
+  padding:18px;
   border-radius:16px;
   border:2px solid #334155;
   text-align:center;
-  font-weight:800;
+  font-weight:700;
   background:#020617;
 }
 .nav button{
@@ -66,7 +66,7 @@ body{
 .task{
   display:flex;
   gap:10px;
-  margin:8px 0;
+  margin:10px 0;
 }
 .progress{
   height:18px;
@@ -90,6 +90,7 @@ body{
 <body>
 <div class="app">
 
+<!-- SIDEBAR -->
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
 
@@ -108,6 +109,7 @@ body{
   </div>
 </div>
 
+<!-- MAIN -->
 <div class="main">
 
   <div id="tasksBox" class="card hidden">
@@ -124,9 +126,9 @@ body{
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import { getFirestore, doc, getDoc, setDoc, updateDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-/* FIREBASE */
+/* FIREBASE CONFIG */
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
   authDomain: "focus-dashboard-5965a.firebaseapp.com",
@@ -141,87 +143,98 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 
 /* CONSTANTS */
-const CURRENT_TASKS="CURRENT_TASKS";
-const SESSION_START="SESSION_START";
-const PRODUCTIVE_TIME="PRODUCTIVE_TIME";
-const IDLE_LIMIT=30;
+const IDLE_LIMIT = 30;
+const CURRENT_TASKS = "CURRENT_TASKS";
+const SESSION_START = "SESSION_START";
+const PRODUCTIVE_TIME = "PRODUCTIVE_TIME";
 
 /* STATE */
-let CURRENT_UID=null;
-let idleTimer=null;
-let idleRemaining=IDLE_LIMIT;
-let lastActiveStamp=null;
+let CURRENT_UID = null;
+let idleTimer = null;
+let idleRemaining = IDLE_LIMIT;
+let lastActiveStamp = null;
 
 /* HELPERS */
-function ukey(k){return CURRENT_UID+"_"+k}
+function ukey(k){ return CURRENT_UID + "_" + k }
 
 /* LOGIN */
-window.login=async()=>{
-  const email=prompt("Email");
-  const pass=prompt("Password");
-  if(!email||!pass)return;
+window.login = async function(){
+  try{
+    const email = prompt("Email");
+    const pass  = prompt("Password");
+    if(!email || !pass) return;
 
-  const cred=await signInWithEmailAndPassword(auth,email,pass);
-  CURRENT_UID=cred.user.uid;
+    const cred = await signInWithEmailAndPassword(auth,email,pass);
+    CURRENT_UID = cred.user.uid;
 
-  const ref=doc(db,"users",CURRENT_UID);
-  if(!(await getDoc(ref)).exists()){
-    await setDoc(ref,{email});
+    const userRef = doc(db,"users",CURRENT_UID);
+    const snap = await getDoc(userRef);
+    if(!snap.exists()){
+      await setDoc(userRef,{ email });
+    }
+
+    if(!localStorage.getItem(ukey(CURRENT_TASKS))){
+      localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify([
+        {name:"Study core subject",done:false},
+        {name:"Revise notes",done:false},
+        {name:"Practice questions",done:false}
+      ]));
+    }
+
+    localStorage.setItem(ukey(SESSION_START),Date.now());
+    localStorage.setItem(ukey(PRODUCTIVE_TIME),"0");
+
+    status.innerText = "Status: Logged in";
+    tasksBox.classList.remove("hidden");
+    idleBox.classList.remove("hidden");
+
+    loadTasks();
+    startIdleTimer();
+
+  }catch(err){
+    alert("Login failed: " + err.message);
   }
-
-  if(!localStorage.getItem(ukey(CURRENT_TASKS))){
-    localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify([
-      {name:"Study core subject",done:false},
-      {name:"Revise notes",done:false},
-      {name:"Practice questions",done:false}
-    ]));
-  }
-
-  localStorage.setItem(ukey(SESSION_START),Date.now());
-  localStorage.setItem(ukey(PRODUCTIVE_TIME),"0");
-
-  status.innerText="Status: Logged in";
-  tasksBox.classList.remove("hidden");
-  idleBox.classList.remove("hidden");
-
-  loadTasks();
-  startIdleTimer();
 };
 
-/* TASKS */
+/* LOAD TASKS */
 function loadTasks(){
-  taskList.innerHTML="";
-  const data=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
+  taskList.innerHTML = "";
+  const data = JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
   data.forEach(t=>{
-    const cb=document.createElement("input");
-    cb.type="checkbox";
-    cb.checked=t.done;
-    cb.onchange=()=>{t.done=cb.checked;localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(data))};
-    const d=document.createElement("div");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = t.done;
+    cb.onchange = ()=>{
+      t.done = cb.checked;
+      localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(data));
+    };
+    const d = document.createElement("div");
     d.className="task";
     d.append(cb," "+t.name);
     taskList.appendChild(d);
   });
 }
 
-/* IDLE LOGIC */
+/* IDLE TIMER */
 function startIdleTimer(){
   clearInterval(idleTimer);
-  idleRemaining=IDLE_LIMIT;
-  idleTime.innerText=idleRemaining;
-  lastActiveStamp=Date.now();
+  idleRemaining = IDLE_LIMIT;
+  idleTime.innerText = idleRemaining;
+  lastActiveStamp = Date.now();
 
-  idleTimer=setInterval(()=>{
+  idleTimer = setInterval(()=>{
     idleRemaining--;
-    idleTime.innerText=idleRemaining;
-    if(idleRemaining<=0) idleLogout();
+    idleTime.innerText = idleRemaining;
+    if(idleRemaining<=0){
+      idleLogout();
+    }
   },1000);
 }
 
-window.resetIdle=function(){
-  const now=Date.now();
-  const productive=Math.floor((now-lastActiveStamp)/1000);
-  const prev=Number(localStorage.getItem(ukey(PRODUCTIVE_TIME))||0);
+window.resetIdle = function(){
+  const now = Date.now();
+  const productive = Math.floor((now-lastActiveStamp)/1000);
+  const prev = Number(localStorage.getItem(ukey(PRODUCTIVE_TIME))||0);
   localStorage.setItem(ukey(PRODUCTIVE_TIME),prev+productive);
   startIdleTimer();
 };
@@ -230,33 +243,35 @@ async function idleLogout(){
   clearInterval(idleTimer);
   alert("Idle detected. Auto logout.");
   await signOut(auth);
-  location.reload();
+  status.innerText="Status: Logged out (Idle)";
+  tasksBox.classList.add("hidden");
+  idleBox.classList.add("hidden");
 }
 
 /* DAY END */
-window.openDayEnd=()=>{
-  dayEndBox.innerHTML=`
+window.openDayEnd = function(){
+  dayEndBox.innerHTML = `
     <h3>Confirm Day End</h3>
     <button onclick="confirmDayEnd()">Confirm</button>
   `;
   dayEndBox.classList.remove("hidden");
 };
 
-window.confirmDayEnd=async()=>{
+window.confirmDayEnd = async function(){
   clearInterval(idleTimer);
 
-  const tasks=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
-  const done=tasks.filter(t=>t.done).length;
-  const taskPercent=tasks.length?Math.round(done/tasks.length*100):0;
+  const tasks = JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
+  const done = tasks.filter(t=>t.done).length;
+  const taskPercent = tasks.length?Math.round(done/tasks.length*100):0;
 
-  const productive=Number(localStorage.getItem(ukey(PRODUCTIVE_TIME))||0);
-  const total=Math.floor((Date.now()-Number(localStorage.getItem(ukey(SESSION_START))))/1000);
-  const productivePercent=total?Math.min(100,Math.round(productive/total*100)):0;
+  const productive = Number(localStorage.getItem(ukey(PRODUCTIVE_TIME))||0);
+  const total = Math.floor((Date.now()-Number(localStorage.getItem(ukey(SESSION_START))))/1000);
+  const productivePercent = total?Math.min(100,Math.round(productive/total*100)):0;
 
-  const finalScore=Math.round(taskPercent*0.7+productivePercent*0.3);
-  const grade=finalScore>=80?"EXCELLENT":finalScore>=60?"GOOD":finalScore>=40?"AVERAGE":"POOR";
+  const finalScore = Math.round(taskPercent*0.7 + productivePercent*0.3);
+  const grade = finalScore>=80?"EXCELLENT":finalScore>=60?"GOOD":finalScore>=40?"AVERAGE":"POOR";
 
-  reportBox.innerHTML=`
+  reportBox.innerHTML = `
     <h3>Report Card</h3>
     Task Completion: ${taskPercent}%<br>
     Productive Time: ${productivePercent}%<br><br>
@@ -271,10 +286,12 @@ window.confirmDayEnd=async()=>{
 };
 
 /* BIO BREAK */
-window.bioBreak=async()=>{
+window.bioBreak = async function(){
   clearInterval(idleTimer);
   await signOut(auth);
-  location.reload();
+  status.innerText="Status: Bio Break";
+  tasksBox.classList.add("hidden");
+  idleBox.classList.add("hidden");
 };
 </script>
 </body>
