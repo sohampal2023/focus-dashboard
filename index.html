@@ -2,40 +2,27 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Dashboard</title>
+<title>Focus System</title>
 
 <style>
 *{box-sizing:border-box}
-html,body{
-  margin:0;height:100%;
-  font-family:Segoe UI,system-ui,sans-serif
-}
-body{
-  background:#020617;
-  color:#e5e7eb
-}
-.app{
-  display:grid;
-  grid-template-columns:280px 1fr;
-  height:100vh
-}
+html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
+body{background:#020617;color:#e5e7eb}
+
+.app{display:grid;grid-template-columns:260px 1fr;height:100vh}
 
 /* SIDEBAR */
 .sidebar{
   padding:20px;
-  border-right:1px solid #1e293b
+  border-right:1px solid #1e293b;
 }
-.sidebar h2{
-  text-align:center;
-  color:#7dd3fc;
-  margin-bottom:12px
-}
+.sidebar h2{text-align:center;color:#7dd3fc}
 .status{
-  padding:12px;
+  padding:10px;
   border:1px solid #334155;
-  border-radius:12px;
+  border-radius:10px;
   text-align:center;
-  margin-bottom:12px
+  margin-bottom:12px;
 }
 button{
   width:100%;
@@ -45,142 +32,82 @@ button{
   border:1px solid #334155;
   background:#020617;
   color:#e5e7eb;
-  cursor:pointer
+  cursor:pointer;
 }
-button:disabled{
-  opacity:.4;
-  cursor:not-allowed
-}
+button:disabled{opacity:.4;cursor:not-allowed}
 
 /* MAIN */
-.main{
-  padding:24px;
-  overflow:auto
-}
+.main{padding:24px;overflow:auto}
 .card{
   background:#020617;
   border:1px solid #334155;
-  border-radius:16px;
+  border-radius:14px;
   padding:20px;
-  margin-bottom:20px
+  margin-bottom:20px;
 }
 .hidden{display:none}
 
-/* SPEEDOMETER – calm car style */
+/* SPEEDOMETER (calm) */
 .speedo{
-  width:320px;
-  height:160px;
-  border-radius:320px 320px 0 0;
+  width:300px;height:150px;border-radius:300px 300px 0 0;
+  background:conic-gradient(from -90deg,
+    #7f1d1d,#92400e,#a16207,#14532d,#312e81);
   position:relative;
-  background:conic-gradient(
-    from -90deg,
-    #7f1d1d,   /* dark red */
-    #92400e,   /* amber */
-    #a16207,   /* yellow */
-    #14532d,   /* green */
-    #312e81    /* violet */
-  );
-  box-shadow:
-    inset 0 0 0 14px #020617,
-    inset 0 0 0 18px #1e293b;
-}
-.ticks{
-  position:absolute;
-  inset:0;
-  background:repeating-conic-gradient(
-    from -90deg,
-    rgba(255,255,255,.6) 0 2deg,
-    transparent 2deg 6deg
-  );
-  mask:radial-gradient(circle at bottom,transparent 58%,black 59%);
+  box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b;
 }
 .needle{
-  position:absolute;
-  width:5px;
-  height:120px;
-  background:#e5e7eb;
-  left:50%;
-  bottom:0;
+  position:absolute;width:4px;height:110px;
+  background:#e5e7eb;left:50%;bottom:0;
   transform-origin:bottom center;
   transform:rotate(-90deg);
-  transition:transform .6s cubic-bezier(.15,.85,.2,1)
+  transition:.6s cubic-bezier(.15,.85,.2,1);
 }
 .cap{
-  position:absolute;
-  width:16px;
-  height:16px;
-  background:#e5e7eb;
-  border-radius:50%;
-  left:50%;
-  bottom:0;
-  transform:translate(-50%,50%)
+  position:absolute;width:14px;height:14px;background:#e5e7eb;
+  border-radius:50%;left:50%;bottom:0;
+  transform:translate(-50%,50%);
 }
+.percent{text-align:center;font-size:36px;font-weight:800;color:#7dd3fc}
+.rating{text-align:center;font-size:18px;font-weight:700}
+.details{text-align:center;font-size:14px;color:#cbd5f5}
 
-/* TEXT */
-.percent{
-  text-align:center;
-  font-size:40px;
-  font-weight:800;
-  color:#7dd3fc
-}
-.rating{
-  text-align:center;
-  font-size:18px;
-  font-weight:700;
-  margin-top:6px
-}
-.details{
-  text-align:center;
-  font-size:14px;
-  color:#cbd5f5
-}
-
-table{
-  width:100%;
-  border-collapse:collapse;
-  font-size:14px
-}
-th,td{
-  border:1px solid #334155;
-  padding:8px;
-  text-align:center
-}
-th{background:#020617}
+/* TABLE */
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{border:1px solid #334155;padding:6px;text-align:center}
 </style>
 </head>
 
 <body>
 <div class="app">
 
+<!-- SIDEBAR -->
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
-  <div id="statusBox" class="status">Status: Logged out</div>
+  <div id="statusBox" class="status">Logged out</div>
   <button id="loginBtn" onclick="login()">Login</button>
   <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
-  <button id="dayBtn" onclick="dayEnd()" disabled>Day End</button>
+  <button id="dayBtn" onclick="startDayEnd()" disabled>Day End</button>
 </div>
 
+<!-- MAIN -->
 <div class="main">
 
 <!-- TASK VIEW -->
 <div id="taskBox" class="card hidden">
-  <div style="display:grid;grid-template-columns:1fr 340px;gap:20px">
+  <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
 
     <div>
       <h3>Assigned Tasks</h3>
       <div id="taskList"></div>
-
       <hr>
-
       <h4>Extra Work</h4>
       <div id="extraList"></div>
-      <button onclick="addExtra()">+ Add Extra Work</button>
+      <button onclick="addExtra()">+ Add Extra</button>
     </div>
 
     <div>
       <h3 style="text-align:center">Live Progress</h3>
       <div class="speedo">
-        <div class="ticks"></div>
         <div id="needle" class="needle"></div>
         <div class="cap"></div>
       </div>
@@ -194,14 +121,15 @@ th{background:#020617}
 
 <!-- LOGIN LOG -->
 <div id="logBox" class="card hidden">
-  <h3>Login / Logout Log</h3>
+  <h3>Login / Logout</h3>
   <table>
-    <thead>
-      <tr><th>Login</th><th>Logout</th><th>Reason</th></tr>
-    </thead>
+    <thead><tr><th>Login</th><th>Logout</th><th>Reason</th></tr></thead>
     <tbody id="logTable"></tbody>
   </table>
 </div>
+
+<!-- DAY END NEXT TASK -->
+<div id="nextTaskBox" class="card hidden"></div>
 
 <!-- REPORT -->
 <div id="reportBox" class="card hidden"></div>
@@ -211,8 +139,8 @@ th{background:#020617}
 
 <script>
 let UID=null;
-const key=k=>UID+"_"+k;
 const now=()=>new Date().toLocaleString();
+const key=k=>UID+"_"+k;
 
 /* LOGIN */
 function login(){
@@ -220,7 +148,7 @@ function login(){
   if(!UID)return;
 
   if(localStorage.getItem(key("ASK_REASON"))==="1"){
-    const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
+    const logs=JSON.parse(localStorage.getItem(key("LOGS")));
     const r=prompt("Reason for last logout?");
     logs[logs.length-1].reason=r||"Not specified";
     localStorage.setItem(key("LOGS"),JSON.stringify(logs));
@@ -231,14 +159,14 @@ function login(){
   logs.push({login:now(),logout:"-",reason:"-"});
   localStorage.setItem(key("LOGS"),JSON.stringify(logs));
 
-  statusBox.innerText="Status: Logged in";
+  statusBox.innerText="Logged in";
   loginBtn.disabled=true;
   bioBtn.disabled=false;
   dayBtn.disabled=false;
 
   initTasks();
-  loadTasks();
   renderLogs();
+  loadTasks();
   updateSpeedo();
 }
 
@@ -251,35 +179,7 @@ function bioBreak(){
   location.reload();
 }
 
-/* DAY END */
-function dayEnd(){
-  const logs=JSON.parse(localStorage.getItem(key("LOGS")));
-  logs[logs.length-1].logout=now();
-  logs[logs.length-1].reason="Day Completed";
-
-  const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
-  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
-
-  const percent=Math.round(((tasks.filter(t=>t.done).length + extras.filter(e=>e.done).length)/tasks.length)*100);
-
-  reportBox.innerHTML=`
-    <h3>Daily Report Card</h3>
-    <div class="percent">${percent}%</div>
-    <div class="rating">${getLabel(percent)}</div>
-    <div class="details">
-      Assigned: ${tasks.length} |
-      Done: ${tasks.filter(t=>t.done).length} |
-      Extra Done: ${extras.filter(e=>e.done).length}
-    </div>
-  `;
-  reportBox.classList.remove("hidden");
-
-  localStorage.removeItem(key("LOGS"));
-  taskBox.classList.add("hidden");
-  logBox.classList.add("hidden");
-}
-
-/* TASKS */
+/* TASK INIT */
 function initTasks(){
   if(!localStorage.getItem(key("TASKS"))){
     localStorage.setItem(key("TASKS"),JSON.stringify([
@@ -293,12 +193,13 @@ function initTasks(){
   logBox.classList.remove("hidden");
 }
 
+/* LOAD TASKS */
 function loadTasks(){
   taskList.innerHTML="";
   extraList.innerHTML="";
 
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
-  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
+  const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
 
   tasks.forEach(t=>{
     const c=document.createElement("input");
@@ -329,30 +230,31 @@ function loadTasks(){
   });
 }
 
+/* ADD EXTRA */
 function addExtra(){
-  const e=prompt("Extra work?");
-  if(!e)return;
-  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
-  extras.push({name:e,done:false});
+  const name=prompt("Extra work?");
+  if(!name)return;
+  const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
+  extras.push({name,done:false});
   localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
   loadTasks();
-  updateSpeedo();
 }
 
+/* SAVE + SPEEDO */
 function save(tasks,extras){
   localStorage.setItem(key("TASKS"),JSON.stringify(tasks));
   localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
   updateSpeedo();
 }
 
-/* SPEEDO + LABEL */
+/* SPEEDO */
 function updateSpeedo(){
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
-  const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
+  const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
 
-  const percent=Math.round(((tasks.filter(t=>t.done).length + extras.filter(e=>e.done).length)/tasks.length)*100);
-  const capped=Math.min(percent,300);
-  const angle=(capped/300)*180 - 90;
+  const done=tasks.filter(t=>t.done).length + extras.filter(e=>e.done).length;
+  const percent=Math.round((done/tasks.length)*100);
+  const angle=(Math.min(percent,300)/300)*180 - 90;
 
   needle.style.transform=`rotate(${angle}deg)`;
   livePercent.innerText=percent+"%";
@@ -360,16 +262,62 @@ function updateSpeedo(){
   liveDetails.innerText=`Assigned: ${tasks.length} | Extra: ${extras.length}`;
 }
 
+/* LABEL */
 function getLabel(p){
-  if(p < 40) return "Poor";
-  if(p < 60) return "Average";
-  if(p < 80) return "Good";
-  if(p < 100) return "Excellent";
-  return "Fabulous";
+  if(p<40)return"Poor";
+  if(p<60)return"Average";
+  if(p<80)return"Good";
+  if(p<100)return"Excellent";
+  return"Fabulous";
 }
 
+/* DAY END STEP 1 */
+function startDayEnd(){
+  nextTaskBox.innerHTML="<h3>Enter Next Day Tasks</h3>";
+  for(let i=0;i<5;i++){
+    nextTaskBox.innerHTML+=`<input id="nt${i}" style="width:100%;margin:6px 0">`;
+  }
+  nextTaskBox.innerHTML+=`<button onclick="finalDayEnd()">Submit</button>`;
+  nextTaskBox.classList.remove("hidden");
+}
+
+/* DAY END FINAL */
+function finalDayEnd(){
+  const next=[];
+  for(let i=0;i<5;i++){
+    const v=document.getElementById("nt"+i).value.trim();
+    if(v)next.push(v);
+  }
+  localStorage.setItem(key("NEXT_TASKS"),JSON.stringify(next));
+
+  const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
+  const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
+
+  const undone=tasks.filter(t=>!t.done);
+  localStorage.setItem(key("TASKS"),JSON.stringify(undone));
+
+  const percent=Math.round(((tasks.length-undone.length+extras.filter(e=>e.done).length)/tasks.length)*100);
+
+  reportBox.innerHTML=`
+    <h3>Daily Report</h3>
+    <div class="percent">${percent}%</div>
+    <div class="rating">${getLabel(percent)}</div>
+  `;
+  reportBox.classList.remove("hidden");
+
+  localStorage.removeItem(key("LOGS"));
+  taskBox.classList.add("hidden");
+  logBox.classList.add("hidden");
+  nextTaskBox.classList.add("hidden");
+
+  loginBtn.disabled=false;
+  bioBtn.disabled=true;
+  dayBtn.disabled=true;
+}
+
+/* LOG TABLE */
 function renderLogs(){
-  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
+  const logs=JSON.parse(localStorage.getItem(key("LOGS")));
   logTable.innerHTML="";
   logs.forEach(l=>{
     logTable.innerHTML+=`<tr><td>${l.login}</td><td>${l.logout}</td><td>${l.reason}</td></tr>`;
