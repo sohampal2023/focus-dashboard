@@ -3,13 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <title>Focus Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
 <style>
 *{box-sizing:border-box}
-body{
+html,body{
   margin:0;
-  height:100vh;
+  height:100%;
   font-family:Segoe UI,system-ui,sans-serif;
+}
+body{
   background:#020617;
   color:#e5e7eb;
 }
@@ -21,8 +24,10 @@ body{
 
 /* SIDEBAR */
 .sidebar{
+  background:#020617;
   border-right:1px solid #1e293b;
   padding:20px;
+  z-index:10;
 }
 .sidebar h2{
   margin:0 0 20px;
@@ -36,7 +41,7 @@ body{
   text-align:center;
   margin-bottom:20px;
 }
-button{
+.sidebar button{
   width:100%;
   padding:14px;
   margin-bottom:10px;
@@ -49,30 +54,37 @@ button{
 
 /* MAIN */
 .main{
+  position:relative;
   padding:30px;
 }
 .hidden{display:none}
 
-/* POPUP */
+/* POPUP (ONLY MAIN AREA) */
 .overlay{
-  position:fixed;
+  position:absolute;
   inset:0;
-  background:rgba(0,0,0,.8);
+  background:rgba(0,0,0,.85);
   display:flex;
   align-items:center;
   justify-content:center;
-  z-index:999;
+  z-index:5;
 }
 .popup{
   background:#020617;
   border:2px solid #38bdf8;
   border-radius:16px;
-  padding:25px;
-  width:320px;
+  padding:28px;
+  width:340px;
   text-align:center;
 }
 .popup button{
+  width:100%;
+  padding:14px;
   margin-top:12px;
+  border:none;
+  border-radius:12px;
+  font-weight:700;
+  cursor:pointer;
 }
 .study{background:#22c55e;color:#022c22}
 .distract{background:#ef4444;color:#450a0a}
@@ -82,6 +94,7 @@ button{
 <body>
 <div class="app">
 
+  <!-- SIDEBAR -->
   <div class="sidebar">
     <h2>FOCUS</h2>
     <div id="status" class="status">Logged out</div>
@@ -91,25 +104,28 @@ button{
     <button id="historyBtn">History</button>
   </div>
 
+  <!-- MAIN -->
   <div class="main">
     <h1>Dashboard</h1>
     <p id="score">Score: 100%</p>
+
     <div id="tasks" class="hidden">
       <h3>Tasks</h3>
       <p>No tasks yet</p>
     </div>
+
+    <!-- POPUP -->
+    <div id="overlay" class="overlay hidden">
+      <div class="popup">
+        <h3>Focus Check</h3>
+        <p>Are you studying?</p>
+        <button id="studyBtn" class="study">Studying</button>
+        <button id="distractBtn" class="distract">Distracted</button>
+      </div>
+    </div>
+
   </div>
 
-</div>
-
-<!-- POPUP -->
-<div id="overlay" class="overlay hidden">
-  <div class="popup">
-    <h3>Focus Check</h3>
-    <p>Are you studying?</p>
-    <button id="studyBtn" class="study">Studying</button>
-    <button id="distractBtn" class="distract">Distracted</button>
-  </div>
 </div>
 
 <script type="module">
@@ -140,7 +156,7 @@ const scoreText = document.getElementById("score");
 let score = 100;
 
 /* BUTTONS */
-document.getElementById("loginBtn").onclick = async () => {
+loginBtn.onclick = async () => {
   const email = prompt("Email");
   const pass = prompt("Password");
   if(!email || !pass) return;
@@ -151,38 +167,33 @@ document.getElementById("loginBtn").onclick = async () => {
   }
 };
 
-document.getElementById("bioBtn").onclick = async () => {
+bioBtn.onclick = async () => {
   await signOut(auth);
 };
 
-document.getElementById("studyBtn").onclick = () => {
+studyBtn.onclick = () => {
   overlay.classList.add("hidden");
 };
 
-document.getElementById("distractBtn").onclick = () => {
+distractBtn.onclick = () => {
   score -= 2;
   scoreText.innerText = "Score: " + score + "%";
   overlay.classList.add("hidden");
 };
 
-document.getElementById("historyBtn").onclick = () => {
-  alert("History later");
-};
+historyBtn.onclick = () => alert("History later");
+dayEndBtn.onclick = () => alert("Day end later");
 
-document.getElementById("dayEndBtn").onclick = () => {
-  alert("Day end later");
-};
-
-/* AUTH STATE */
+/* AUTH */
 onAuthStateChanged(auth,(user)=>{
   if(user){
     status.innerText = "Logged in";
     tasks.classList.remove("hidden");
-    overlay.classList.remove("hidden"); // ASK IMMEDIATELY
+    overlay.classList.remove("hidden");   // ASK ONLY AFTER LOGIN
   }else{
     status.innerText = "Logged out";
     tasks.classList.add("hidden");
-    overlay.classList.add("hidden");
+    overlay.classList.add("hidden");      // NEVER SHOW WHEN LOGGED OUT
   }
 });
 </script>
