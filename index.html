@@ -6,53 +6,145 @@
 
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
-body{background:#020617;color:#e5e7eb}
-.app{display:grid;grid-template-columns:280px 1fr;height:100vh}
+html,body{
+  margin:0;height:100%;
+  font-family:Segoe UI,system-ui,sans-serif
+}
+body{
+  background:#020617;
+  color:#e5e7eb
+}
+.app{
+  display:grid;
+  grid-template-columns:280px 1fr;
+  height:100vh
+}
 
 /* SIDEBAR */
-.sidebar{padding:20px;border-right:1px solid #1e293b}
-.sidebar h2{text-align:center;color:#38bdf8;margin-bottom:12px}
-.status{padding:12px;border:1px solid #334155;border-radius:12px;text-align:center;margin-bottom:12px}
-button{
-  width:100%;padding:12px;margin:6px 0;border-radius:10px;
-  border:1px solid #334155;background:#020617;color:#e5e7eb;cursor:pointer
+.sidebar{
+  padding:20px;
+  border-right:1px solid #1e293b
 }
-button:disabled{opacity:.4;cursor:not-allowed}
+.sidebar h2{
+  text-align:center;
+  color:#7dd3fc;
+  margin-bottom:12px
+}
+.status{
+  padding:12px;
+  border:1px solid #334155;
+  border-radius:12px;
+  text-align:center;
+  margin-bottom:12px
+}
+button{
+  width:100%;
+  padding:12px;
+  margin:6px 0;
+  border-radius:10px;
+  border:1px solid #334155;
+  background:#020617;
+  color:#e5e7eb;
+  cursor:pointer
+}
+button:disabled{
+  opacity:.4;
+  cursor:not-allowed
+}
 
 /* MAIN */
-.main{padding:24px;overflow:auto}
-.card{background:#020617;border:1px solid #334155;border-radius:16px;padding:20px;margin-bottom:20px}
+.main{
+  padding:24px;
+  overflow:auto
+}
+.card{
+  background:#020617;
+  border:1px solid #334155;
+  border-radius:16px;
+  padding:20px;
+  margin-bottom:20px
+}
 .hidden{display:none}
 
-/* SPEEDOMETER (task view only) */
+/* SPEEDOMETER – calm car style */
 .speedo{
-  width:320px;height:160px;border-radius:320px 320px 0 0;position:relative;
-  background:conic-gradient(from -90deg,#dc2626,#f97316,#facc15,#22c55e,#8b5cf6);
-  box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b;
+  width:320px;
+  height:160px;
+  border-radius:320px 320px 0 0;
+  position:relative;
+  background:conic-gradient(
+    from -90deg,
+    #7f1d1d,   /* dark red */
+    #92400e,   /* amber */
+    #a16207,   /* yellow */
+    #14532d,   /* green */
+    #312e81    /* violet */
+  );
+  box-shadow:
+    inset 0 0 0 14px #020617,
+    inset 0 0 0 18px #1e293b;
 }
 .ticks{
-  position:absolute;inset:0;
-  background:repeating-conic-gradient(from -90deg,#fff 0 2deg,transparent 2deg 6deg);
+  position:absolute;
+  inset:0;
+  background:repeating-conic-gradient(
+    from -90deg,
+    rgba(255,255,255,.6) 0 2deg,
+    transparent 2deg 6deg
+  );
   mask:radial-gradient(circle at bottom,transparent 58%,black 59%);
 }
 .needle{
-  position:absolute;width:6px;height:120px;background:#fff;
-  left:50%;bottom:0;transform-origin:bottom center;
+  position:absolute;
+  width:5px;
+  height:120px;
+  background:#e5e7eb;
+  left:50%;
+  bottom:0;
+  transform-origin:bottom center;
   transform:rotate(-90deg);
   transition:transform .6s cubic-bezier(.15,.85,.2,1)
 }
 .cap{
-  position:absolute;width:18px;height:18px;background:#fff;border-radius:50%;
-  left:50%;bottom:0;transform:translate(-50%,50%)
+  position:absolute;
+  width:16px;
+  height:16px;
+  background:#e5e7eb;
+  border-radius:50%;
+  left:50%;
+  bottom:0;
+  transform:translate(-50%,50%)
 }
 
-.percent{text-align:center;font-size:40px;font-weight:800;color:#38bdf8}
-.rating{text-align:center;font-size:18px;font-weight:700;margin-top:6px}
-.details{text-align:center;font-size:14px;color:#cbd5f5}
+/* TEXT */
+.percent{
+  text-align:center;
+  font-size:40px;
+  font-weight:800;
+  color:#7dd3fc
+}
+.rating{
+  text-align:center;
+  font-size:18px;
+  font-weight:700;
+  margin-top:6px
+}
+.details{
+  text-align:center;
+  font-size:14px;
+  color:#cbd5f5
+}
 
-table{width:100%;border-collapse:collapse;font-size:14px}
-th,td{border:1px solid #334155;padding:8px;text-align:center}
+table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:14px
+}
+th,td{
+  border:1px solid #334155;
+  padding:8px;
+  text-align:center
+}
 th{background:#020617}
 </style>
 </head>
@@ -73,13 +165,16 @@ th{background:#020617}
 <!-- TASK VIEW -->
 <div id="taskBox" class="card hidden">
   <div style="display:grid;grid-template-columns:1fr 340px;gap:20px">
+
     <div>
       <h3>Assigned Tasks</h3>
       <div id="taskList"></div>
+
       <hr>
+
       <h4>Extra Work</h4>
       <div id="extraList"></div>
-      <button onclick="addExtra()">+ Add Extra</button>
+      <button onclick="addExtra()">+ Add Extra Work</button>
     </div>
 
     <div>
@@ -93,6 +188,7 @@ th{background:#020617}
       <div id="liveRating" class="rating">Poor</div>
       <div id="liveDetails" class="details"></div>
     </div>
+
   </div>
 </div>
 
@@ -115,8 +211,8 @@ th{background:#020617}
 
 <script>
 let UID=null;
-const now=()=>new Date().toLocaleString();
 const key=k=>UID+"_"+k;
+const now=()=>new Date().toLocaleString();
 
 /* LOGIN */
 function login(){
@@ -164,7 +260,7 @@ function dayEnd(){
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
   const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
 
-  const percent=Math.round(((tasks.filter(t=>t.done).length+extras.length)/tasks.length)*100);
+  const percent=Math.round(((tasks.filter(t=>t.done).length + extras.filter(e=>e.done).length)/tasks.length)*100);
 
   reportBox.innerHTML=`
     <h3>Daily Report Card</h3>
@@ -173,7 +269,7 @@ function dayEnd(){
     <div class="details">
       Assigned: ${tasks.length} |
       Done: ${tasks.filter(t=>t.done).length} |
-      Extra: ${extras.length}
+      Extra Done: ${extras.filter(e=>e.done).length}
     </div>
   `;
   reportBox.classList.remove("hidden");
@@ -208,12 +304,28 @@ function loadTasks(){
     const c=document.createElement("input");
     c.type="checkbox";
     c.checked=t.done;
-    c.onchange=()=>{t.done=c.checked;save(tasks,extras)};
+    c.onchange=()=>{
+      if(!confirm("Confirm task completion?")){
+        c.checked=!c.checked;return;
+      }
+      t.done=c.checked;
+      save(tasks,extras);
+    };
     taskList.append(c," "+t.name,document.createElement("br"));
   });
 
   extras.forEach(e=>{
-    extraList.append("✔ "+e.name,document.createElement("br"));
+    const c=document.createElement("input");
+    c.type="checkbox";
+    c.checked=e.done;
+    c.onchange=()=>{
+      if(!confirm("Confirm extra work completion?")){
+        c.checked=!c.checked;return;
+      }
+      e.done=c.checked;
+      save(tasks,extras);
+    };
+    extraList.append(c," "+e.name,document.createElement("br"));
   });
 }
 
@@ -221,7 +333,7 @@ function addExtra(){
   const e=prompt("Extra work?");
   if(!e)return;
   const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
-  extras.push({name:e});
+  extras.push({name:e,done:false});
   localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
   loadTasks();
   updateSpeedo();
@@ -238,7 +350,7 @@ function updateSpeedo(){
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
   const extras=JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
 
-  const percent=Math.round(((tasks.filter(t=>t.done).length+extras.length)/tasks.length)*100);
+  const percent=Math.round(((tasks.filter(t=>t.done).length + extras.filter(e=>e.done).length)/tasks.length)*100);
   const capped=Math.min(percent,300);
   const angle=(capped/300)*180 - 90;
 
