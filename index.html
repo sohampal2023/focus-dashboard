@@ -94,7 +94,7 @@ body{
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
 
-  <div id="status" class="status">Status: Logged out</div>
+  <div id="statusBox" class="status">Status: Logged out</div>
 
   <div id="idleBox" class="status hidden">
     Focus Timer: <span id="idleTime">30</span>s
@@ -111,7 +111,6 @@ body{
 
 <!-- MAIN -->
 <div class="main">
-
   <div id="tasksBox" class="card hidden">
     <h3>Assigned Tasks</h3>
     <div id="taskList"></div>
@@ -119,7 +118,6 @@ body{
 
   <div id="dayEndBox" class="card hidden"></div>
   <div id="reportBox" class="card hidden"></div>
-
 </div>
 </div>
 
@@ -128,7 +126,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebas
 import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
 
-/* FIREBASE CONFIG */
+/* FIREBASE */
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
   authDomain: "focus-dashboard-5965a.firebaseapp.com",
@@ -141,6 +139,15 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+/* DOM REFERENCES (CRITICAL FIX) */
+const statusEl  = document.getElementById("statusBox");
+const tasksBox  = document.getElementById("tasksBox");
+const taskList  = document.getElementById("taskList");
+const idleBox   = document.getElementById("idleBox");
+const idleTime  = document.getElementById("idleTime");
+const dayEndBox = document.getElementById("dayEndBox");
+const reportBox = document.getElementById("reportBox");
 
 /* CONSTANTS */
 const IDLE_LIMIT = 30;
@@ -184,7 +191,7 @@ window.login = async function(){
     localStorage.setItem(ukey(SESSION_START),Date.now());
     localStorage.setItem(ukey(PRODUCTIVE_TIME),"0");
 
-    status.innerText = "Status: Logged in";
+    statusEl.innerText = "Status: Logged in";
     tasksBox.classList.remove("hidden");
     idleBox.classList.remove("hidden");
 
@@ -198,17 +205,17 @@ window.login = async function(){
 
 /* LOAD TASKS */
 function loadTasks(){
-  taskList.innerHTML = "";
+  taskList.innerHTML="";
   const data = JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
   data.forEach(t=>{
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = t.done;
-    cb.onchange = ()=>{
-      t.done = cb.checked;
+    const cb=document.createElement("input");
+    cb.type="checkbox";
+    cb.checked=t.done;
+    cb.onchange=()=>{
+      t.done=cb.checked;
       localStorage.setItem(ukey(CURRENT_TASKS),JSON.stringify(data));
     };
-    const d = document.createElement("div");
+    const d=document.createElement("div");
     d.className="task";
     d.append(cb," "+t.name);
     taskList.appendChild(d);
@@ -218,23 +225,23 @@ function loadTasks(){
 /* IDLE TIMER */
 function startIdleTimer(){
   clearInterval(idleTimer);
-  idleRemaining = IDLE_LIMIT;
-  idleTime.innerText = idleRemaining;
-  lastActiveStamp = Date.now();
+  idleRemaining=IDLE_LIMIT;
+  idleTime.innerText=idleRemaining;
+  lastActiveStamp=Date.now();
 
-  idleTimer = setInterval(()=>{
+  idleTimer=setInterval(()=>{
     idleRemaining--;
-    idleTime.innerText = idleRemaining;
+    idleTime.innerText=idleRemaining;
     if(idleRemaining<=0){
       idleLogout();
     }
   },1000);
 }
 
-window.resetIdle = function(){
-  const now = Date.now();
-  const productive = Math.floor((now-lastActiveStamp)/1000);
-  const prev = Number(localStorage.getItem(ukey(PRODUCTIVE_TIME))||0);
+window.resetIdle=function(){
+  const now=Date.now();
+  const productive=Math.floor((now-lastActiveStamp)/1000);
+  const prev=Number(localStorage.getItem(ukey(PRODUCTIVE_TIME))||0);
   localStorage.setItem(ukey(PRODUCTIVE_TIME),prev+productive);
   startIdleTimer();
 };
@@ -243,35 +250,33 @@ async function idleLogout(){
   clearInterval(idleTimer);
   alert("Idle detected. Auto logout.");
   await signOut(auth);
-  status.innerText="Status: Logged out (Idle)";
+  statusEl.innerText="Status: Logged out (Idle)";
   tasksBox.classList.add("hidden");
   idleBox.classList.add("hidden");
 }
 
 /* DAY END */
-window.openDayEnd = function(){
-  dayEndBox.innerHTML = `
-    <h3>Confirm Day End</h3>
-    <button onclick="confirmDayEnd()">Confirm</button>
-  `;
+window.openDayEnd=function(){
+  dayEndBox.innerHTML=`<h3>Confirm Day End</h3>
+  <button onclick="confirmDayEnd()">Confirm</button>`;
   dayEndBox.classList.remove("hidden");
 };
 
-window.confirmDayEnd = async function(){
+window.confirmDayEnd=async function(){
   clearInterval(idleTimer);
 
-  const tasks = JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
-  const done = tasks.filter(t=>t.done).length;
-  const taskPercent = tasks.length?Math.round(done/tasks.length*100):0;
+  const tasks=JSON.parse(localStorage.getItem(ukey(CURRENT_TASKS))||"[]");
+  const done=tasks.filter(t=>t.done).length;
+  const taskPercent=tasks.length?Math.round(done/tasks.length*100):0;
 
-  const productive = Number(localStorage.getItem(ukey(PRODUCTIVE_TIME))||0);
-  const total = Math.floor((Date.now()-Number(localStorage.getItem(ukey(SESSION_START))))/1000);
-  const productivePercent = total?Math.min(100,Math.round(productive/total*100)):0;
+  const productive=Number(localStorage.getItem(ukey(PRODUCTIVE_TIME))||0);
+  const total=Math.floor((Date.now()-Number(localStorage.getItem(ukey(SESSION_START))))/1000);
+  const productivePercent=total?Math.min(100,Math.round(productive/total*100)):0;
 
-  const finalScore = Math.round(taskPercent*0.7 + productivePercent*0.3);
-  const grade = finalScore>=80?"EXCELLENT":finalScore>=60?"GOOD":finalScore>=40?"AVERAGE":"POOR";
+  const finalScore=Math.round(taskPercent*0.7+productivePercent*0.3);
+  const grade=finalScore>=80?"EXCELLENT":finalScore>=60?"GOOD":finalScore>=40?"AVERAGE":"POOR";
 
-  reportBox.innerHTML = `
+  reportBox.innerHTML=`
     <h3>Report Card</h3>
     Task Completion: ${taskPercent}%<br>
     Productive Time: ${productivePercent}%<br><br>
@@ -286,10 +291,10 @@ window.confirmDayEnd = async function(){
 };
 
 /* BIO BREAK */
-window.bioBreak = async function(){
+window.bioBreak=async function(){
   clearInterval(idleTimer);
   await signOut(auth);
-  status.innerText="Status: Bio Break";
+  statusEl.innerText="Status: Bio Break";
   tasksBox.classList.add("hidden");
   idleBox.classList.add("hidden");
 };
