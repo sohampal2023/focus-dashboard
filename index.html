@@ -81,7 +81,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <body>
 <div class="app">
 
-<!-- SIDEBAR -->
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
 
@@ -98,7 +97,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
 </div>
 
-<!-- MAIN -->
 <div class="main">
 
 <div id="taskBox" class="card hidden">
@@ -155,27 +153,18 @@ let idleRemaining=1800;
 let idleMiss=0;
 let penalty=0;
 
-/* ✅ TAB VISIBILITY FLAG */
-let tabActive=true;
-
-document.addEventListener("visibilitychange",()=>{
-  tabActive=!document.hidden;
-});
-
 const now=()=>new Date().toLocaleString();
 const key=k=>UID+"_"+k;
 
-/* IDLE */
+/* 🔒 HARD IDLE TIMER – ALWAYS RUNS */
 function startIdle(){
   clearInterval(idleTimer);
-  idleRemaining=1800000;
+  idleRemaining=1800;
   idleMiss=0;
   idleBox.classList.remove("hidden");
   updateIdle();
 
   idleTimer=setInterval(()=>{
-    if(!tabActive) return;   // ✅ pause idle when tab/app inactive
-
     idleRemaining--;
     updateIdle();
 
@@ -189,6 +178,10 @@ function startIdle(){
         autoLogout();
       }
     }
+
+    if(idleRemaining<=0){
+      autoLogout();
+    }
   },1000);
 }
 
@@ -199,15 +192,17 @@ function updateIdle(){
 }
 function resetIdle(){startIdle()}
 
+/* AUTO LOGOUT */
 function autoLogout(){
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
+
   const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
   if(logs.length){
     logs[logs.length-1].logout=now();
+    logs[logs.length-1].reason="Idle timeout";
     localStorage.setItem(key("LOGS"),JSON.stringify(logs));
   }
-  localStorage.setItem(key("ASK_REASON"),"1");
   location.reload();
 }
 
@@ -217,16 +212,6 @@ function login(){
   if(!UID)return;
 
   localStorage.removeItem(key("DAY_ENDED"));
-
-  if(localStorage.getItem(key("ASK_REASON"))==="1"){
-    const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
-    if(logs.length){
-      logs[logs.length-1].reason=
-        prompt("Reason for last logout?")||"Idle timeout";
-      localStorage.setItem(key("LOGS"),JSON.stringify(logs));
-    }
-    localStorage.removeItem(key("ASK_REASON"));
-  }
 
   const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
   logs.push({login:now(),logout:"-",reason:"-"});
@@ -249,16 +234,17 @@ function login(){
 function bioBreak(){
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
+
   const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
   if(logs.length){
     logs[logs.length-1].logout=now();
+    logs[logs.length-1].reason="Bio break";
     localStorage.setItem(key("LOGS"),JSON.stringify(logs));
   }
-  localStorage.setItem(key("ASK_REASON"),"1");
   location.reload();
 }
 
-/* TASK SETUP */
+/* TASK LOGIC (UNCHANGED) */
 function setupTasks(){
   const carried=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
   const next=JSON.parse(localStorage.getItem(key("NEXT_TASKS"))||"[]");
@@ -281,7 +267,6 @@ function setupTasks(){
   reportBox.classList.add("hidden");
 }
 
-/* TASK UI */
 function loadTasks(){
   taskList.innerHTML="";
   extraList.innerHTML="";
@@ -382,7 +367,6 @@ function finalDayEnd(){
 
   localStorage.setItem(key("TASKS"),JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"),JSON.stringify([]));
-
   localStorage.removeItem(key("LOGS"));
   logTable.innerHTML="";
 
@@ -402,7 +386,6 @@ function finalDayEnd(){
   nextDayBox.classList.add("hidden");
 
   statusBox.innerText="Day End – Thank you";
-
   loginBtn.disabled=false;
   bioBtn.disabled=true;
   dayBtn.disabled=true;
