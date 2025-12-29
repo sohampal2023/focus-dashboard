@@ -6,11 +6,12 @@
 
 <style>
 *{box-sizing:border-box}
-body{
-  margin:0;
-  height:100vh;
+html,body{
+  margin:0;height:100%;
   font-family:Segoe UI,system-ui,sans-serif;
-  background:#020617;
+}
+body{
+  background:linear-gradient(135deg,#0f172a,#020617);
   color:#e5e7eb;
 }
 .app{
@@ -20,42 +21,64 @@ body{
 }
 .sidebar{
   padding:20px;
+  display:flex;
+  flex-direction:column;
+  gap:18px;
   border-right:1px solid #1e293b;
 }
-.status{
-  padding:14px;
-  border:1px solid #334155;
-  border-radius:12px;
-  margin-bottom:10px;
+.sidebar h2{
   text-align:center;
+  color:#38bdf8;
+  margin:0;
 }
-button{
+.status{
+  padding:16px;
+  border-radius:16px;
+  border:2px solid #334155;
+  text-align:center;
+  font-weight:700;
+  background:#020617;
+}
+.nav button{
   width:100%;
-  padding:12px;
-  margin-top:8px;
+  padding:14px;
+  margin-bottom:10px;
+  border-radius:12px;
+  border:1px solid #1e293b;
   background:#020617;
   color:#e5e7eb;
-  border:1px solid #334155;
-  border-radius:10px;
+  font-weight:600;
   cursor:pointer;
 }
-button:disabled{opacity:.4}
-.main{padding:20px}
+.nav button:disabled{
+  opacity:.4;
+  cursor:not-allowed;
+}
+.main{
+  padding:25px;
+  overflow:auto;
+}
 .card{
-  border:1px solid #334155;
-  border-radius:14px;
+  background:#020617;
+  border:1px solid #1e293b;
+  border-radius:16px;
   padding:20px;
   margin-bottom:20px;
 }
-.task{display:flex;gap:10px;margin:8px 0}
 .hidden{display:none}
-input{
+.task{
+  display:flex;
+  gap:10px;
+  margin:10px 0;
+}
+input.nextTask{
   width:100%;
   padding:8px;
+  margin:6px 0;
+  border-radius:8px;
+  border:1px solid #334155;
   background:#020617;
   color:#e5e7eb;
-  border:1px solid #334155;
-  border-radius:8px;
 }
 </style>
 </head>
@@ -64,10 +87,14 @@ input{
 <div class="app">
 
 <div class="sidebar">
-  <h3>FOCUS SYSTEM</h3>
-  <div id="status" class="status">Logged out</div>
-  <button onclick="login()">Login</button>
-  <button id="dayEndBtn" onclick="openDayEnd()" disabled>Day End</button>
+  <h2>FOCUS SYSTEM</h2>
+
+  <div id="statusBox" class="status">Status: Logged out</div>
+
+  <div class="nav">
+    <button onclick="login()">Login</button>
+    <button id="dayEndBtn" onclick="openDayEnd()" disabled>Day End</button>
+  </div>
 </div>
 
 <div class="main">
@@ -106,7 +133,7 @@ let UID = null;
 let currentTasks = [];
 
 /* DOM */
-const statusEl = document.getElementById("status");
+const statusEl = document.getElementById("statusBox");
 const taskList = document.getElementById("taskList");
 const tasksBox = document.getElementById("tasksBox");
 const dayEndBox = document.getElementById("dayEndBox");
@@ -126,57 +153,70 @@ window.login = async ()=>{
     const ref = doc(db,"users",UID);
     const snap = await getDoc(ref);
 
+    /* First-time user */
     if(!snap.exists()){
       await setDoc(ref,{
         email,
         currentTasks:[
           {name:"Study core subject",done:false},
-          {name:"Revise notes",done:false}
+          {name:"Revise notes",done:false},
+          {name:"Practice questions",done:false}
         ],
         dayClosed:false,
-        idleCount:0,
         sessionStart:Date.now()
       });
     }
 
     const data = (await getDoc(ref)).data();
 
+    /* GUARANTEED ARRAY */
+    const baseTasks = Array.isArray(data.currentTasks)
+      ? data.currentTasks
+      : [];
+
+    /* DAY LOGIC */
     if(data.dayClosed){
-      const carry = data.currentTasks.filter(t=>!t.done);
+      const carry = baseTasks.filter(t=>!t.done);
+
       await updateDoc(ref,{
-        currentTasks:carry,
+        currentTasks: carry,
         dayClosed:false,
         sessionStart:Date.now()
       });
+
       currentTasks = carry;
     }else{
-      currentTasks = data.currentTasks;
+      currentTasks = baseTasks;
     }
 
     renderTasks();
-    statusEl.innerText="Logged in";
+
+    statusEl.innerText = "Status: Logged in";
     tasksBox.classList.remove("hidden");
-    dayEndBtn.disabled=false;
+    dayEndBtn.disabled = false;
 
   }catch(e){
-    alert("Login failed:\n"+e.message);
+    console.error(e);
+    alert(e.code + "\n" + e.message);
   }
 };
 
-/* TASKS */
+/* TASK RENDER */
 function renderTasks(){
   taskList.innerHTML="";
-  currentTasks.forEach((t,i)=>{
+  currentTasks.forEach((t)=>{
     const cb=document.createElement("input");
     cb.type="checkbox";
     cb.checked=t.done;
     cb.onchange=async()=>{
-      if(!confirm("Confirm change?")){
+      if(!confirm("Confirm task status change?")){
         cb.checked=!cb.checked;
         return;
       }
       t.done = cb.checked;
-      await updateDoc(doc(db,"users",UID),{ currentTasks });
+      await updateDoc(doc(db,"users",UID),{
+        currentTasks
+      });
     };
     const d=document.createElement("div");
     d.className="task";
@@ -187,9 +227,9 @@ function renderTasks(){
 
 /* DAY END */
 window.openDayEnd = ()=>{
-  let html="<h3>Next Day Tasks</h3>";
+  let html="<h3>Enter Next Day Tasks</h3>";
   for(let i=0;i<5;i++){
-    html+=`<input class="nextTask" placeholder="Task ${i+1}">`;
+    html+=`<input class="nextTask" placeholder="Next Day Task ${i+1}">`;
   }
   html+=`<br><button onclick="confirmDayEnd()">Submit</button>`;
   dayEndBox.innerHTML=html;
@@ -197,22 +237,33 @@ window.openDayEnd = ()=>{
 };
 
 window.confirmDayEnd = async ()=>{
-  const done=currentTasks.filter(t=>t.done).length;
-  const percent=Math.round(done/currentTasks.length*100);
-  const grade=percent>=80?"EXCELLENT":percent>=60?"GOOD":percent>=40?"AVERAGE":"POOR";
+  const done = currentTasks.filter(t=>t.done).length;
+  const percent = currentTasks.length
+    ? Math.round(done/currentTasks.length*100)
+    : 0;
+
+  const grade =
+    percent>=80?"EXCELLENT":
+    percent>=60?"GOOD":
+    percent>=40?"AVERAGE":"POOR";
 
   await addDoc(collection(db,"users",UID,"reports"),{
-    tasks:currentTasks,
-    taskPercent:percent,
+    tasks: currentTasks,
+    taskPercent: percent,
     grade,
-    createdAt:serverTimestamp()
+    createdAt: serverTimestamp()
   });
 
   await updateDoc(doc(db,"users",UID),{
     dayClosed:true
   });
 
-  reportBox.innerHTML=`<h3>Report</h3>${percent}% - ${grade}`;
+  reportBox.innerHTML = `
+    <h3>Report Card</h3>
+    Task Completion: ${percent}%<br>
+    Grade: <b>${grade}</b>
+  `;
+
   reportBox.classList.remove("hidden");
   tasksBox.classList.add("hidden");
   dayEndBox.classList.add("hidden");
