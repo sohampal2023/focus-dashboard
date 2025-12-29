@@ -1,96 +1,115 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>User Dashboard</title>
+<title>User Focus Dashboard</title>
 
 <style>
-body{background:#020617;color:#e5e7eb;font-family:Segoe UI;margin:0}
-.app{display:grid;grid-template-columns:260px 1fr;height:100vh}
+body{margin:0;font-family:Segoe UI;background:#020617;color:#e5e7eb}
+.app{display:grid;grid-template-columns:280px 1fr;height:100vh}
 .sidebar{padding:20px;border-right:1px solid #1e293b}
 .main{padding:20px}
-button{width:100%;padding:10px;margin:6px 0;background:#020617;color:#fff;border:1px solid #334155}
+button{padding:10px;width:100%;margin:6px 0;background:#020617;color:#fff;border:1px solid #334155}
+.status{padding:14px;border:2px solid #334155;border-radius:10px;margin-bottom:10px}
 .task{display:flex;gap:8px;margin:6px 0}
 .hidden{display:none}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;align-items:center;justify-content:center}
+.popup{background:#020617;border:2px solid #38bdf8;padding:20px;border-radius:14px;width:320px;text-align:center}
+.popup button{width:auto;margin:8px}
 </style>
 </head>
 
 <body>
 <div class="app">
-  <div class="sidebar">
-    <h3>USER PANEL</h3>
-    <div id="status">Logged out</div>
-    <button onclick="login()">Login</button>
-    <button onclick="dayEnd()">Day End</button>
-  </div>
 
-  <div class="main">
-    <h3>Today Tasks</h3>
-    <div id="taskList"></div>
-    <input id="newTask" placeholder="Add task">
-    <button onclick="addTask()">Add Task</button>
+<div class="sidebar">
+  <h3>USER PANEL</h3>
+  <div id="status" class="status">Logged out</div>
+  <button onclick="login()">Login</button>
+  <button onclick="bioBreak()">Bio Break</button>
+  <button onclick="dayEnd()">Day End</button>
+</div>
+
+<div class="main">
+  <h3>Assigned Work</h3>
+  <div id="taskList"></div>
+  <input id="newTask" placeholder="Next day task">
+  <button onclick="addTask()">Add Task</button>
+  <div id="reportBox" class="hidden"></div>
+</div>
+
+</div>
+
+<div id="focusOverlay" class="overlay hidden">
+  <div class="popup">
+    <h4>Focus Check</h4>
+    <p>Studying or distracted?</p>
+    <button onclick="focusResponse(true)">Studying</button>
+    <button onclick="focusResponse(false)">Distracted</button>
   </div>
 </div>
 
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/12.7.0/firebase-auth.js";
-import {
-  getFirestore, collection, addDoc, query, where, getDocs,
-  updateDoc, doc, serverTimestamp
-} from "https://www.gstatic.com/firebasejs/12.7.0/firebase-firestore.js";
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 
+<script>
 /* FIREBASE */
-const app = initializeApp({
+firebase.initializeApp({
   apiKey:"AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
   authDomain:"focus-dashboard-5965a.firebaseapp.com",
   projectId:"focus-dashboard-5965a"
 });
-const auth=getAuth(app);
-const db=getFirestore(app);
+const auth=firebase.auth();
+const db=firebase.firestore();
 
 /* STATE */
 let uid=null;
-let activeDayId=null;
+let sessionId=null;
 let tasks=[];
+let popupMiss=0;
+let score=100;
+let popupTimer=null;
+let lastLoginTime=null;
+
+/* HELPERS */
+const now=()=>firebase.firestore.FieldValue.serverTimestamp();
+const statusBox=document.getElementById("status");
 
 /* LOGIN */
 async function login(){
   const email=prompt("Email");
   const pass=prompt("Password");
-  const res=await signInWithEmailAndPassword(auth,email,pass);
+  const res=await auth.signInWithEmailAndPassword(email,pass);
   uid=res.user.uid;
-  document.getElementById("status").innerText="Logged in";
-  await loadOrCreateDay();
+  statusBox.innerText="Logged in";
+  await loadOrCreateSession();
+  showPopup();
 }
 
-/* LOAD OR CREATE DAY */
-async function loadOrCreateDay(){
-  const q=query(
-    collection(db,"daily_tasks"),
-    where("uid","==",uid),
-    where("dayStatus","==","ACTIVE")
-  );
-  const snap=await getDocs(q);
+/* LOAD SESSION */
+async function loadOrCreateSession(){
+  const q=await db.collection("daily_sessions")
+    .where("uid","==",uid)
+    .where("status","==","ACTIVE")
+    .get();
 
-  if(snap.empty){
-    const ref=await addDoc(collection(db,"daily_tasks"),{
-      uid,
-      dayStatus:"ACTIVE",
-      tasks:[],
-      createdAt:serverTimestamp(),
-      closedAt:null
+  if(q.empty){
+    const ref=await db.collection("daily_sessions").add({
+      uid,loginAt:now(),status:"ACTIVE",score:100,popupMiss:0
     });
-    activeDayId=ref.id;
+    sessionId=ref.id;
     tasks=[];
   }else{
-    activeDayId=snap.docs[0].id;
-    tasks=snap.docs[0].data().tasks;
+    sessionId=q.docs[0].id;
+    const t=await db.collection("daily_tasks")
+      .where("sessionId","==",sessionId).get();
+    tasks=t.empty?[]:t.docs[0].data().tasks;
   }
   renderTasks();
 }
 
-/* RENDER */
+/* TASKS */
 function renderTasks(){
   const box=document.getElementById("taskList");
   box.innerHTML="";
@@ -98,7 +117,13 @@ function renderTasks(){
     const cb=document.createElement("input");
     cb.type="checkbox";
     cb.checked=t.done;
-    cb.onchange=()=>{tasks[i].done=true;saveTasks()};
+    cb.disabled=t.done;
+    cb.onchange=()=>{
+      if(confirm("Confirm task done?")){
+        tasks[i].done=true;
+        saveTasks();
+      }else cb.checked=false;
+    };
     const d=document.createElement("div");
     d.className="task";
     d.append(cb,t.name);
@@ -106,50 +131,69 @@ function renderTasks(){
   });
 }
 
-/* SAVE TASKS */
 async function saveTasks(){
-  await updateDoc(doc(db,"daily_tasks",activeDayId),{tasks});
+  const snap=await db.collection("daily_tasks")
+    .where("sessionId","==",sessionId).get();
+  if(snap.empty){
+    await db.collection("daily_tasks").add({uid,sessionId,tasks});
+  }else{
+    await snap.docs[0].ref.update({tasks});
+  }
+  renderTasks();
 }
 
-/* ADD TASK */
 function addTask(){
   const v=document.getElementById("newTask").value.trim();
   if(!v)return;
   tasks.push({name:v,done:false});
   saveTasks();
-  renderTasks();
   document.getElementById("newTask").value="";
+}
+
+/* FOCUS POPUP */
+function showPopup(){
+  document.getElementById("focusOverlay").classList.remove("hidden");
+  popupTimer=setTimeout(()=>{
+    popupMiss++;
+    if(popupMiss>=3){
+      score-=2;
+      bioBreak();
+    }
+    document.getElementById("focusOverlay").classList.add("hidden");
+  },60000);
+}
+
+function focusResponse(ok){
+  clearTimeout(popupTimer);
+  document.getElementById("focusOverlay").classList.add("hidden");
+  if(!ok)score-=2;
+}
+
+/* BIO BREAK */
+async function bioBreak(){
+  clearTimeout(popupTimer);
+  await auth.signOut();
+  statusBox.innerText="Bio Break";
 }
 
 /* DAY END */
 async function dayEnd(){
-  if(!activeDayId)return;
+  const done=tasks.filter(t=>t.done).length;
+  const total=tasks.length;
+  const pct=total?Math.round(done/total*100):0;
 
-  const unfinished=tasks.filter(t=>!t.done);
-
-  // close today
-  await updateDoc(doc(db,"daily_tasks",activeDayId),{
-    dayStatus:"CLOSED",
-    closedAt:serverTimestamp()
+  await db.collection("daily_sessions").doc(sessionId).update({
+    status:"CLOSED",score,popupMiss,dayEndAt:now()
   });
 
-  // create next day
-  await addDoc(collection(db,"daily_tasks"),{
-    uid,
-    dayStatus:"ACTIVE",
-    tasks:unfinished,
-    createdAt:serverTimestamp(),
-    closedAt:null
-  });
+  document.getElementById("reportBox").innerHTML=
+    `<h3>Report</h3>
+     Tasks: ${done}/${total}<br>
+     Completion: ${pct}%<br>
+     Score: ${score}%`;
 
-  alert("Day Ended. Next day prepared.");
-  location.reload();
+  document.getElementById("reportBox").classList.remove("hidden");
 }
-
-/* expose */
-window.login=login;
-window.addTask=addTask;
-window.dayEnd=dayEnd;
 </script>
 </body>
 </html>
