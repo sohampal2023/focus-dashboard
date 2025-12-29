@@ -72,6 +72,7 @@ input.nextTask{width:100%;padding:8px;margin:6px 0;border-radius:8px;border:1px 
           <th>#</th>
           <th>Login Time</th>
           <th>Logout Time</th>
+          <th>Reason</th>
         </tr>
       </thead>
       <tbody id="logTable"></tbody>
@@ -112,9 +113,8 @@ function login(){
   idleBox.classList.remove("hidden");
   startIdle();
 
-  // log login
   const logs=JSON.parse(localStorage.getItem(key(K_LOGS))||"[]");
-  logs.push({login:new Date().toLocaleString(),logout:"—"});
+  logs.push({login:new Date().toLocaleString(),logout:"—",reason:"—"});
   localStorage.setItem(key(K_LOGS),JSON.stringify(logs));
 
   mergeTasks();
@@ -122,13 +122,13 @@ function login(){
   renderLogs();
 }
 
-/* PRESERVE DONE STATE */
+/* TASK MERGE */
 function mergeTasks(){
   const prev=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
   const next=JSON.parse(localStorage.getItem(key(K_NEXT))||"[]");
 
   const merged=[
-    ...prev,                    // ← keep done state
+    ...prev,
     ...next.map(n=>({name:n,done:false}))
   ];
 
@@ -192,7 +192,7 @@ function renderLogs(){
   const logs=JSON.parse(localStorage.getItem(key(K_LOGS))||"[]");
   logs.forEach((l,i)=>{
     const tr=document.createElement("tr");
-    tr.innerHTML=`<td>${i+1}</td><td>${l.login}</td><td>${l.logout}</td>`;
+    tr.innerHTML=`<td>${i+1}</td><td>${l.login}</td><td>${l.logout}</td><td>${l.reason}</td>`;
     logTable.appendChild(tr);
   });
 }
@@ -273,11 +273,15 @@ function confirmDayEnd(){
   statusBox.innerText="Status: Day End Completed";
 }
 
-/* BIO BREAK */
+/* BIO BREAK (ADD REASON) */
 function bioBreak(){
+  const reason=prompt("Reason for Bio Break?");
+  if(!reason)return;
+
   const logs=JSON.parse(localStorage.getItem(key(K_LOGS))||"[]");
   if(logs.length){
     logs[logs.length-1].logout=new Date().toLocaleString();
+    logs[logs.length-1].reason=reason;
     localStorage.setItem(key(K_LOGS),JSON.stringify(logs));
   }
   location.reload();
