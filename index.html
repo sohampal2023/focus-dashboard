@@ -12,66 +12,40 @@ body{background:#020617;color:#e5e7eb}
 .app{display:grid;grid-template-columns:260px 1fr;height:100vh}
 
 /* SIDEBAR */
-.sidebar{
-  padding:20px;
-  border-right:1px solid #1e293b;
-}
-.sidebar h2{text-align:center;color:#7dd3fc;margin-bottom:10px}
-.status{
-  padding:10px;
-  border:1px solid #334155;
-  border-radius:10px;
-  text-align:center;
-  margin-bottom:12px;
-}
-button{
-  width:100%;
-  padding:12px;
-  margin:6px 0;
-  border-radius:10px;
-  border:1px solid #334155;
-  background:#020617;
-  color:#e5e7eb;
-  cursor:pointer;
-}
-button:disabled{opacity:.4;cursor:not-allowed}
+.sidebar{padding:20px;border-right:1px solid #1e293b}
+.sidebar h2{text-align:center;color:#7dd3fc}
+.status{padding:10px;border:1px solid #334155;border-radius:10px;text-align:center;margin-bottom:10px}
+button{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #334155;background:#020617;color:#e5e7eb;cursor:pointer}
+button:disabled{opacity:.4}
 
 /* MAIN */
 .main{padding:24px;overflow:auto}
-.card{
-  background:#020617;
-  border:1px solid #334155;
-  border-radius:14px;
-  padding:20px;
-  margin-bottom:20px;
-}
+.card{background:#020617;border:1px solid #334155;border-radius:14px;padding:20px;margin-bottom:20px}
 .hidden{display:none}
 
-/* SPEEDOMETER (calm) */
+/* IDLE */
+.idleBox{
+  padding:12px;
+  border:1px solid #7dd3fc;
+  border-radius:12px;
+  margin-bottom:12px;
+  text-align:center;
+}
+
+/* SPEEDO */
 .speedo{
   width:300px;height:150px;border-radius:300px 300px 0 0;
-  background:conic-gradient(from -90deg,
-    #7f1d1d,#92400e,#a16207,#14532d,#312e81);
+  background:conic-gradient(from -90deg,#7f1d1d,#92400e,#a16207,#14532d,#312e81);
   position:relative;
   box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b;
 }
-.needle{
-  position:absolute;width:4px;height:110px;
-  background:#e5e7eb;left:50%;bottom:0;
-  transform-origin:bottom center;
-  transform:rotate(-90deg);
-  transition:.6s cubic-bezier(.15,.85,.2,1);
-}
-.cap{
-  position:absolute;width:14px;height:14px;background:#e5e7eb;
-  border-radius:50%;left:50%;bottom:0;
-  transform:translate(-50%,50%);
-}
+.needle{position:absolute;width:4px;height:110px;background:#e5e7eb;left:50%;bottom:0;transform-origin:bottom center;transform:rotate(-90deg);transition:.6s}
+.cap{position:absolute;width:14px;height:14px;background:#e5e7eb;border-radius:50%;left:50%;bottom:0;transform:translate(-50%,50%)}
+
 .percent{text-align:center;font-size:36px;font-weight:800;color:#7dd3fc}
 .rating{text-align:center;font-size:18px;font-weight:700}
 .details{text-align:center;font-size:14px;color:#cbd5f5}
 
-/* TABLE */
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{border:1px solid #334155;padding:6px;text-align:center}
 </style>
@@ -83,6 +57,12 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
   <div id="statusBox" class="status">Logged out</div>
+
+  <div id="idleBox" class="idleBox hidden">
+    Idle Time Left: <b><span id="idleTime">30:00</span></b><br><br>
+    <button onclick="resetIdle()">I am studying</button>
+  </div>
+
   <button id="loginBtn" onclick="login()">Login</button>
   <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
   <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
@@ -90,7 +70,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 <div class="main">
 
-<!-- TASK VIEW -->
 <div id="taskBox" class="card hidden">
   <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
 
@@ -100,7 +79,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
       <hr>
       <h4>Extra Work</h4>
       <div id="extraList"></div>
-      <button onclick="addExtra()">+ Add Extra Work</button>
+      <button onclick="addExtra()">+ Add Extra</button>
     </div>
 
     <div>
@@ -117,7 +96,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   </div>
 </div>
 
-<!-- LOGIN LOG -->
 <div id="logBox" class="card hidden">
   <h3>Login / Logout Log</h3>
   <table>
@@ -126,10 +104,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   </table>
 </div>
 
-<!-- NEXT DAY TASK INPUT -->
 <div id="nextDayBox" class="card hidden"></div>
-
-<!-- REPORT -->
 <div id="reportBox" class="card hidden"></div>
 
 </div>
@@ -137,8 +112,52 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 <script>
 let UID=null;
+let idleTimer=null;
+let idleRemaining=1800;
+let idleMiss=0;
+let penalty=0;
+
 const now=()=>new Date().toLocaleString();
 const key=k=>UID+"_"+k;
+
+/* IDLE */
+function startIdle(){
+  idleRemaining=1800;
+  idleMiss=0;
+  idleTime.innerText="30:00";
+  idleBox.classList.remove("hidden");
+
+  clearInterval(idleTimer);
+  idleTimer=setInterval(()=>{
+    idleRemaining--;
+    idleTime.innerText=
+      Math.floor(idleRemaining/60)+":"+String(idleRemaining%60).padStart(2,"0");
+
+    if(idleRemaining%30===0 && idleRemaining!==1800){
+      idleMiss++;
+      if(idleMiss>=2){
+        penalty+=2;
+        updateProgress();
+      }
+      if(idleMiss>=3){
+        autoLogout();
+      }
+    }
+  },1000);
+}
+
+function resetIdle(){
+  startIdle();
+}
+
+function autoLogout(){
+  clearInterval(idleTimer);
+  const logs=JSON.parse(localStorage.getItem(key("LOGS")));
+  logs[logs.length-1].logout=now();
+  localStorage.setItem(key("LOGS"),JSON.stringify(logs));
+  localStorage.setItem(key("ASK_REASON"),"1");
+  location.reload();
+}
 
 /* LOGIN */
 function login(){
@@ -148,7 +167,7 @@ function login(){
   if(localStorage.getItem(key("ASK_REASON"))==="1"){
     const logs=JSON.parse(localStorage.getItem(key("LOGS")));
     const r=prompt("Reason for last logout?");
-    logs[logs.length-1].reason=r||"Not specified";
+    logs[logs.length-1].reason=r||"Idle timeout";
     localStorage.setItem(key("LOGS"),JSON.stringify(logs));
     localStorage.removeItem(key("ASK_REASON"));
   }
@@ -162,6 +181,8 @@ function login(){
   bioBtn.disabled=false;
   dayBtn.disabled=false;
 
+  penalty=0;
+  startIdle();
   setupTasks();
   loadTasks();
   renderLogs();
@@ -170,6 +191,7 @@ function login(){
 
 /* BIO BREAK */
 function bioBreak(){
+  clearInterval(idleTimer);
   const logs=JSON.parse(localStorage.getItem(key("LOGS")));
   logs[logs.length-1].logout=now();
   localStorage.setItem(key("LOGS"),JSON.stringify(logs));
@@ -177,7 +199,7 @@ function bioBreak(){
   location.reload();
 }
 
-/* SETUP TASKS */
+/* TASK SETUP */
 function setupTasks(){
   const carried=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
   const next=JSON.parse(localStorage.getItem(key("NEXT_TASKS"))||"[]");
@@ -204,40 +226,37 @@ function setupTasks(){
 function loadTasks(){
   taskList.innerHTML="";
   extraList.innerHTML="";
-
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
   const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
 
   tasks.forEach(t=>{
-    const cb=document.createElement("input");
-    cb.type="checkbox";
-    cb.checked=t.done;
-    cb.onchange=()=>{
+    const c=document.createElement("input");
+    c.type="checkbox";c.checked=t.done;
+    c.onchange=()=>{
       if(!confirm("Confirm task completion?")){
-        cb.checked=!cb.checked;return;
+        c.checked=!c.checked;return;
       }
-      t.done=cb.checked;
+      t.done=c.checked;
       save(tasks,extras);
     };
-    taskList.append(cb," "+t.name,document.createElement("br"));
+    taskList.append(c," "+t.name,document.createElement("br"));
   });
 
   extras.forEach(e=>{
-    const cb=document.createElement("input");
-    cb.type="checkbox";
-    cb.checked=e.done;
-    cb.onchange=()=>{
+    const c=document.createElement("input");
+    c.type="checkbox";c.checked=e.done;
+    c.onchange=()=>{
       if(!confirm("Confirm extra work completion?")){
-        cb.checked=!cb.checked;return;
+        c.checked=!c.checked;return;
       }
-      e.done=cb.checked;
+      e.done=c.checked;
       save(tasks,extras);
     };
-    extraList.append(cb," "+e.name,document.createElement("br"));
+    extraList.append(c," "+e.name,document.createElement("br"));
   });
 }
 
-/* ADD EXTRA */
+/* EXTRA */
 function addExtra(){
   const name=prompt("Extra work?");
   if(!name)return;
@@ -247,37 +266,29 @@ function addExtra(){
   loadTasks();
 }
 
-/* SAVE + UPDATE */
+/* SAVE */
 function save(tasks,extras){
   localStorage.setItem(key("TASKS"),JSON.stringify(tasks));
   localStorage.setItem(key("EXTRA"),JSON.stringify(extras));
   updateProgress();
 }
 
-/* SINGLE SOURCE OF TRUTH */
-function calculateProgress(){
+/* PROGRESS */
+function calculate(){
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
   const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
-  const doneAssigned=tasks.filter(t=>t.done).length;
-  const doneExtra=extras.filter(e=>e.done).length;
-  const assigned=tasks.length;
-
-  const totalDone=doneAssigned+doneExtra;
-  const percent=assigned?Math.round((totalDone/assigned)*100):0;
-
-  return {percent,assigned,doneAssigned,doneExtra,totalDone};
+  const done=tasks.filter(t=>t.done).length + extras.filter(e=>e.done).length;
+  const percent=tasks.length?Math.max(0,Math.round((done/tasks.length)*100-penalty)):0;
+  return {percent,assigned:tasks.length,extra:extras.length};
 }
 
-/* UPDATE SPEEDO + TEXT */
 function updateProgress(){
-  const p=calculateProgress();
-  const angle=(Math.min(p.percent,300)/300)*180 - 90;
-
+  const p=calculate();
+  const angle=(Math.min(p.percent,300)/300)*180-90;
   needle.style.transform=`rotate(${angle}deg)`;
   livePercent.innerText=p.percent+"%";
   liveRating.innerText=getLabel(p.percent);
-  liveDetails.innerText=
-    `Assigned: ${p.assigned} | Done: ${p.doneAssigned} | Extra: ${p.doneExtra}`;
+  liveDetails.innerText=`Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${penalty}%`;
 }
 
 function getLabel(p){
@@ -288,19 +299,19 @@ function getLabel(p){
   return"Fabulous";
 }
 
-/* DAY END STEP 1 */
+/* DAY END */
 function openDayEnd(){
+  clearInterval(idleTimer);
+  idleBox.classList.add("hidden");
+
   nextDayBox.innerHTML="<h3>Enter Next Day Tasks</h3>";
   for(let i=0;i<5;i++){
-    nextDayBox.innerHTML+=
-      `<input id="nd${i}" style="width:100%;margin:6px 0">`;
+    nextDayBox.innerHTML+=`<input id="nd${i}" style="width:100%;margin:6px 0">`;
   }
-  nextDayBox.innerHTML+=
-    `<button onclick="finalDayEnd()">Submit</button>`;
+  nextDayBox.innerHTML+=`<button onclick="finalDayEnd()">Submit</button>`;
   nextDayBox.classList.remove("hidden");
 }
 
-/* DAY END FINAL */
 function finalDayEnd(){
   const next=[];
   for(let i=0;i<5;i++){
@@ -309,27 +320,25 @@ function finalDayEnd(){
   }
   localStorage.setItem(key("NEXT_TASKS"),JSON.stringify(next));
 
-  const p=calculateProgress();
+  const p=calculate();
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
-
   const carry=tasks.filter(t=>!t.done);
+
   localStorage.setItem(key("TASKS"),JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"),JSON.stringify([]));
+  localStorage.removeItem(key("LOGS"));
 
   reportBox.innerHTML=`
     <h3>Daily Report</h3>
     <div class="percent">${p.percent}%</div>
     <div class="rating">${getLabel(p.percent)}</div>
     <div class="details">
-      Assigned: ${p.assigned} |
-      Done: ${p.doneAssigned} |
-      Extra: ${p.doneExtra} |
-      Carry Forward: ${carry.length}
+      Assigned: ${tasks.length} |
+      Carry Forward: ${carry.length} |
+      Penalty: -${penalty}%
     </div>
   `;
   reportBox.classList.remove("hidden");
-
-  localStorage.removeItem(key("LOGS"));
 
   taskBox.classList.add("hidden");
   logBox.classList.add("hidden");
@@ -345,8 +354,7 @@ function renderLogs(){
   const logs=JSON.parse(localStorage.getItem(key("LOGS")));
   logTable.innerHTML="";
   logs.forEach(l=>{
-    logTable.innerHTML+=
-      `<tr><td>${l.login}</td><td>${l.logout}</td><td>${l.reason}</td></tr>`;
+    logTable.innerHTML+=`<tr><td>${l.login}</td><td>${l.logout}</td><td>${l.reason}</td></tr>`;
   });
 }
 </script>
