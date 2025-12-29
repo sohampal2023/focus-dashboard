@@ -133,80 +133,93 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 </div>
 
 <script>
-let UID=null;
-let idleTimer=null;
-let idleRemaining=1800;
-let warningPlayed=false;
-let penalty=0;
-
-const now=()=>new Date().toLocaleString();
-const key=k=>UID+"_"+k;
-
-/* 🔊 Beep sound */
-function playBeep(){
-  const ctx=new (window.AudioContext||window.webkitAudioContext)();
-  const osc=ctx.createOscillator();
-  const gain=ctx.createGain();
-  osc.type="sine";
-  osc.frequency.value=880;
-  gain.gain.value=0.1;
-  osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.start();
-  setTimeout(()=>{osc.stop();ctx.close()},300);
+/* ================= AUDIO UNLOCK ================= */
+let audioCtx = null;
+function unlockAudio(){
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  }
+  if(audioCtx.state === "suspended"){
+    audioCtx.resume();
+  }
 }
 
-/* IDLE */
+/* Beep */
+function playBeep(){
+  if(!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.frequency.value = 880;
+  gain.gain.value = 0.15;
+  osc.connect(gain);
+  gain.connect(audioCtx.destination);
+  osc.start();
+  setTimeout(()=>osc.stop(),300);
+}
+
+/* ================= IDLE (TAB SAFE) ================= */
+const IDLE_LIMIT = 30 * 60 * 1000;   // 30 min
+const WARNING_AT = 60 * 1000;        // 1 min
+
+let idleTimer = null;
+let lastActive = null;
+let warningPlayed = false;
+
 function startIdle(){
   clearInterval(idleTimer);
-  idleRemaining=1800;
-  warningPlayed=false;
+  lastActive = Date.now();
+  warningPlayed = false;
   idleBox.classList.remove("hidden");
-  updateIdle();
-
-  idleTimer=setInterval(()=>{
-    idleRemaining--;
-    updateIdle();
-
-    if(idleRemaining===60 && !warningPlayed){
-      playBeep();
-      warningPlayed=true;
-    }
-
-    if(idleRemaining<=0){
-      autoLogout();
-    }
-  },1000);
+  idleTimer = setInterval(checkIdle, 1000);
 }
 
-function updateIdle(){
-  idleTime.innerText=
-    Math.floor(idleRemaining/60)+":"+
-    String(idleRemaining%60).padStart(2,"0");
+function checkIdle(){
+  const now = Date.now();
+  const remaining = IDLE_LIMIT - (now - lastActive);
+
+  if(remaining <= 0){
+    autoLogout();
+    return;
+  }
+
+  const m = Math.floor(remaining/60000);
+  const s = Math.floor((remaining%60000)/1000);
+  idleTime.innerText = `${m}:${String(s).padStart(2,"0")}`;
+
+  if(remaining <= WARNING_AT && !warningPlayed){
+    playBeep();
+    warningPlayed = true;
+  }
 }
 
 function resetIdle(){
-  startIdle();
+  unlockAudio();           // user gesture → audio allowed
+  lastActive = Date.now();
+  warningPlayed = false;
 }
+
+/* ================= CORE ================= */
+let UID=null;
+const nowStr=()=>new Date().toLocaleString();
+const key=k=>UID+"_"+k;
 
 function autoLogout(){
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
-
-  const logs=JSON.parse(localStorage.getItem(key("LOGS")));
-  logs[logs.length-1].logout=now();
-  logs[logs.length-1].reason="Idle timeout";
+  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||[]);
+  logs[logs.length-1].logout = nowStr();
+  logs[logs.length-1].reason = "Idle timeout";
   localStorage.setItem(key("LOGS"),JSON.stringify(logs));
   location.reload();
 }
 
-/* LOGIN */
 function login(){
+  unlockAudio();           // 🔑 unlock sound here
   UID=prompt("Email");
-  if(!UID)return;
+  if(!UID) return;
 
-  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||"[]");
-  logs.push({login:now(),logout:"-",reason:"-"});
+  const logs=JSON.parse(localStorage.getItem(key("LOGS"))||[]);
+  logs.push({login:nowStr(),logout:"-",reason:"-"});
   localStorage.setItem(key("LOGS"),JSON.stringify(logs));
 
   statusBox.innerText="Logged in";
@@ -218,25 +231,20 @@ function login(){
   setupTasks();
   loadTasks();
   renderLogs();
-  updateProgress();
 }
 
-/* BIO */
 function bioBreak(){
   clearInterval(idleTimer);
-  idleBox.classList.add("hidden");
-
   const logs=JSON.parse(localStorage.getItem(key("LOGS")));
-  logs[logs.length-1].logout=now();
-  logs[logs.length-1].reason="Bio break";
+  logs[logs.length-1].logout = nowStr();
+  logs[logs.length-1].reason = "Bio break";
   localStorage.setItem(key("LOGS"),JSON.stringify(logs));
   location.reload();
 }
 
-/* TASK SETUP */
+/* ================= TASKS (unchanged) ================= */
 function setupTasks(){
-  const tasks=JSON.parse(localStorage.getItem(key("TASKS"))||"[]");
-  if(!tasks.length){
+  if(!localStorage.getItem(key("TASKS"))){
     localStorage.setItem(key("TASKS"),JSON.stringify([
       {name:"Study",done:false},
       {name:"Revise",done:false},
@@ -248,7 +256,6 @@ function setupTasks(){
   logBox.classList.remove("hidden");
 }
 
-/* TASK UI */
 function loadTasks(){
   taskList.innerHTML="";
   extraList.innerHTML="";
@@ -299,30 +306,22 @@ function save(tasks,extras){
   updateProgress();
 }
 
-/* PROGRESS */
+/* ================= PROGRESS ================= */
 function calculate(){
   const tasks=JSON.parse(localStorage.getItem(key("TASKS")));
   const extras=JSON.parse(localStorage.getItem(key("EXTRA")));
   const done=tasks.filter(t=>t.done).length+extras.filter(e=>e.done).length;
-  const percent=tasks.length?Math.round((done/tasks.length)*100):0;
-  return{percent,assigned:tasks.length};
+  const percent=Math.round((done/tasks.length)*100);
+  return percent;
 }
 function updateProgress(){
   const p=calculate();
-  needle.style.transform=
-    `rotate(${(Math.min(p.percent,300)/300)*180-90}deg)`;
-  livePercent.innerText=p.percent+"%";
-  liveRating.innerText=getLabel(p.percent);
-}
-function getLabel(p){
-  if(p<40)return"Poor";
-  if(p<60)return"Average";
-  if(p<80)return"Good";
-  if(p<=100)return"Excellent";
-  return"Fabulous";
+  needle.style.transform=`rotate(${(Math.min(p,300)/300)*180-90}deg)`;
+  livePercent.innerText=p+"%";
+  liveRating.innerText=p<=100?"Excellent":"Fabulous";
 }
 
-/* LOG TABLE */
+/* ================= LOG TABLE ================= */
 function renderLogs(){
   const logs=JSON.parse(localStorage.getItem(key("LOGS"))||[]);
   logTable.innerHTML="";
