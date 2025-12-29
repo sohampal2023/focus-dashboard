@@ -32,7 +32,6 @@ body{
   text-align:center;
   color:#38bdf8;
   margin:0;
-  letter-spacing:1px;
 }
 .status{
   padding:14px;
@@ -71,13 +70,12 @@ body{
   margin-bottom:20px;
 }
 .hidden{display:none}
-.task{margin:10px 0}
 
 /* SPEEDOMETER */
 .speedo-wrap{
   display:flex;
   justify-content:center;
-  margin:30px 0 10px;
+  margin:20px 0 10px;
 }
 .speedo{
   width:320px;
@@ -85,10 +83,11 @@ body{
   border-radius:320px 320px 0 0;
   position:relative;
   background:conic-gradient(
-    #ef4444 0deg,
+    #dc2626 0deg,
+    #ef4444 30deg,
     #facc15 60deg,
-    #22c55e 120deg,
-    #38bdf8 160deg,
+    #22c55e 100deg,
+    #38bdf8 140deg,
     #a855f7 180deg
   );
   overflow:hidden;
@@ -96,22 +95,24 @@ body{
 .speedo::after{
   content:"";
   position:absolute;
-  inset:18px;
+  inset:20px;
   background:#020617;
   border-radius:300px 300px 0 0;
 }
 .needle{
-  width:5px;
+  width:4px;
   height:130px;
   background:#f8fafc;
   position:absolute;
   bottom:0;
   left:50%;
   transform-origin:bottom center;
-  transition:transform 1s cubic-bezier(.2,.8,.2,1);
+  transform:rotate(-90deg);
+  transition:transform .6s cubic-bezier(.2,.8,.2,1);
+  z-index:4;
 }
 .center-dot{
-  width:18px;height:18px;
+  width:16px;height:16px;
   background:#f8fafc;
   border-radius:50%;
   position:absolute;
@@ -121,29 +122,21 @@ body{
   z-index:5;
 }
 
-/* REPORT TEXT */
+/* TEXT */
 .percent{
   text-align:center;
   font-size:42px;
   font-weight:900;
-  margin-top:10px;
   color:#38bdf8;
-  text-shadow:0 0 18px rgba(56,189,248,.6);
-}
-.motive{
-  text-align:center;
-  margin-top:8px;
-  font-size:16px;
-  color:#a5f3fc;
 }
 .details{
   text-align:center;
-  margin-top:12px;
+  margin-top:10px;
   font-size:14px;
   color:#cbd5f5;
 }
 
-/* INPUTS */
+/* INPUT */
 input.nextTask{
   width:100%;
   padding:8px;
@@ -179,18 +172,39 @@ input.nextTask{
 <!-- MAIN -->
 <div class="main">
 
-  <div id="tasksBox" class="card hidden">
-    <h3>Assigned Tasks</h3>
-    <div id="taskList"></div>
-    <hr>
-    <h4>Extra Work (Bonus)</h4>
-    <div id="extraList"></div>
-    <button onclick="addExtraTask()">+ Add Extra Work</button>
+<div id="tasksBox" class="card hidden">
+  <div style="display:grid;grid-template-columns:1fr 360px;gap:20px">
+
+    <div>
+      <h3>Assigned Tasks</h3>
+      <div id="taskList"></div>
+
+      <hr>
+
+      <h4>Extra Work (Bonus)</h4>
+      <div id="extraList"></div>
+      <button onclick="addExtraTask()">+ Add Extra Work</button>
+    </div>
+
+    <div>
+      <h3 style="text-align:center">Live Progress</h3>
+
+      <div class="speedo-wrap">
+        <div class="speedo">
+          <div id="liveNeedle" class="needle"></div>
+          <div class="center-dot"></div>
+        </div>
+      </div>
+
+      <div id="livePercent" class="percent">0%</div>
+      <div id="liveDetails" class="details"></div>
+    </div>
+
   </div>
+</div>
 
-  <div id="dayEndBox" class="card hidden"></div>
-
-  <div id="reportBox" class="card hidden"></div>
+<div id="dayEndBox" class="card hidden"></div>
+<div id="reportBox" class="card hidden"></div>
 
 </div>
 </div>
@@ -204,34 +218,29 @@ const K_TASKS="TASKS";
 const K_EXTRA="EXTRA_TASKS";
 const K_NEXT="NEXT_TASKS";
 const key=k=>UID+"_"+k;
-
 const fmt=s=>`${Math.floor(s/60)}:${String(s%60).padStart(2,"0")}`;
 
-/* LOGIN */
 function login(){
   UID=prompt("Email");
   if(!UID)return;
 
   reportBox.classList.add("hidden");
-  reportBox.innerHTML="";
-
-  statusBox.innerText="Status: Logged in";
   loginBtn.disabled=true;
   bioBtn.disabled=false;
   dayEndBtn.disabled=false;
+  statusBox.innerText="Status: Logged in";
 
   idleBox.classList.remove("hidden");
   startIdle();
 
   mergeTasks();
   loadTasks();
+  updateLiveSpeedo();
 }
 
-/* TASK MERGE */
 function mergeTasks(){
   const prev=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
   const next=JSON.parse(localStorage.getItem(key(K_NEXT))||"[]");
-
   const merged=[...prev,...next.map(n=>({name:n,done:false}))];
 
   if(!merged.length){
@@ -249,7 +258,6 @@ function mergeTasks(){
   tasksBox.classList.remove("hidden");
 }
 
-/* TASK UI */
 function loadTasks(){
   taskList.innerHTML="";
   extraList.innerHTML="";
@@ -267,6 +275,7 @@ function loadTasks(){
       }
       t.done=cb.checked;
       localStorage.setItem(key(K_TASKS),JSON.stringify(tasks));
+      updateLiveSpeedo();
     };
     taskList.append(cb," "+t.name,document.createElement("br"));
   });
@@ -281,6 +290,7 @@ function loadTasks(){
       }
       e.done=cb.checked;
       localStorage.setItem(key(K_EXTRA),JSON.stringify(extras));
+      updateLiveSpeedo();
     };
     extraList.append(cb," "+e.name,document.createElement("br"));
   });
@@ -293,9 +303,25 @@ function addExtraTask(){
   extras.push({name,done:false});
   localStorage.setItem(key(K_EXTRA),JSON.stringify(extras));
   loadTasks();
+  updateLiveSpeedo();
 }
 
-/* IDLE */
+function updateLiveSpeedo(){
+  const tasks=JSON.parse(localStorage.getItem(key(K_TASKS))||"[]");
+  const extras=JSON.parse(localStorage.getItem(key(K_EXTRA))||"[]");
+
+  const assigned=tasks.length;
+  const done=tasks.filter(t=>t.done).length;
+  const extraDone=extras.filter(e=>e.done).length;
+
+  const percent=assigned?Math.round(((done+extraDone)/assigned)*100):0;
+  const angle=Math.min(percent*1.8,270)-90;
+
+  liveNeedle.style.transform=`rotate(${angle}deg)`;
+  livePercent.innerText=percent+"%";
+  liveDetails.innerText=`Assigned: ${assigned} | Done: ${done} | Extra: ${extraDone}`;
+}
+
 function startIdle(){
   clearInterval(idleTimer);
   idleRemaining=1800;
@@ -308,7 +334,6 @@ function startIdle(){
 }
 function resetIdle(){startIdle()}
 
-/* DAY END */
 function openDayEnd(){
   let html="<h3>Enter Next Day Tasks</h3>";
   for(let i=0;i<5;i++){
@@ -334,52 +359,34 @@ function confirmDayEnd(){
   localStorage.setItem(key(K_TASKS),JSON.stringify(undone));
 
   const assigned=tasks.length;
-  const doneAssigned=tasks.filter(t=>t.done).length;
+  const done=tasks.filter(t=>t.done).length;
   const extraDone=extras.filter(e=>e.done).length;
-
-  const percent=Math.round(((doneAssigned+extraDone)/assigned)*100);
+  const percent=Math.round(((done+extraDone)/assigned)*100);
   const angle=(percent*1.8)-90;
-
-  let msg="Good effort, push more!";
-  if(percent>=100) msg="🔥 Outstanding! You exceeded the target!";
-  else if(percent>=80) msg="🚀 Excellent momentum!";
-  else if(percent>=60) msg="💪 Keep going, almost there!";
 
   reportBox.innerHTML=`
     <h3 style="text-align:center">Performance Meter</h3>
-
     <div class="speedo-wrap">
       <div class="speedo">
         <div class="needle" style="transform:rotate(${angle}deg)"></div>
         <div class="center-dot"></div>
       </div>
     </div>
-
     <div class="percent">${percent}%</div>
-    <div class="motive">${msg}</div>
-
-    <div class="details">
-      Assigned: ${assigned} |
-      Done: ${doneAssigned} |
-      Extra: ${extraDone}
-    </div>
+    <div class="details">Assigned: ${assigned} | Done: ${done} | Extra: ${extraDone}</div>
   `;
   reportBox.classList.remove("hidden");
 
   tasksBox.classList.add("hidden");
   dayEndBox.classList.add("hidden");
 
+  loginBtn.disabled=false;
   bioBtn.disabled=true;
   dayEndBtn.disabled=true;
-  loginBtn.disabled=false;
-
   statusBox.innerText="Status: Day End Completed";
 }
 
-/* BIO BREAK */
-function bioBreak(){
-  location.reload();
-}
+function bioBreak(){location.reload()}
 </script>
 </body>
 </html>
