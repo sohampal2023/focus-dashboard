@@ -205,7 +205,7 @@ function autoLogout() {
   location.reload();
 }
 
-/* LOGIN – UPDATED TO ASK FOR REASON */
+/* LOGIN */
 function login() {
   UID = prompt("Email");
   if (!UID) return;
@@ -215,16 +215,14 @@ function login() {
   // CHECK PREVIOUS BREAK REASON
   if (logs.length) {
     const lastLog = logs[logs.length - 1];
-    // If the last reason was "Pending" (from Bio Break button), ask user now
     if (lastLog.reason === "Pending") {
       const userReason = prompt("Reason for previous break?", "Bio Break");
-      lastLog.reason = userReason || "Bio Break"; // Default if empty
+      lastLog.reason = userReason || "Bio Break";
     }
   }
 
   localStorage.removeItem(key("DAY_ENDED"));
 
-  // Add NEW session
   logs.push({ login: now(), logout: "-", reason: "-" });
   localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 
@@ -241,7 +239,7 @@ function login() {
   updateProgress();
 }
 
-/* BIO BREAK – UPDATED TO SET PENDING STATUS */
+/* BIO BREAK */
 function bioBreak() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
@@ -249,7 +247,7 @@ function bioBreak() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
     logs[logs.length - 1].logout = now();
-    logs[logs.length - 1].reason = "Pending"; // Marks it to ask on next login
+    logs[logs.length - 1].reason = "Pending";
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
   location.reload();
@@ -359,7 +357,7 @@ function getLabel(p) {
   return "Fabulous";
 }
 
-/* DAY END */
+/* DAY END & FULL REPORT CARD */
 function openDayEnd() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
@@ -382,13 +380,31 @@ function finalDayEnd() {
 
   const p = calculate();
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
   const carry = tasks.filter(t => !t.done);
+
+  // 🟢 CREATE COMPLETED SUBJECT LIST
+  const doneTasks = tasks.filter(t => t.done).map(t => t.name);
+  const doneExtras = extras.filter(e => e.done).map(e => e.name + " (Extra)");
+  const allDone = [...doneTasks, ...doneExtras];
+
+  let doneHtml = "";
+  if(allDone.length > 0){
+    doneHtml = `<div style="text-align:left;margin-top:20px;border-top:1px solid #334155;padding-top:10px">
+        <strong>Done:</strong>
+        <ul style="margin:10px 0;padding-left:20px;color:#86efac">
+          ${allDone.map(d => `<li>${d}</li>`).join("")}
+        </ul>
+    </div>`;
+  }
+  // 🟢 END LIST LOGIC
 
   localStorage.setItem(key("TASKS"), JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"), JSON.stringify([]));
   localStorage.removeItem(key("LOGS"));
   logTable.innerHTML = "";
 
+  // 🟢 REPORT CARD: PERCENT + RATING + DETAILS + LIST
   reportBox.innerHTML = `
     <h3>Daily Report</h3>
     <div class="percent">${p.percent}%</div>
@@ -397,7 +413,9 @@ function finalDayEnd() {
       Assigned: ${tasks.length} |
       Carry Forward: ${carry.length} |
       Penalty: -${penalty}%
-    </div>`;
+    </div>
+    ${doneHtml}`;
+    
   reportBox.classList.remove("hidden");
 
   taskBox.classList.add("hidden");
