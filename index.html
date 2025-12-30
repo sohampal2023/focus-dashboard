@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog System (Firebase + History)</title>
+<title>Focus Watchdog System (Firebase + History V2)</title>
 
 <style>
 *{box-sizing:border-box}
@@ -165,7 +165,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
   </div>
   <div style="flex-grow:1"></div> 
-  
+   
   <button id="loginBtn" onclick="login()">Login (Cloud)</button>
   <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
   <button id="histBtn" onclick="toggleHistory()" disabled>View History</button>
@@ -176,16 +176,17 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 <div id="historyBox" class="card hidden">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
-        <h3>Last 7 Days History</h3>
+        <h3>Last 9 Days History</h3>
         <button onclick="toggleHistory()" style="width:auto; padding:5px 15px;">Close</button>
     </div>
     <table>
         <thead>
             <tr>
-                <th>Date</th>
-                <th>Score</th>
-                <th>Time Studied</th>
-                <th>Rating</th>
+                <th style="width:15%">Date</th>
+                <th style="width:10%">Score</th>
+                <th style="width:15%">Time</th>
+                <th style="width:15%">Rating</th>
+                <th style="width:45%">Covered Subjects</th>
             </tr>
         </thead>
         <tbody id="historyTable"></tbody>
@@ -317,7 +318,7 @@ function uploadData() {
         LOGS: localStorage.getItem(key("LOGS")),
         TEST_STATE: localStorage.getItem(key("TEST_STATE")),
         NEXT_TASKS: localStorage.getItem(key("NEXT_TASKS")),
-        HISTORY: localStorage.getItem(key("HISTORY")), // Added History
+        HISTORY: localStorage.getItem(key("HISTORY")), 
         IDLE_STRIKES: localStorage.getItem(key("IDLE_STRIKES")),
         PENALTY: localStorage.getItem(key("PENALTY"))
     };
@@ -333,7 +334,7 @@ function uploadData() {
     });
 }
 
-// --- HISTORY LOGIC ---
+// --- HISTORY LOGIC (MODIFIED FOR SUBJECTS) ---
 function toggleHistory() {
     const histBox = document.getElementById("historyBox");
     const taskBox = document.getElementById("taskBox");
@@ -356,18 +357,22 @@ function toggleHistory() {
             if(entry.rating === "Good") color = "#facc15";
             if(entry.rating === "Excellent" || entry.rating === "Fabulous") color = "#4ade80";
 
+            // Fallback for old history records that didn't have subjects
+            const subjectText = entry.subjects || "No Data";
+
             tbody.innerHTML += `
                 <tr>
                     <td>${entry.date}</td>
                     <td style="color:${color}; font-weight:bold">${entry.score}%</td>
                     <td>${entry.time}</td>
                     <td style="color:${color}">${entry.rating}</td>
+                    <td style="text-align:left; font-size:12px; color:#cbd5e1">${subjectText}</td>
                 </tr>
             `;
         });
         
         if(history.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="4">No history records yet. Complete a day to see stats.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5">No history records yet. Complete a day to see stats.</td></tr>`;
         }
     } else {
         // CLOSE HISTORY
@@ -979,24 +984,29 @@ function finalDayEnd() {
   const mins = totalMin % 60;
   const timeStr = `${hrs} hr ${mins} min`;
 
-  // --- SAVE HISTORY BEFORE WIPING ---
+  // --- SAVE HISTORY WITH SUBJECTS (AUTO DELETE > 9) ---
+  const doneTasks = tasks.filter(t => t.done).map(t => t.name);
+  const doneExtras = extras.filter(e => e.done).map(e => e.name + " (Extra)");
+  const subjectsCovered = [...doneTasks, ...doneExtras].join(", ");
+
   const historyEntry = {
       date: new Date().toLocaleDateString(),
       score: p.percent,
       rating: getLabel(p.percent),
-      time: timeStr
+      time: timeStr,
+      subjects: subjectsCovered || "No Tasks Completed"
   };
   
-  // Get existing history, add new, keep last 7
+  // Get existing history, add new, keep last 9
   let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
   history.push(historyEntry);
-  if (history.length > 7) history.shift(); // Remove oldest if > 7
+  if (history.length > 9) history.shift(); // Remove oldest if > 9
   localStorage.setItem(key("HISTORY"), JSON.stringify(history));
   // ----------------------------------
 
-  const doneTasks = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
-  const doneExtras = extras.filter(e => e.done).map(e => ({name: e.name + " (Extra)", comment: e.comment, due: e.due}));
-  const allDone = [...doneTasks, ...doneExtras];
+  const doneReportItems = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
+  const doneExtraItems = extras.filter(e => e.done).map(e => ({name: e.name + " (Extra)", comment: e.comment, due: e.due}));
+  const allDone = [...doneReportItems, ...doneExtraItems];
 
   let doneTable = "";
   if(allDone.length > 0){
