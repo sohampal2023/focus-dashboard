@@ -240,7 +240,7 @@ function login() {
     logout: "-", 
     logoutTS: null,
     reason: "-", 
-    completed: [] 
+    completed: [] // Will store objects {name, comment, due}
   });
   localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 
@@ -257,7 +257,7 @@ function login() {
   updateProgress();
 }
 
-/* TASK SYSTEM (UPDATED PROMPTS) */
+/* TASK SYSTEM */
 function setupTasks() {
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const next = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
@@ -285,35 +285,55 @@ function loadTasks() {
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
 
-  const updateLogTask = (name, isChecked) => {
+  // Update Log Data Function
+  const updateLogTask = (name, isChecked, comment, due) => {
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if(logs.length){
       const active = logs[logs.length-1];
+      if(!active.completed) active.completed = [];
+
       if(isChecked){
-        if(!active.completed) active.completed = [];
-        if(!active.completed.includes(name)) active.completed.push(name);
+        // Remove existing if updating
+        active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
+        // Add new object with details
+        active.completed.push({ name: name, comment: comment, due: due });
       } else {
-        if(active.completed){
-          active.completed = active.completed.filter(n => n !== name);
-        }
+        // Remove
+        active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
       }
+      
       localStorage.setItem(key("LOGS"), JSON.stringify(logs));
       renderLogs();
     }
   };
 
-  // Render Assigned Tasks
+  // RENDER ASSIGNED
   tasks.forEach(t => {
+    const container = document.createElement("div");
+    container.style.marginBottom = "4px";
+
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = t.done;
+    
+    // Label span to show name + details
+    const label = document.createElement("span");
+    
+    const updateLabel = () => {
+       if(t.done){
+           label.innerHTML = ` ${t.name} <span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>`;
+       } else {
+           label.innerText = " " + t.name;
+       }
+    };
+    updateLabel();
+
     cb.onchange = () => {
       if (!confirm("Confirm task completion?")) {
         cb.checked = !cb.checked;
         return;
       }
       
-      // ASK SPECIFIC TO THIS TASK
       if(cb.checked){
         const remark = prompt(`Comment for ${t.name}?`, "Done");
         const dueVal = prompt(`Any pending work/marks left for ${t.name}?`, "None");
@@ -325,24 +345,40 @@ function loadTasks() {
       }
       
       t.done = cb.checked;
-      updateLogTask(t.name, t.done);
+      updateLabel(); // Update UI immediately
+      updateLogTask(t.name, t.done, t.comment, t.due);
       save(tasks, extras);
     };
-    taskList.append(cb, " " + t.name, document.createElement("br"));
+
+    container.append(cb, label);
+    taskList.append(container);
   });
 
-  // Render Extra Tasks
+  // RENDER EXTRAS
   extras.forEach(e => {
+    const container = document.createElement("div");
+    container.style.marginBottom = "4px";
+
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = e.done;
+
+    const label = document.createElement("span");
+    const updateLabel = () => {
+       if(e.done){
+           label.innerHTML = ` ${e.name} <span style="font-size:12px;color:#94a3b8">[C: ${e.comment} | Due: ${e.due}]</span>`;
+       } else {
+           label.innerText = " " + e.name;
+       }
+    };
+    updateLabel();
+
     cb.onchange = () => {
       if (!confirm("Confirm extra work completion?")) {
         cb.checked = !cb.checked;
         return;
       }
       
-      // ASK SPECIFIC TO THIS TASK
       if(cb.checked){
         const remark = prompt(`Comment for ${e.name}?`, "Done");
         const dueVal = prompt(`Any pending work/marks left for ${e.name}?`, "None");
@@ -354,10 +390,13 @@ function loadTasks() {
       }
 
       e.done = cb.checked;
-      updateLogTask(e.name + " (Extra)", e.done);
+      updateLabel(); // Update UI immediately
+      updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
       save(tasks, extras);
     };
-    extraList.append(cb, " " + e.name, document.createElement("br"));
+
+    container.append(cb, label);
+    extraList.append(container);
   });
 }
 
@@ -432,7 +471,7 @@ function finalDayEnd() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   const carry = tasks.filter(t => !t.done);
 
-  // 1. CALCULATE TOTAL TIME
+  // 1. TIME CALC
   let totalMillis = 0;
   logs.forEach(l => {
     let end = l.logoutTS;
@@ -445,7 +484,7 @@ function finalDayEnd() {
   const mins = totalMin % 60;
   const timeStr = `${hrs} hr ${mins} min`;
 
-  // 2. CREATE DONE TABLE ROWS
+  // 2. DONE TABLE
   const doneTasks = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
   const doneExtras = extras.filter(e => e.done).map(e => ({name: e.name + " (Extra)", comment: e.comment, due: e.due}));
   const allDone = [...doneTasks, ...doneExtras];
@@ -484,7 +523,7 @@ function finalDayEnd() {
   const tableRef = document.getElementById("logTable");
   if(tableRef) tableRef.innerHTML = "";
 
-  // 3. RENDER REPORT
+  // 3. RENDER
   reportBox.innerHTML = `
     <h3>Daily Report</h3>
     <div class="percent">${p.percent}%</div>
@@ -512,7 +551,7 @@ function finalDayEnd() {
   dayBtn.disabled = true;
 }
 
-/* LOG TABLE */
+/* LOG TABLE (LIST WISE VIEW) */
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   
@@ -523,7 +562,7 @@ function renderLogs() {
         <th>Login</th>
         <th>Logout</th>
         <th>Reason</th>
-        <th>Work Ticked</th>
+        <th style="width:40%">Work Ticked</th>
       </tr>
     </thead>
     <tbody id="logTable"></tbody> 
@@ -533,14 +572,31 @@ function renderLogs() {
   tbody.innerHTML = "";
 
   logs.forEach(l => {
-    const work = (l.completed && l.completed.length) ? l.completed.join(", ") : "-";
+    let workHtml = "-";
+    
+    if (l.completed && l.completed.length) {
+      // Create Vertical List of Work
+      workHtml = l.completed.map(item => {
+        // Handle legacy string data vs new object data
+        if(typeof item === 'string'){
+           return `<div>${item}</div>`;
+        }
+        return `
+        <div style="border-bottom:1px dashed #334155; padding:4px 0;">
+            <div style="color:#86efac;font-weight:bold">${item.name}</div>
+            <div style="font-size:12px;color:#cbd5e1">
+               Comment: ${item.comment} | Due: <span style="color:#fca5a5">${item.due}</span>
+            </div>
+        </div>`;
+      }).join("");
+    }
     
     tbody.innerHTML += `
       <tr>
-        <td>${l.login}</td>
-        <td>${l.logout}</td>
-        <td>${l.reason}</td>
-        <td style="color:#86efac">${work}</td>
+        <td style="vertical-align:top">${l.login}</td>
+        <td style="vertical-align:top">${l.logout}</td>
+        <td style="vertical-align:top">${l.reason}</td>
+        <td style="text-align:left;vertical-align:top">${workHtml}</td>
       </tr>`;
   });
 }
