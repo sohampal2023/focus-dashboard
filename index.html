@@ -224,6 +224,7 @@ function login() {
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
 
+  // 1. Handle Previous Bio Break Reason
   if (logs.length) {
     const lastLog = logs[logs.length - 1];
     if (lastLog.reason === "Pending") {
@@ -240,7 +241,7 @@ function login() {
     logout: "-", 
     logoutTS: null,
     reason: "-", 
-    completed: [] // Will store objects {name, comment, due}
+    completed: [] 
   });
   localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 
@@ -251,13 +252,122 @@ function login() {
 
   penalty = 0;
   startIdle();
+
+  // 2. CHECK FOR ACTIVE TEST (RESUME LOGIC)
+  const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+  if (activeTest) {
+    if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
+      restoreTestUI(activeTest);
+      loadTasks(); // Load background data
+      renderLogs();
+      updateProgress();
+      return; // Stop here, don't show normal task box
+    } else {
+      // User says NO, end the test now
+      finishTestSequence(activeTest);
+    }
+  }
+
   setupTasks();
   loadTasks();
   renderLogs();
   updateProgress();
 }
 
-/* TASK SYSTEM */
+/* --- MOCK TEST LOGIC --- */
+
+function startMockTestSetup() {
+  const name = prompt("Enter Test Name:");
+  if(!name) return;
+  const fullMarks = prompt("Enter Full Marks:");
+  if(!fullMarks) return;
+  const time = prompt("Total Time (e.g. 2 hours):");
+
+  // Save State
+  const testState = {
+    name: name,
+    fullMarks: fullMarks,
+    time: time,
+    startTime: now()
+  };
+  localStorage.setItem(key("TEST_STATE"), JSON.stringify(testState));
+
+  restoreTestUI(testState);
+}
+
+function restoreTestUI(testState) {
+  // Hide Task Box, Show Test Box (Injecting UI dynamically)
+  taskBox.classList.remove("hidden"); // Ensure container is visible
+  
+  // Clear current view
+  const container = document.getElementById("taskBox");
+  container.innerHTML = `
+    <div style="text-align:center; padding: 20px; border: 1px solid #facc15; border-radius: 10px;">
+      <h2 style="color:#facc15">MOCK TEST RUNNING</h2>
+      <h3 style="color:white">${testState.name}</h3>
+      <p>Full Marks: ${testState.fullMarks} | Duration: ${testState.time}</p>
+      <hr style="border-color:#334155; margin: 20px 0;">
+      <p>When you are finished, click below:</p>
+      <button onclick="triggerEndTest()" style="background:#dc2626; border:none; padding:15px; font-size:18px; font-weight:bold;">EXAM DONE</button>
+    </div>
+  `;
+}
+
+function triggerEndTest() {
+  const testState = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+  if(testState) finishTestSequence(testState);
+}
+
+function finishTestSequence(testState) {
+  const obtained = prompt(`Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`);
+  if(obtained === null) return; // Cancelled
+  
+  const accuracy = prompt("Enter Accuracy %:");
+  if(accuracy === null) return;
+
+  // CONFIRMATION
+  const msg = `Please Confirm Details:\n\nTest: ${testState.name}\nScore: ${obtained} / ${testState.fullMarks}\nAccuracy: ${accuracy}%`;
+  
+  if(confirm(msg)) {
+    // 1. Save as a completed Extra Task
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+    
+    // Create detailed comment
+    const resultComment = `Score: ${obtained}/${testState.fullMarks} | Acc: ${accuracy}%`;
+    
+    extras.push({
+      name: `MOCK TEST: ${testState.name}`,
+      done: true,
+      comment: resultComment,
+      due: "None" // Usually no due work immediately after test
+    });
+    
+    localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+    
+    // 2. Add to Log
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    if(logs.length){
+      const active = logs[logs.length-1];
+      if(!active.completed) active.completed = [];
+      active.completed.push({
+        name: `MOCK TEST: ${testState.name}`,
+        comment: resultComment,
+        due: "None"
+      });
+      localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
+
+    // 3. Clear Test State
+    localStorage.removeItem(key("TEST_STATE"));
+
+    // 4. Reload UI
+    location.reload(); // Refresh to go back to normal view
+  }
+}
+
+/* --- STANDARD TASK SYSTEM --- */
+
 function setupTasks() {
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const next = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
@@ -274,40 +384,69 @@ function setupTasks() {
   localStorage.setItem(key("TASKS"), JSON.stringify(merged));
   localStorage.removeItem(key("NEXT_TASKS"));
   
+  // Restore standard UI structure in case it was overwritten by Test Mode
+  taskBox.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
+      <div>
+        <h3>Assigned Tasks</h3>
+        
+        <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center">
+             <button onclick="startMockTestSetup()" style="background:#a16207; width:auto; padding:8px 20px;">Start Mock Test</button>
+        </div>
+
+        <div id="taskList"></div>
+        <hr>
+        <h4>Extra Work</h4>
+        <div id="extraList"></div>
+        <button onclick="addExtra()">+ Add Extra Work</button>
+      </div>
+      <div>
+        <h3 style="text-align:center">Live Progress</h3>
+        <div class="speedo">
+          <div id="needle" class="needle"></div>
+          <div class="cap"></div>
+        </div>
+        <div id="livePercent" class="percent">0%</div>
+        <div id="liveRating" class="rating">Poor</div>
+        <div id="liveDetails" class="details"></div>
+      </div>
+    </div>
+  `;
+
   taskBox.classList.remove("hidden");
   logBox.classList.remove("hidden");
   reportBox.classList.add("hidden");
 }
 
 function loadTasks() {
-  taskList.innerHTML = "";
-  extraList.innerHTML = "";
+  const tList = document.getElementById("taskList");
+  const eList = document.getElementById("extraList");
+  
+  if(!tList || !eList) return; // Safety check
+
+  tList.innerHTML = "";
+  eList.innerHTML = "";
+  
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
 
-  // Update Log Data Function
   const updateLogTask = (name, isChecked, comment, due) => {
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if(logs.length){
       const active = logs[logs.length-1];
       if(!active.completed) active.completed = [];
-
       if(isChecked){
-        // Remove existing if updating
         active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
-        // Add new object with details
         active.completed.push({ name: name, comment: comment, due: due });
       } else {
-        // Remove
         active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
       }
-      
       localStorage.setItem(key("LOGS"), JSON.stringify(logs));
       renderLogs();
     }
   };
 
-  // RENDER ASSIGNED
+  // Render Tasks
   tasks.forEach(t => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
@@ -316,9 +455,7 @@ function loadTasks() {
     cb.type = "checkbox";
     cb.checked = t.done;
     
-    // Label span to show name + details
     const label = document.createElement("span");
-    
     const updateLabel = () => {
        if(t.done){
            label.innerHTML = ` ${t.name} <span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>`;
@@ -333,7 +470,6 @@ function loadTasks() {
         cb.checked = !cb.checked;
         return;
       }
-      
       if(cb.checked){
         const remark = prompt(`Comment for ${t.name}?`, "Done");
         const dueVal = prompt(`Any pending work/marks left for ${t.name}?`, "None");
@@ -343,18 +479,16 @@ function loadTasks() {
         t.comment = "";
         t.due = "";
       }
-      
       t.done = cb.checked;
-      updateLabel(); // Update UI immediately
+      updateLabel();
       updateLogTask(t.name, t.done, t.comment, t.due);
       save(tasks, extras);
     };
-
     container.append(cb, label);
-    taskList.append(container);
+    tList.append(container);
   });
 
-  // RENDER EXTRAS
+  // Render Extras
   extras.forEach(e => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
@@ -362,11 +496,16 @@ function loadTasks() {
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = e.done;
+    
+    // MOCK TESTS ARE READ-ONLY IN LIST (They are created via button)
+    if(e.name.startsWith("MOCK TEST:")) {
+       cb.disabled = true;
+    }
 
     const label = document.createElement("span");
     const updateLabel = () => {
        if(e.done){
-           label.innerHTML = ` ${e.name} <span style="font-size:12px;color:#94a3b8">[C: ${e.comment} | Due: ${e.due}]</span>`;
+           label.innerHTML = ` ${e.name} <span style="font-size:12px;color:#94a3b8">[${e.comment}]</span>`;
        } else {
            label.innerText = " " + e.name;
        }
@@ -378,7 +517,6 @@ function loadTasks() {
         cb.checked = !cb.checked;
         return;
       }
-      
       if(cb.checked){
         const remark = prompt(`Comment for ${e.name}?`, "Done");
         const dueVal = prompt(`Any pending work/marks left for ${e.name}?`, "None");
@@ -388,15 +526,13 @@ function loadTasks() {
         e.comment = "";
         e.due = "";
       }
-
       e.done = cb.checked;
-      updateLabel(); // Update UI immediately
+      updateLabel();
       updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
       save(tasks, extras);
     };
-
     container.append(cb, label);
-    extraList.append(container);
+    eList.append(container);
   });
 }
 
@@ -427,6 +563,10 @@ function calculate() {
 }
 
 function updateProgress() {
+  // Check if elements exist (might not in Test Mode)
+  const needle = document.getElementById("needle");
+  if(!needle) return;
+
   const p = calculate();
   needle.style.transform =
     `rotate(${(Math.min(p.percent, 300) / 300) * 180 - 90}deg)`;
@@ -444,13 +584,14 @@ function getLabel(p) {
   return "Fabulous";
 }
 
-/* DAY END & REPORT CARD */
+/* DAY END */
 function openDayEnd() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
 
   nextInputs.innerHTML = "";
-  for (let i = 0; i < 5; i++) {
+  // UPDATED: Loop 7 times for 7 slots
+  for (let i = 0; i < 7; i++) {
     nextInputs.innerHTML +=
       `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">`;
   }
@@ -459,9 +600,10 @@ function openDayEnd() {
 
 function finalDayEnd() {
   const next = [];
-  for (let i = 0; i < 5; i++) {
-    const v = document.getElementById("nd" + i).value.trim();
-    if (v) next.push(v);
+  // UPDATED: Loop 7 times
+  for (let i = 0; i < 7; i++) {
+    const el = document.getElementById("nd" + i);
+    if(el && el.value.trim()) next.push(el.value.trim());
   }
   localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
 
@@ -471,7 +613,7 @@ function finalDayEnd() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   const carry = tasks.filter(t => !t.done);
 
-  // 1. TIME CALC
+  // Time Calc
   let totalMillis = 0;
   logs.forEach(l => {
     let end = l.logoutTS;
@@ -484,7 +626,7 @@ function finalDayEnd() {
   const mins = totalMin % 60;
   const timeStr = `${hrs} hr ${mins} min`;
 
-  // 2. DONE TABLE
+  // Done Table
   const doneTasks = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
   const doneExtras = extras.filter(e => e.done).map(e => ({name: e.name + " (Extra)", comment: e.comment, due: e.due}));
   const allDone = [...doneTasks, ...doneExtras];
@@ -515,15 +657,16 @@ function finalDayEnd() {
     doneTable = `<div style="margin-top:20px;color:#fca5a5">No work completed.</div>`;
   }
 
-  // CLEANUP
+  // Cleanup
   localStorage.setItem(key("TASKS"), JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"), JSON.stringify([]));
   localStorage.removeItem(key("LOGS"));
+  localStorage.removeItem(key("TEST_STATE")); // Ensure test state is clear
   
   const tableRef = document.getElementById("logTable");
   if(tableRef) tableRef.innerHTML = "";
 
-  // 3. RENDER
+  // Render Report
   reportBox.innerHTML = `
     <h3>Daily Report</h3>
     <div class="percent">${p.percent}%</div>
@@ -541,7 +684,7 @@ function finalDayEnd() {
     ${doneTable}`;
     
   reportBox.classList.remove("hidden");
-  taskBox.classList.add("hidden");
+  if(taskBox) taskBox.classList.add("hidden"); // check existence
   logBox.classList.add("hidden");
   nextDayBox.classList.add("hidden");
 
@@ -551,11 +694,13 @@ function finalDayEnd() {
   dayBtn.disabled = true;
 }
 
-/* LOG TABLE (LIST WISE VIEW) */
+/* LOG TABLE */
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   
   const table = document.querySelector("table");
+  if(!table) return; // in case hidden
+
   table.innerHTML = `
     <thead>
       <tr>
@@ -575,9 +720,7 @@ function renderLogs() {
     let workHtml = "-";
     
     if (l.completed && l.completed.length) {
-      // Create Vertical List of Work
       workHtml = l.completed.map(item => {
-        // Handle legacy string data vs new object data
         if(typeof item === 'string'){
            return `<div>${item}</div>`;
         }
@@ -585,7 +728,7 @@ function renderLogs() {
         <div style="border-bottom:1px dashed #334155; padding:4px 0;">
             <div style="color:#86efac;font-weight:bold">${item.name}</div>
             <div style="font-size:12px;color:#cbd5e1">
-               Comment: ${item.comment} | Due: <span style="color:#fca5a5">${item.due}</span>
+               ${item.comment} | Due: <span style="color:#fca5a5">${item.due}</span>
             </div>
         </div>`;
       }).join("");
