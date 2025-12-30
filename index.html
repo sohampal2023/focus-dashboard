@@ -195,7 +195,7 @@ function autoLogout() {
   if (logs.length) {
     const last = logs[logs.length - 1];
     last.logout = now();
-    last.logoutTS = Date.now(); // Save timestamp for calc
+    last.logoutTS = Date.now();
     last.reason = "30 min Timeout";
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
@@ -210,7 +210,7 @@ function bioBreak() {
   if (logs.length) {
     const last = logs[logs.length - 1];
     last.logout = now();
-    last.logoutTS = Date.now(); // Save timestamp for calc
+    last.logoutTS = Date.now();
     last.reason = "Pending";
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
@@ -224,7 +224,6 @@ function login() {
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
 
-  // Check previous break reason
   if (logs.length) {
     const lastLog = logs[logs.length - 1];
     if (lastLog.reason === "Pending") {
@@ -235,14 +234,13 @@ function login() {
 
   localStorage.removeItem(key("DAY_ENDED"));
 
-  // New Log with Timestamps and Completed Array
   logs.push({ 
     login: now(), 
     loginTS: Date.now(),
     logout: "-", 
     logoutTS: null,
     reason: "-", 
-    completed: [] // Stores tasks done in this session
+    completed: [] 
   });
   localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 
@@ -275,7 +273,6 @@ function setupTasks() {
 
   localStorage.setItem(key("TASKS"), JSON.stringify(merged));
   localStorage.removeItem(key("NEXT_TASKS"));
-  // Extra work persists until Day End
   
   taskBox.classList.remove("hidden");
   logBox.classList.remove("hidden");
@@ -288,23 +285,20 @@ function loadTasks() {
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
 
-  // Helper to update Current Log
   const updateLogTask = (name, isChecked) => {
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if(logs.length){
       const active = logs[logs.length-1];
       if(isChecked){
-        // Add if not present
         if(!active.completed) active.completed = [];
         active.completed.push(name);
       } else {
-        // Remove if unchecked
         if(active.completed){
           active.completed = active.completed.filter(n => n !== name);
         }
       }
       localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-      renderLogs(); // Refresh table immediately
+      renderLogs();
     }
   };
 
@@ -416,7 +410,7 @@ function finalDayEnd() {
   let totalMillis = 0;
   logs.forEach(l => {
     let end = l.logoutTS;
-    if(!end) end = Date.now(); // If current session, end is now
+    if(!end) end = Date.now();
     if(l.loginTS) totalMillis += (end - l.loginTS);
   });
   
@@ -444,7 +438,10 @@ function finalDayEnd() {
   localStorage.setItem(key("TASKS"), JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"), JSON.stringify([]));
   localStorage.removeItem(key("LOGS"));
-  logTable.innerHTML = "";
+  
+  // FIX: Safely clear table if it exists
+  const tableRef = document.getElementById("logTable");
+  if(tableRef) tableRef.innerHTML = "";
 
   // 3. RENDER REPORT
   reportBox.innerHTML = `
@@ -474,11 +471,11 @@ function finalDayEnd() {
   dayBtn.disabled = true;
 }
 
-/* LOG TABLE (UPDATED) */
+/* LOG TABLE (FIXED ID) */
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   
-  // Re-write table header to ensure 'Work Done' exists
+  // Ensure the table structure exists with the CORRECT ID
   const table = document.querySelector("table");
   table.innerHTML = `
     <thead>
@@ -489,14 +486,14 @@ function renderLogs() {
         <th>Work Done</th>
       </tr>
     </thead>
-    <tbody id="logTableBody"></tbody>
+    <tbody id="logTable"></tbody> 
   `;
+  // ^ Note: I restored id="logTable" so finalDayEnd() can find it.
   
-  const tbody = document.getElementById("logTableBody");
+  const tbody = document.getElementById("logTable");
   tbody.innerHTML = "";
 
   logs.forEach(l => {
-    // If completed array exists and has items, join them. Else "-"
     const work = (l.completed && l.completed.length) ? l.completed.join(", ") : "-";
     
     tbody.innerHTML += `
