@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V7 (Restricted + Slot Delete)</title>
+<title>Focus Watchdog V8 (Sync Fix + Lock Reason)</title>
 
 <style>
 *{box-sizing:border-box}
@@ -361,7 +361,7 @@ function forceLogout() {
 }
 
 // ==========================================
-// ADMIN DASHBOARD LOGIC (Updated V6)
+// ADMIN DASHBOARD LOGIC
 // ==========================================
 async function initAdminDashboard() {
     document.getElementById("statusBox").innerText = "ADMINISTRATOR";
@@ -528,7 +528,7 @@ window.renderAdminLogs = function(uid, logs) {
 };
 
 window.deleteLogEntry = async function(uid, index) {
-    if(!confirm("Delete this specific time slot log?")) return;
+    if(!confirm("Delete this specific time slot log? Student will lose this record on next login.")) return;
     
     try {
         const snapshot = await get(child(ref(db), `users/${uid}/LOGS`));
@@ -579,10 +579,19 @@ window.clearLeave = async function(uid) {
 window.terminateStudent = async function(uid) {
     const hours = prompt("Enter Lockout Duration in Hours (e.g., 1, 24):");
     if(!hours || isNaN(hours)) return;
+
+    const reason = prompt("Enter Reason for Lockout (Visible to Student):");
+    if(!reason) {
+        alert("Lockout Reason is required.");
+        return;
+    }
     
     const lockTime = Date.now() + (parseFloat(hours) * 60 * 60 * 1000);
     try {
-        await update(ref(db, `users/${uid}`), { lockout: lockTime });
+        await update(ref(db, `users/${uid}`), { 
+            lockout: lockTime,
+            lockoutReason: reason 
+        });
         alert("Student Locked.");
         refreshAdminView();
     } catch(e) { alert("Error: " + e.message); }
@@ -610,25 +619,29 @@ async function initStudentDashboard() {
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    await downloadData(currentUser.uid);
+    // 1. DOWNLOAD SERVER DATA FIRST (Source of Truth)
+    const serverData = await downloadData(currentUser.uid);
     
-    // Check Lockout
-    const lockout = localStorage.getItem(key("LOCKOUT"));
-    if(lockout && parseInt(lockout) > Date.now()) {
-        const minLeft = Math.ceil((parseInt(lockout) - Date.now())/60000);
+    // 2. CHECK LOCKOUT IMMEDIATELY FROM SERVER DATA
+    if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
+        const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
+        const reason = serverData.lockoutReason || "Admin Disciplinary Action";
+        
         document.body.innerHTML = `
             <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;text-align:center;">
-                <h1 style="color:#ef4444;font-size:3rem">TERMINATED</h1>
+                <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">TERMINATED</h1>
+                <h2 style="color:#f87171;margin-top:10px">${reason}</h2>
                 <p>Admin has locked your access.</p>
                 <p>Time remaining: ${minLeft} minutes</p>
                 <button onclick="location.reload()" style="width:200px;margin-top:20px;">Try Again</button>
             </div>
         `;
-        return; 
+        return; // STOP HERE. Do not load dashboard.
     }
 
     checkLeaveStatus();
 
+    // 3. LOAD LOGS (Synced from Server in downloadData)
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
@@ -642,6 +655,8 @@ async function initStudentDashboard() {
     }
 
     localStorage.removeItem(key("DAY_ENDED"));
+    
+    // Add new Login Entry
     logs.push({
         login: now(),
         loginTS: Date.now(),
@@ -717,7 +732,6 @@ function checkLeaveStatus() {
     if(req) {
         box.classList.remove("hidden");
         let statusText = "";
-        let color = "#cbd5e1";
         
         if(req.status === "Pending") {
             box.style.background = "#422006"; box.style.borderColor="#ca8a04";
@@ -733,7 +747,13 @@ function checkLeaveStatus() {
             statusText = `<span style="color:#fca5a5">✖ REJECTED</span>`;
         }
         
-        const commentHtml = req.adminComment ? `<div style="margin-top:4px; font-style:italic; border-top:1px solid rgba(255,255,255,0.2); padding-top:4px;">Admin: "${req.adminComment}"</div>` : "";
+        // Show Admin Comment Prominently
+        const commentHtml = req.adminComment ? 
+            `<div style="margin-top:8px; background:rgba(0,0,0,0.3); padding:5px; border-radius:4px; border:1px solid rgba(255,255,255,0.2);">
+                <span style="color:#cbd5e1; font-weight:bold; font-size:11px;">ADMIN MSG:</span>
+                <div style="color:#fff; font-style:italic;">"${req.adminComment}"</div>
+             </div>` : "";
+             
         box.innerHTML = statusText + commentHtml;
 
     } else {
@@ -750,9 +770,13 @@ async function downloadData(uid) {
         const snapshot = await get(child(ref(db), `users/${uid}`));
         if (snapshot.exists()) {
             const data = snapshot.val();
+            
+            // --- STRICT SYNC: Overwrite Local with Server ---
+            // This ensures Admin deletions of LOGS are reflected immediately
             if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
             if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
             if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
+            
             if(data.TEST_STATE) localStorage.setItem(key("TEST_STATE"), data.TEST_STATE);
             if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
             if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
@@ -763,13 +787,16 @@ async function downloadData(uid) {
             
             localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
             localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
+            
+            syncStatus.innerText = "Online";
+            return data; // Return full object for immediate checking
         }
-        syncStatus.innerText = "Online";
-        return true;
+        syncStatus.innerText = "Online (New)";
+        return {};
     } catch (error) {
         console.error("Access Denied:", error);
         syncStatus.innerText = "Auth Error";
-        return false;
+        return null;
     }
 }
 
