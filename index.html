@@ -151,7 +151,7 @@ let UID = null;
 let idleTimer = null;
 let targetTime = null;
 let penalty = 0;
-let idleStrikes = 0; // New Counter
+let idleStrikes = 0; 
 
 const now = () => new Date().toLocaleString();
 const key = k => UID + "_" + k;
@@ -159,8 +159,6 @@ const key = k => UID + "_" + k;
 /* 🔒 IDLE TIMER – DYNAMIC DURATION */
 function startIdle(customSeconds = 1800) {
   clearInterval(idleTimer);
-  
-  // Set target based on custom input or default 30 mins (1800s)
   targetTime = Date.now() + (customSeconds * 1000);
   
   idleBox.classList.remove("hidden");
@@ -188,7 +186,6 @@ function updateIdle(seconds) {
   const m = Math.floor((displaySeconds % 3600) / 60);
   const s = displaySeconds % 60;
 
-  // Format: HH:MM:SS or MM:SS depending on duration
   if(h > 0) {
     idleTime.innerText = `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
   } else {
@@ -196,22 +193,33 @@ function updateIdle(seconds) {
   }
 }
 
-/* LOGOUTS & PENALTY LOGIC */
+/* LOGOUTS & PENALTY LOGIC (FIXED) */
 function autoLogout() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
 
-  // 1. Handle Idle Strikes
-  idleStrikes++;
-  if(idleStrikes >= 2) {
-    penalty += 10; // Charge 10% penalty
-    idleStrikes = 0; // Reset after charging to count next pair
+  // 1. READ latest strikes from Storage (Fixes the sync issue)
+  let currentStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+  
+  // 2. Increment
+  currentStrikes++;
+  
+  // 3. Check Logic
+  if(currentStrikes >= 2) {
+    // Apply Penalty
+    let currentPenalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+    currentPenalty += 10;
+    localStorage.setItem(key("PENALTY"), currentPenalty);
+    
+    // Reset Strikes after penalty
+    currentStrikes = 0; 
     alert("⚠ 2 Consecutive Idle Timeouts! -10% Penalty Applied.");
   }
   
-  localStorage.setItem(key("IDLE_STRIKES"), idleStrikes);
-  localStorage.setItem(key("PENALTY"), penalty);
+  // 4. Save Updates
+  localStorage.setItem(key("IDLE_STRIKES"), currentStrikes);
 
+  // 5. Log the Logout
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
     const last = logs[logs.length - 1];
@@ -220,6 +228,7 @@ function autoLogout() {
     last.reason = "Timeout";
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
+  
   location.reload();
 }
 
@@ -227,9 +236,8 @@ function bioBreak() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
   
-  // Bio Break breaks the consecutive idle streak
-  idleStrikes = 0; 
-  localStorage.setItem(key("IDLE_STRIKES"), idleStrikes);
+  // Bio Break resets the streak
+  localStorage.setItem(key("IDLE_STRIKES"), "0");
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
@@ -249,14 +257,14 @@ function login() {
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
 
-  // Restore Strikes & Penalty
+  // LOAD DATA FROM STORAGE
   idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
   penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
 
-  // Show Idle Strike Count in Sidebar
+  // Update UI
   updateStrikeDisplay();
 
-  // Handle Previous Bio Break Reason
+  // Handle Previous Break
   if (logs.length) {
     const lastLog = logs[logs.length - 1];
     if (lastLog.reason === "Pending") {
@@ -282,13 +290,12 @@ function login() {
   bioBtn.disabled = false;
   dayBtn.disabled = false;
 
-  // CHECK FOR ACTIVE TEST
+  // CHECK TEST STATE
   const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
   if (activeTest) {
     if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
       restoreTestUI(activeTest);
       
-      // RESUME TEST TIMER: Calculate remaining time based on original duration
       const elapsed = (Date.now() - activeTest.startTime) / 1000;
       const totalDuration = activeTest.durationMins * 60;
       const remaining = totalDuration - elapsed;
@@ -296,7 +303,7 @@ function login() {
       if(remaining > 0) {
         startIdle(remaining);
       } else {
-        startIdle(1); // Expires immediately
+        startIdle(1);
       }
       
       loadTasks(); 
@@ -308,7 +315,7 @@ function login() {
     }
   }
 
-  startIdle(); // Default 30 mins
+  startIdle(); 
   setupTasks();
   loadTasks();
   renderLogs();
@@ -316,17 +323,27 @@ function login() {
 }
 
 function updateStrikeDisplay() {
-  // Create or Update Idle Counter in Sidebar
   let box = document.getElementById("idleStrikeBox");
   if(!box) {
     box = document.createElement("div");
     box.id = "idleStrikeBox";
     box.className = "status";
-    box.style.borderColor = "#f87171";
-    box.style.color = "#f87171";
     statusBox.parentNode.insertBefore(box, statusBox.nextSibling);
   }
+  
   box.innerText = `Idle Strikes: ${idleStrikes}`;
+  
+  // Visual Feedback (Red if strike exists)
+  if(idleStrikes > 0) {
+      box.style.borderColor = "#f87171";
+      box.style.color = "#f87171";
+      box.style.background = "rgba(248, 113, 113, 0.1)";
+  } else {
+      // Default style
+      box.style.borderColor = "#334155";
+      box.style.color = "#e5e7eb";
+      box.style.background = "transparent";
+  }
 }
 
 /* --- MOCK TEST LOGIC --- */
@@ -337,7 +354,6 @@ function startMockTestSetup() {
   const fullMarks = prompt("Enter Full Marks:");
   if(!fullMarks) return;
   
-  // KEY CHANGE: Ask for Minutes specifically for the timer
   const durationInput = prompt("Enter Duration in MINUTES (e.g. 120):");
   const durationMins = parseInt(durationInput);
   
@@ -346,7 +362,6 @@ function startMockTestSetup() {
     return;
   }
 
-  // Save State
   const testState = {
     name: name,
     fullMarks: fullMarks,
@@ -355,7 +370,6 @@ function startMockTestSetup() {
   };
   localStorage.setItem(key("TEST_STATE"), JSON.stringify(testState));
 
-  // Change Idle Timer to Test Duration
   startIdle(durationMins * 60);
 
   restoreTestUI(testState);
@@ -365,7 +379,6 @@ function restoreTestUI(testState) {
   taskBox.classList.remove("hidden");
   const container = document.getElementById("taskBox");
   
-  // Format readable time
   const hrs = Math.floor(testState.durationMins / 60);
   const mins = testState.durationMins % 60;
   
@@ -399,7 +412,6 @@ function finishTestSequence(testState) {
   
   if(confirm(msg)) {
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    
     const resultComment = `Score: ${obtained}/${testState.fullMarks} | Acc: ${accuracy}%`;
     
     extras.push({
@@ -408,7 +420,6 @@ function finishTestSequence(testState) {
       comment: resultComment,
       due: "None"
     });
-    
     localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
     
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
@@ -424,8 +435,6 @@ function finishTestSequence(testState) {
     }
 
     localStorage.removeItem(key("TEST_STATE"));
-    
-    // Reset Idle Timer to standard 30 mins
     startIdle(1800);
     location.reload(); 
   }
@@ -453,11 +462,9 @@ function setupTasks() {
     <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
       <div>
         <h3>Assigned Tasks</h3>
-        
         <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center">
              <button onclick="startMockTestSetup()" style="background:#a16207; width:auto; padding:8px 20px;">Start Mock Test</button>
         </div>
-
         <div id="taskList"></div>
         <hr>
         <h4>Extra Work</h4>
