@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog (Secure + History V2)</title>
+<title>Focus Watchdog (Admin Edition)</title>
 
 <style>
 *{box-sizing:border-box}
@@ -41,50 +41,29 @@ button:disabled{opacity:.4; cursor: not-allowed;}
     margin: 0 auto 10px;
 }
 
-/* Rotated so start point is top */
-.timer-svg {
-    transform: rotate(-90deg);
-    width: 100%;
-    height: 100%;
-}
-
-.timer-circle-bg {
-    fill: none;
-    stroke: #1e293b;
-    stroke-width: 8;
-}
-
+.timer-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+.timer-circle-bg { fill: none; stroke: #1e293b; stroke-width: 8; }
 .timer-circle-fg {
-    fill: none;
-    stroke-width: 8;
-    stroke-linecap: round;
-    /* Circumference of r=54 is approx 339 */
-    stroke-dasharray: 339;
-    stroke-dashoffset: 0;
+    fill: none; stroke-width: 8; stroke-linecap: round;
+    stroke-dasharray: 339; stroke-dashoffset: 0;
     transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
 }
 
 .timer-label {
-    position: absolute;
-    top: 50%; left: 50%;
+    position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%);
-    display: flex; flex-direction: column;
-    align-items: center;
+    display: flex; flex-direction: column; align-items: center;
 }
 .timer-time { font-size: 22px; font-weight: 800; color: #f8fafc; line-height: 1; }
 .timer-sub { font-size: 10px; color: #94a3b8; margin-top: 2px; text-transform: uppercase; }
 
-/* Watchdog Animations */
 @keyframes pulse-red {
     0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
     70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
     100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
 }
 
-.critical {
-    animation: pulse-red 1.5s infinite;
-    border-color: #ef4444 !important;
-}
+.critical { animation: pulse-red 1.5s infinite; border-color: #ef4444 !important; }
 
 .watchdog-btn {
     background: #0ea5e9; border:none; color:white;
@@ -98,7 +77,25 @@ button:disabled{opacity:.4; cursor: not-allowed;}
   background:#020617;border:1px solid #334155;
   border-radius:14px;padding:20px;margin-bottom:20px
 }
-.hidden{display:none}
+.hidden{display:none !important}
+
+/* ADMIN PANEL STYLES */
+.admin-row {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 15px; border-bottom: 1px solid #334155;
+}
+.admin-row:last-child { border-bottom: none; }
+.admin-badge { padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; }
+.badge-red { background: #7f1d1d; color: #fca5a5; }
+.badge-green { background: #14532d; color: #86efac; }
+.badge-yellow { background: #713f12; color: #fde047; }
+.admin-btn-group button { width: auto; padding: 5px 10px; font-size: 12px; margin: 0 2px; }
+
+/* LEAVE STATUS */
+.leave-banner {
+    background: #312e81; color: #c7d2fe; padding: 10px;
+    border-radius: 8px; margin-bottom: 10px; text-align: center; font-size: 13px;
+}
 
 /* INPUT */
 .nextInput{
@@ -110,8 +107,7 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 /* SPEEDOMETER */
 .speedo{
   width:300px;height:150px;border-radius:300px 300px 0 0;
-  background:conic-gradient(from -90deg,
-    #7f1d1d,#92400e,#a16207,#14532d,#312e81);
+  background:conic-gradient(from -90deg, #7f1d1d,#92400e,#a16207,#14532d,#312e81);
   position:relative; margin: 0 auto;
   box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b
 }
@@ -151,105 +147,122 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   <div id="statusBox" class="status">Logged out</div>
   <div id="syncStatus" class="sync-status">Offline</div>
 
-  <div id="idleBox" class="idleBox hidden">
-    <div class="timer-container">
-        <svg class="timer-svg" viewBox="0 0 120 120">
-            <circle class="timer-circle-bg" cx="60" cy="60" r="54"></circle>
-            <circle id="timerRing" class="timer-circle-fg" cx="60" cy="60" r="54"></circle>
-        </svg>
-        <div class="timer-label">
-            <div id="idleTime" class="timer-time">30:00</div>
-            <div class="timer-sub">Watchdog</div>
+  <div id="studentControls" class="hidden">
+      <div id="idleBox" class="idleBox hidden">
+        <div class="timer-container">
+            <svg class="timer-svg" viewBox="0 0 120 120">
+                <circle class="timer-circle-bg" cx="60" cy="60" r="54"></circle>
+                <circle id="timerRing" class="timer-circle-fg" cx="60" cy="60" r="54"></circle>
+            </svg>
+            <div class="timer-label">
+                <div id="idleTime" class="timer-time">30:00</div>
+                <div class="timer-sub">Watchdog</div>
+            </div>
         </div>
-    </div>
-    <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
+        <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
+      </div>
+      
+      <div id="leaveStatusBox" class="hidden leave-banner"></div>
+      
+      <button id="leaveBtn" onclick="requestLeave()">Request Leave</button>
+      <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
+      <button id="histBtn" onclick="toggleHistory()" disabled>History</button>
+      <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
   </div>
+
   <div style="flex-grow:1"></div> 
     
   <button id="loginBtn" onclick="handleLoginFlow()">Secure Login</button>
-  <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
-  <button id="histBtn" onclick="toggleHistory()" disabled>View History (9 Days)</button>
-  <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
+  <button id="logoutBtn" class="hidden" onclick="forceLogout()">Logout</button>
 </div>
 
 <div class="main">
 
-<div id="historyBox" class="card hidden">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
-        <h3 style="color:#7dd3fc">History (Protected)</h3>
-        <button onclick="toggleHistory()" style="width:auto; padding:5px 15px;">Close</button>
+<div id="adminBox" class="card hidden" style="border-color: #a855f7;">
+    <h2 style="color:#a855f7; border-bottom:1px solid #334155; padding-bottom:10px;">ADMINISTRATOR DASHBOARD</h2>
+    <div style="text-align:right; margin-bottom:10px;">
+        <button style="width:auto; background:#334155" onclick="refreshAdminView()">Refresh Data</button>
     </div>
-    <table>
+    <div id="studentList">Loading Students...</div>
+</div>
+
+<div id="studentView">
+    <div id="historyBox" class="card hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+            <h3 style="color:#7dd3fc">History (Protected)</h3>
+            <button onclick="toggleHistory()" style="width:auto; padding:5px 15px;">Close</button>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:15%">Date</th>
+                    <th style="width:10%">Score</th>
+                    <th style="width:15%">Time</th>
+                    <th style="width:15%">Rating</th>
+                    <th style="width:45%">Covered Subjects</th>
+                </tr>
+            </thead>
+            <tbody id="historyTable"></tbody>
+        </table>
+    </div>
+
+    <div id="taskBox" class="card hidden">
+      <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
+
+        <div>
+          <h3>Assigned Tasks</h3>
+          <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center">
+               <button onclick="startMockTestSetup()" style="background:#a16207; width:auto; padding:8px 20px;">Start Mock Test</button>
+          </div>
+          <div id="taskList"></div>
+          <hr style="border-color:#334155; margin:15px 0">
+          <h4>Extra Work</h4>
+          <div id="extraList"></div>
+          <button onclick="addExtra()" style="margin-top:10px">+ Add Extra Work</button>
+        </div>
+
+        <div>
+          <h3 style="text-align:center">Live Progress</h3>
+          <div class="speedo">
+            <div id="needle" class="needle"></div>
+            <div class="cap"></div>
+          </div>
+          <div id="livePercent" class="percent">0%</div>
+          <div id="liveRating" class="rating">Poor</div>
+          <div id="liveDetails" class="details"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <div id="logBox" class="card hidden">
+      <h3>Login / Logout Log</h3>
+      <table>
         <thead>
-            <tr>
-                <th style="width:15%">Date</th>
-                <th style="width:10%">Score</th>
-                <th style="width:15%">Time</th>
-                <th style="width:15%">Rating</th>
-                <th style="width:45%">Covered Subjects</th>
-            </tr>
+          <tr><th>Login</th><th>Logout</th><th>Reason</th><th>Work Ticked</th></tr>
         </thead>
-        <tbody id="historyTable"></tbody>
-    </table>
-</div>
-
-<div id="taskBox" class="card hidden">
-  <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
-
-    <div>
-      <h3>Assigned Tasks</h3>
-      <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center">
-           <button onclick="startMockTestSetup()" style="background:#a16207; width:auto; padding:8px 20px;">Start Mock Test</button>
-      </div>
-      <div id="taskList"></div>
-      <hr style="border-color:#334155; margin:15px 0">
-      <h4>Extra Work</h4>
-      <div id="extraList"></div>
-      <button onclick="addExtra()" style="margin-top:10px">+ Add Extra Work</button>
+        <tbody id="logTable"></tbody>
+      </table>
     </div>
 
-    <div>
-      <h3 style="text-align:center">Live Progress</h3>
-      <div class="speedo">
-        <div id="needle" class="needle"></div>
-        <div class="cap"></div>
-      </div>
-      <div id="livePercent" class="percent">0%</div>
-      <div id="liveRating" class="rating">Poor</div>
-      <div id="liveDetails" class="details"></div>
+    <div id="nextDayBox" class="card hidden">
+      <h3>Enter Next Day Tasks</h3>
+      <div id="nextInputs"></div>
+      <button onclick="finalDayEnd()">Submit</button>
     </div>
 
-  </div>
+    <div id="reportBox" class="card hidden"></div>
 </div>
-
-<div id="logBox" class="card hidden">
-  <h3>Login / Logout Log</h3>
-  <table>
-    <thead>
-      <tr><th>Login</th><th>Logout</th><th>Reason</th><th>Work Ticked</th></tr>
-    </thead>
-    <tbody id="logTable"></tbody>
-  </table>
-</div>
-
-<div id="nextDayBox" class="card hidden">
-  <h3>Enter Next Day Tasks</h3>
-  <div id="nextInputs"></div>
-  <button onclick="finalDayEnd()">Submit</button>
-</div>
-
-<div id="reportBox" class="card hidden"></div>
 
 </div>
 </div>
 
 <script type="module">
-// --- FIREBASE SETUP (WEB COMPATIBLE) ---
+// --- FIREBASE SETUP ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, set, get, child, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-// --- YOUR CONFIGURATION ---
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
   authDomain: "focus-dashboard-5965a.firebaseapp.com",
@@ -271,70 +284,10 @@ let targetTime = null;
 let totalDuration = 0;
 let penalty = 0;
 let idleStrikes = 0;
+const ADMIN_EMAIL = "admin@study.com";
 
 const now = () => new Date().toLocaleString();
 const key = k => (currentUser ? currentUser.uid : "GUEST") + "_" + k;
-
-// --- CLOUD FUNCTIONS (SECURED) ---
-async function downloadData(uid) {
-    const dbRef = ref(db);
-    const syncStatus = document.getElementById("syncStatus");
-    syncStatus.innerText = "Verifying Credentials...";
-    
-    try {
-        const snapshot = await get(child(dbRef, `users/${uid}`));
-        
-        if (snapshot.exists()) {
-            const data = snapshot.val();
-            if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
-            if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
-            if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
-            if(data.TEST_STATE) localStorage.setItem(key("TEST_STATE"), data.TEST_STATE);
-            if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
-            if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
-            
-            localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
-            localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
-        } else {
-            console.log("New User - No data yet");
-        }
-        syncStatus.innerText = "Secure Connection Active";
-        return true;
-    } catch (error) {
-        console.error("Access Denied:", error);
-        alert("SECURITY ALERT: Access Denied. Database Locked.");
-        syncStatus.innerText = "Auth Error";
-        return false;
-    }
-}
-
-function uploadData() {
-    if(!currentUser) return;
-    const syncStatus = document.getElementById("syncStatus");
-    syncStatus.innerText = "Encrypting...";
-
-    const payload = {
-        TASKS: localStorage.getItem(key("TASKS")),
-        EXTRA: localStorage.getItem(key("EXTRA")),
-        LOGS: localStorage.getItem(key("LOGS")),
-        TEST_STATE: localStorage.getItem(key("TEST_STATE")),
-        NEXT_TASKS: localStorage.getItem(key("NEXT_TASKS")),
-        HISTORY: localStorage.getItem(key("HISTORY")), 
-        IDLE_STRIKES: localStorage.getItem(key("IDLE_STRIKES")),
-        PENALTY: localStorage.getItem(key("PENALTY"))
-    };
-
-    set(ref(db, `users/${currentUser.uid}`), payload)
-    .then(() => {
-        syncStatus.innerText = "Saved Securely";
-        setTimeout(() => syncStatus.innerText = "Secured", 2000);
-    })
-    .catch((error) => {
-        syncStatus.innerText = "Save Failed";
-        console.error(error);
-        alert("Write Permission Denied. Check Account.");
-    });
-}
 
 // --- AUTHENTICATION FLOW ---
 async function handleLoginFlow() {
@@ -347,14 +300,19 @@ async function handleLoginFlow() {
         document.getElementById("syncStatus").innerText = "Authenticating...";
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         currentUser = userCredential.user;
-        postLoginInit();
+        
+        if (currentUser.email === ADMIN_EMAIL) {
+            initAdminDashboard();
+        } else {
+            initStudentDashboard();
+        }
     } catch (error) {
         if(error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
-            if(confirm("User not found. Create new secure account with these credentials?")) {
+            if(confirm("User not found. Create new secure account?")) {
                 try {
                     const newUser = await createUserWithEmailAndPassword(auth, email, password);
                     currentUser = newUser.user;
-                    postLoginInit();
+                    initStudentDashboard();
                 } catch (createErr) {
                     alert("Creation failed: " + createErr.message);
                 }
@@ -366,17 +324,156 @@ async function handleLoginFlow() {
     }
 }
 
-async function postLoginInit() {
-    document.getElementById("statusBox").innerText = `ID: ${currentUser.email}`;
-    document.getElementById("loginBtn").classList.add("hidden");
-    
-    await downloadData(currentUser.uid);
+function forceLogout() {
+    signOut(auth).then(() => location.reload());
+}
 
+// ==========================================
+// ADMIN DASHBOARD LOGIC
+// ==========================================
+async function initAdminDashboard() {
+    document.getElementById("statusBox").innerText = "ADMINISTRATOR";
+    document.getElementById("statusBox").style.borderColor = "#a855f7";
+    document.getElementById("statusBox").style.color = "#d8b4fe";
+    
+    document.getElementById("loginBtn").classList.add("hidden");
+    document.getElementById("logoutBtn").classList.remove("hidden");
+    document.getElementById("studentView").classList.add("hidden");
+    document.getElementById("studentControls").classList.add("hidden");
+    document.getElementById("adminBox").classList.remove("hidden");
+    
+    document.getElementById("syncStatus").innerText = "Admin Access Granted";
+    refreshAdminView();
+}
+
+async function refreshAdminView() {
+    const listDiv = document.getElementById("studentList");
+    listDiv.innerHTML = "Fetching Data...";
+    
+    try {
+        const snapshot = await get(ref(db, 'users'));
+        if (snapshot.exists()) {
+            const users = snapshot.val();
+            let html = "";
+            
+            Object.keys(users).forEach(uid => {
+                const u = users[uid];
+                const email = u.profile ? u.profile.email : "Unknown User";
+                
+                // Skip Admin
+                if (email === ADMIN_EMAIL) return;
+
+                // Lockout Status
+                let isLocked = false;
+                if(u.lockout && u.lockout > Date.now()) isLocked = true;
+
+                // Leave Status
+                let leaveBadge = `<span class="admin-badge badge-green">Active</span>`;
+                let leaveActions = "";
+                
+                if (u.leaveRequest) {
+                    if (u.leaveRequest.status === "Pending") {
+                        leaveBadge = `<span class="admin-badge badge-yellow">Leave Req: ${u.leaveRequest.dates}</span>`;
+                        leaveActions = `
+                            <button style="background:#166534" onclick="handleLeave('${uid}', true)">Approve</button>
+                            <button style="background:#991b1b" onclick="handleLeave('${uid}', false)">Reject</button>
+                        `;
+                    } else if (u.leaveRequest.status === "Approved") {
+                        leaveBadge = `<span class="admin-badge badge-green">On Leave: ${u.leaveRequest.dates}</span>`;
+                    } else if (u.leaveRequest.status === "Rejected") {
+                        leaveBadge = `<span class="admin-badge badge-red">Leave Rejected</span>`;
+                    }
+                }
+
+                // Lockout Badge
+                if(isLocked) {
+                    const timeLeft = Math.ceil((u.lockout - Date.now())/1000/60);
+                    leaveBadge += ` <span class="admin-badge badge-red">LOCKED (${timeLeft}m)</span>`;
+                }
+
+                // Render Row
+                html += `
+                <div class="admin-row">
+                    <div>
+                        <div style="font-weight:bold; color:#fff">${email}</div>
+                        <div style="font-size:12px; color:#94a3b8">ID: ${uid.substring(0,6)}...</div>
+                    </div>
+                    <div style="text-align:center">
+                        ${leaveBadge}
+                        <div style="font-size:11px; margin-top:4px;">${u.leaveRequest ? u.leaveRequest.reason : ""}</div>
+                    </div>
+                    <div class="admin-btn-group">
+                        ${leaveActions}
+                        <button style="background:#ea580c" onclick="terminateStudent('${uid}')">Terminate (Lock)</button>
+                    </div>
+                </div>`;
+            });
+            
+            listDiv.innerHTML = html || "No students found.";
+        } else {
+            listDiv.innerHTML = "No user data available.";
+        }
+    } catch (e) {
+        console.error(e);
+        listDiv.innerHTML = "Error fetching data.";
+    }
+}
+
+// Admin Actions attached to window
+window.handleLeave = async function(uid, approve) {
+    const status = approve ? "Approved" : "Rejected";
+    try {
+        await update(ref(db, `users/${uid}/leaveRequest`), { status: status });
+        alert(`Leave ${status}`);
+        refreshAdminView();
+    } catch(e) { alert("Error updating: " + e.message); }
+};
+
+window.terminateStudent = async function(uid) {
+    const hours = prompt("Enter Lockout Duration in Hours (e.g., 1, 4, 24):");
+    if(!hours || isNaN(hours)) return;
+    
+    const lockTime = Date.now() + (parseFloat(hours) * 60 * 60 * 1000);
+    try {
+        await update(ref(db, `users/${uid}`), { lockout: lockTime });
+        alert("Student Terminated/Locked out.");
+        refreshAdminView();
+    } catch(e) { alert("Error: " + e.message); }
+};
+window.refreshAdminView = refreshAdminView;
+
+// ==========================================
+// STUDENT DASHBOARD LOGIC
+// ==========================================
+async function initStudentDashboard() {
+    document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
+    document.getElementById("loginBtn").classList.add("hidden");
+    document.getElementById("studentControls").classList.remove("hidden");
+
+    await downloadData(currentUser.uid);
+    
+    // Check Lockout
+    const lockout = localStorage.getItem(key("LOCKOUT"));
+    if(lockout && parseInt(lockout) > Date.now()) {
+        const minLeft = Math.ceil((parseInt(lockout) - Date.now())/60000);
+        document.body.innerHTML = `
+            <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;text-align:center;">
+                <h1 style="color:#ef4444;font-size:3rem">TERMINATED</h1>
+                <p>Admin has locked your access.</p>
+                <p>Time remaining: ${minLeft} minutes</p>
+                <button onclick="location.reload()" style="width:200px;margin-top:20px;">Try Again</button>
+            </div>
+        `;
+        return; // Stop execution
+    }
+
+    // Check Leave Status
+    checkLeaveStatus();
+
+    // Standard Init
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
-
-    updateStrikeDisplay();
 
     if (logs.length) {
         const lastLog = logs[logs.length - 1];
@@ -387,7 +484,6 @@ async function postLoginInit() {
     }
 
     localStorage.removeItem(key("DAY_ENDED"));
-
     logs.push({
         login: now(),
         loginTS: Date.now(),
@@ -398,11 +494,12 @@ async function postLoginInit() {
     });
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 
+    // Enable Buttons
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
     
-    uploadData();
+    uploadData(); // Saves email profile + logs
 
     // Check Mock Test
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
@@ -412,22 +509,11 @@ async function postLoginInit() {
            finishTestSequence(activeTest, true);
            return;
         }
-
         if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
             restoreTestUI(activeTest);
             const elapsed = (Date.now() - activeTest.startTime) / 1000;
-            const totalDurationSecs = activeTest.durationMins * 60;
-            const remaining = totalDurationSecs - elapsed;
-
-            if(remaining > 0) {
-                startIdle(remaining);
-            } else {
-                startIdle(1);
-            }
-            
-            const btn = document.querySelector(".watchdog-btn");
-            if(btn) btn.innerText = "EXAM MODE (NO RESET)";
-
+            const remaining = (activeTest.durationMins * 60) - elapsed;
+            startIdle(remaining > 0 ? remaining : 1);
             loadTasks();
             renderLogs();
             updateProgress();
@@ -445,13 +531,111 @@ async function postLoginInit() {
     updateProgress();
 }
 
-// --- HISTORY LOGIC (PROTECTED) ---
-function toggleHistory() {
-    if(!currentUser) {
-        alert("Security Alert: Login required to view history.");
-        return;
-    }
+// --- STUDENT LEAVE FUNCTIONS ---
+async function requestLeave() {
+    const dates = prompt("Enter Dates (e.g., Dec 31 - Jan 2):");
+    if(!dates) return;
+    const reason = prompt("Enter Reason:");
+    if(!reason) return;
+    
+    const payload = {
+        dates: dates,
+        reason: reason,
+        status: "Pending",
+        timestamp: Date.now()
+    };
+    
+    // Save locally and push to DB specific node
+    localStorage.setItem(key("LEAVE_REQ"), JSON.stringify(payload));
+    
+    try {
+        await update(ref(db, `users/${currentUser.uid}/leaveRequest`), payload);
+        checkLeaveStatus(); // Refresh UI
+    } catch(e) { alert("Failed to send request"); }
+}
 
+function checkLeaveStatus() {
+    // We check local storage for immediate feedback, but verify with DB in downloadData
+    const req = JSON.parse(localStorage.getItem(key("LEAVE_REQ")));
+    const box = document.getElementById("leaveStatusBox");
+    
+    if(req) {
+        box.classList.remove("hidden");
+        if(req.status === "Pending") {
+            box.style.background = "#422006"; box.style.color="#fde047";
+            box.innerText = `Leave Pending: ${req.dates}`;
+        } else if (req.status === "Approved") {
+            box.style.background = "#14532d"; box.style.color="#86efac";
+            box.innerText = `Leave Approved: ${req.dates}`;
+        } else if (req.status === "Rejected") {
+            box.style.background = "#7f1d1d"; box.style.color="#fca5a5";
+            box.innerText = `Leave Rejected. Contact Admin.`;
+        }
+    } else {
+        box.classList.add("hidden");
+    }
+}
+
+// --- DATA SYNC ---
+async function downloadData(uid) {
+    const syncStatus = document.getElementById("syncStatus");
+    syncStatus.innerText = "Syncing...";
+    
+    try {
+        const snapshot = await get(child(ref(db), `users/${uid}`));
+        if (snapshot.exists()) {
+            const data = snapshot.val();
+            if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
+            if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
+            if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
+            if(data.TEST_STATE) localStorage.setItem(key("TEST_STATE"), data.TEST_STATE);
+            if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
+            if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
+            
+            // Sync Admin Controlled Fields
+            if(data.lockout) localStorage.setItem(key("LOCKOUT"), data.lockout);
+            if(data.leaveRequest) localStorage.setItem(key("LEAVE_REQ"), JSON.stringify(data.leaveRequest));
+            
+            localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
+            localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
+        }
+        syncStatus.innerText = "Online";
+        return true;
+    } catch (error) {
+        console.error("Access Denied:", error);
+        syncStatus.innerText = "Auth Error";
+        return false;
+    }
+}
+
+function uploadData() {
+    if(!currentUser) return;
+    const syncStatus = document.getElementById("syncStatus");
+    
+    const payload = {
+        profile: { email: currentUser.email }, // CRITICAL FOR ADMIN TO SEE WHO IS WHO
+        TASKS: localStorage.getItem(key("TASKS")),
+        EXTRA: localStorage.getItem(key("EXTRA")),
+        LOGS: localStorage.getItem(key("LOGS")),
+        TEST_STATE: localStorage.getItem(key("TEST_STATE")),
+        NEXT_TASKS: localStorage.getItem(key("NEXT_TASKS")),
+        HISTORY: localStorage.getItem(key("HISTORY")), 
+        IDLE_STRIKES: localStorage.getItem(key("IDLE_STRIKES")),
+        PENALTY: localStorage.getItem(key("PENALTY"))
+    };
+
+    update(ref(db, `users/${currentUser.uid}`), payload)
+    .then(() => {
+        syncStatus.innerText = "Saved";
+        setTimeout(() => syncStatus.innerText = "Online", 2000);
+    })
+    .catch((error) => {
+        syncStatus.innerText = "Save Failed";
+    });
+}
+
+// --- HISTORY LOGIC ---
+function toggleHistory() {
     const histBox = document.getElementById("historyBox");
     const taskBox = document.getElementById("taskBox");
     const logBox = document.getElementById("logBox");
@@ -485,7 +669,7 @@ function toggleHistory() {
         });
         
         if(history.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5">No history records yet. Complete a day to see stats.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="5">No history records yet.</td></tr>`;
         }
     } else {
         histBox.classList.add("hidden");
@@ -598,7 +782,7 @@ function autoLogout() {
     currentPenalty += 10;
     localStorage.setItem(key("PENALTY"), currentPenalty);
     currentStrikes = 0;
-    alert(" Watchdog bit you! 2 Timeouts = -10% Penalty.");
+    alert("Watchdog bit you! 2 Timeouts = -10% Penalty.");
   }
   localStorage.setItem(key("IDLE_STRIKES"), currentStrikes);
 
@@ -638,28 +822,6 @@ function bioBreak() {
   }
   uploadData();
   setTimeout(() => location.reload(), 500);
-}
-
-function updateStrikeDisplay() {
-  let box = document.getElementById("idleStrikeBox");
-  if(!box) {
-    box = document.createElement("div");
-     box.id = "idleStrikeBox";
-    box.className = "status";
-    document.getElementById("statusBox").parentNode.insertBefore(box, document.getElementById("statusBox").nextSibling);
-  }
-  
-  box.innerText = `Idle Strikes: ${idleStrikes}`;
-  
-  if(idleStrikes > 0) {
-      box.style.borderColor = "#f87171";
-      box.style.color = "#f87171";
-      box.style.background = "rgba(248, 113, 113, 0.1)";
-  } else {
-      box.style.borderColor = "#334155";
-      box.style.color = "#e5e7eb";
-      box.style.background = "transparent";
-  }
 }
 
 // --- MOCK TEST LOGIC ---
@@ -1009,7 +1171,7 @@ function finalDayEnd() {
   const mins = totalMin % 60;
   const timeStr = `${hrs} hr ${mins} min`;
 
-  // --- SAVE HISTORY WITH SUBJECTS (AUTO DELETE > 9) ---
+  // --- SAVE HISTORY WITH SUBJECTS ---
   const doneTasks = tasks.filter(t => t.done).map(t => t.name);
   const doneExtras = extras.filter(e => e.done).map(e => e.name + " (Extra)");
   const subjectsCovered = [...doneTasks, ...doneExtras].join(", ");
@@ -1022,10 +1184,9 @@ function finalDayEnd() {
       subjects: subjectsCovered || "No Tasks Completed"
   };
   
-  // Get existing history, add new, keep last 9
   let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
   history.push(historyEntry);
-  if (history.length > 9) history.shift(); // Remove oldest if > 9
+  if (history.length > 9) history.shift(); 
   localStorage.setItem(key("HISTORY"), JSON.stringify(history));
   // ----------------------------------
 
@@ -1095,10 +1256,8 @@ function finalDayEnd() {
   document.getElementById("historyBox").classList.add("hidden");
 
   document.getElementById("statusBox").innerText = "Day End – Thank you";
+  document.getElementById("studentControls").classList.add("hidden");
   document.getElementById("loginBtn").classList.remove("hidden");
-  document.getElementById("bioBtn").disabled = true;
-  document.getElementById("dayBtn").disabled = true;
-  document.getElementById("histBtn").disabled = true;
   currentUser = null;
 }
 
@@ -1143,6 +1302,8 @@ window.startMockTestSetup = startMockTestSetup;
 window.triggerEndTest = triggerEndTest;
 window.addExtra = addExtra;
 window.toggleHistory = toggleHistory;
+window.requestLeave = requestLeave;
+window.forceLogout = forceLogout;
 </script>
 </body>
 </html>
