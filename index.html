@@ -170,7 +170,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
   <button id="histBtn" onclick="toggleHistory()" disabled>View History (9 Days)</button>
   <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
-  <button id="logoutBtn" onclick="handleLogout()" class="hidden" style="background:#7f1d1d">Logout</button>
 </div>
 
 <div class="main">
@@ -246,12 +245,11 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 <script type="module">
 // --- FIREBASE SETUP (WEB COMPATIBLE) ---
-// We use FULL URLs here so the browser can understand them without a build tool.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, set, get, child, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-// --- YOUR CONFIGURATION (CORRECTLY INSERTED) ---
+// --- YOUR CONFIGURATION ---
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
   authDomain: "focus-dashboard-5965a.firebaseapp.com",
@@ -368,15 +366,9 @@ async function handleLoginFlow() {
     }
 }
 
-async function handleLogout() {
-    await signOut(auth);
-    location.reload();
-}
-
 async function postLoginInit() {
     document.getElementById("statusBox").innerText = `ID: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
-    document.getElementById("logoutBtn").classList.remove("hidden");
     
     await downloadData(currentUser.uid);
 
@@ -1104,7 +1096,6 @@ function finalDayEnd() {
 
   document.getElementById("statusBox").innerText = "Day End – Thank you";
   document.getElementById("loginBtn").classList.remove("hidden");
-  document.getElementById("logoutBtn").classList.add("hidden");
   document.getElementById("bioBtn").disabled = true;
   document.getElementById("dayBtn").disabled = true;
   document.getElementById("histBtn").disabled = true;
@@ -1142,9 +1133,8 @@ function renderLogs() {
   });
 }
 
-// --- ATTACH TO WINDOW (CRITICAL FIX FOR MODULES) ---
+// --- ATTACH TO WINDOW ---
 window.handleLoginFlow = handleLoginFlow;
-window.handleLogout = handleLogout;
 window.resetWatchdog = resetWatchdog;
 window.bioBreak = bioBreak;
 window.openDayEnd = openDayEnd;
