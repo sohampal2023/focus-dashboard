@@ -156,7 +156,7 @@ let idleStrikes = 0;
 const now = () => new Date().toLocaleString();
 const key = k => UID + "_" + k;
 
-/* 🔒 IDLE TIMER – DYNAMIC DURATION */
+/* 🔒 IDLE TIMER */
 function startIdle(customSeconds = 1800) {
   clearInterval(idleTimer);
   targetTime = Date.now() + (customSeconds * 1000);
@@ -193,33 +193,33 @@ function updateIdle(seconds) {
   }
 }
 
-/* LOGOUTS & PENALTY LOGIC (FIXED) */
+/* LOGOUTS & PENALTY LOGIC */
 function autoLogout() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
 
-  // 1. READ latest strikes from Storage (Fixes the sync issue)
+  // 1. Strike Logic
   let currentStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
-  
-  // 2. Increment
   currentStrikes++;
   
-  // 3. Check Logic
   if(currentStrikes >= 2) {
-    // Apply Penalty
     let currentPenalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
     currentPenalty += 10;
     localStorage.setItem(key("PENALTY"), currentPenalty);
-    
-    // Reset Strikes after penalty
     currentStrikes = 0; 
     alert("⚠ 2 Consecutive Idle Timeouts! -10% Penalty Applied.");
   }
-  
-  // 4. Save Updates
   localStorage.setItem(key("IDLE_STRIKES"), currentStrikes);
 
-  // 5. Log the Logout
+  // 2. DETECT MOCK TEST TIMEOUT (The Rule)
+  // If a test is active when timeout hits, mark it EXPIRED.
+  const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+  if(activeTest) {
+      activeTest.status = "EXPIRED"; 
+      localStorage.setItem(key("TEST_STATE"), JSON.stringify(activeTest));
+  }
+
+  // 3. Log Logout
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
     const last = logs[logs.length - 1];
@@ -236,7 +236,7 @@ function bioBreak() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
   
-  // Bio Break resets the streak
+  // Bio break does NOT mark test as expired. It stays "RUNNING".
   localStorage.setItem(key("IDLE_STRIKES"), "0");
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
@@ -257,14 +257,11 @@ function login() {
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
 
-  // LOAD DATA FROM STORAGE
   idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
   penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
 
-  // Update UI
   updateStrikeDisplay();
 
-  // Handle Previous Break
   if (logs.length) {
     const lastLog = logs[logs.length - 1];
     if (lastLog.reason === "Pending") {
@@ -290,9 +287,21 @@ function login() {
   bioBtn.disabled = false;
   dayBtn.disabled = false;
 
-  // CHECK TEST STATE
+  // --- CHECK MOCK TEST STATE ---
   const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+  
   if (activeTest) {
+    // RULE: If Timeout caused logout, status is EXPIRED.
+    // ACTION: Force marks entry, then load dashboard.
+    if (activeTest.status === "EXPIRED") {
+       alert("Mock Test Time Ended! Please enter marks.");
+       // We pass 'true' to indicate we want to load dashboard after saving
+       finishTestSequence(activeTest, true); 
+       return;
+    }
+
+    // RULE: If Bio Break caused logout, status is RUNNING (undefined/default).
+    // ACTION: Ask to Resume.
     if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
       restoreTestUI(activeTest);
       
@@ -311,10 +320,13 @@ function login() {
       updateProgress();
       return; 
     } else {
-      finishTestSequence(activeTest);
+      // User manually chose NOT to resume
+      finishTestSequence(activeTest, true);
+      return;
     }
   }
 
+  // NORMAL LOGIN (No Test)
   startIdle(); 
   setupTasks();
   loadTasks();
@@ -333,13 +345,11 @@ function updateStrikeDisplay() {
   
   box.innerText = `Idle Strikes: ${idleStrikes}`;
   
-  // Visual Feedback (Red if strike exists)
   if(idleStrikes > 0) {
       box.style.borderColor = "#f87171";
       box.style.color = "#f87171";
       box.style.background = "rgba(248, 113, 113, 0.1)";
   } else {
-      // Default style
       box.style.borderColor = "#334155";
       box.style.color = "#e5e7eb";
       box.style.background = "transparent";
@@ -366,7 +376,8 @@ function startMockTestSetup() {
     name: name,
     fullMarks: fullMarks,
     durationMins: durationMins,
-    startTime: Date.now()
+    startTime: Date.now(),
+    status: "RUNNING"
   };
   localStorage.setItem(key("TEST_STATE"), JSON.stringify(testState));
 
@@ -398,15 +409,19 @@ function restoreTestUI(testState) {
 
 function triggerEndTest() {
   const testState = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-  if(testState) finishTestSequence(testState);
+  // Pass 'true' to load dashboard
+  if(testState) finishTestSequence(testState, true);
 }
 
-function finishTestSequence(testState) {
-  const obtained = prompt(`Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`);
-  if(obtained === null) return; 
+function finishTestSequence(testState, loadDashboard = false) {
+  let obtained = prompt(`Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`);
   
-  const accuracy = prompt("Enter Accuracy %:");
-  if(accuracy === null) return;
+  // Prevent escaping if test is expired
+  if(obtained === null && testState.status === "EXPIRED") obtained = "0";
+  if(obtained === null) return; // Allow cancel only if manually triggered
+
+  let accuracy = prompt("Enter Accuracy %:");
+  if(accuracy === null) accuracy = "0";
 
   const msg = `Please Confirm Details:\n\nTest: ${testState.name}\nScore: ${obtained} / ${testState.fullMarks}\nAccuracy: ${accuracy}%`;
   
@@ -435,8 +450,23 @@ function finishTestSequence(testState) {
     }
 
     localStorage.removeItem(key("TEST_STATE"));
-    startIdle(1800);
-    location.reload(); 
+    
+    // IMPORTANT: Reset Idle to 30 mins and Load Dashboard
+    if(loadDashboard) {
+        startIdle(1800);
+        setupTasks();
+        loadTasks();
+        renderLogs();
+        updateProgress();
+    } else {
+        location.reload(); 
+    }
+  } else {
+    // Loop if expired and they try to cancel confirmation
+    if(testState.status === "EXPIRED") {
+        alert("You must save marks to proceed.");
+        finishTestSequence(testState, true);
+    }
   }
 }
 
