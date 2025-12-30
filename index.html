@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus System + Watchdog</title>
+<title>Focus Watchdog System</title>
 
 <style>
 *{box-sizing:border-box}
@@ -226,13 +226,21 @@ const key = k => UID + "_" + k;
 /* 🔒 IDLE TIMER & WATCHDOG LOGIC */
 
 function startIdle(customSeconds = 1800) {
-  clearInterval(idleTimer);
-  totalDuration = customSeconds; // Store Max time for Circle Calc
+  // Clear any existing interval to prevent overlapping timers
+  if(idleTimer) clearInterval(idleTimer);
+  
+  totalDuration = customSeconds; 
   targetTime = Date.now() + (customSeconds * 1000);
   
-  idleBox.classList.remove("hidden");
-  idleBox.classList.remove("critical"); // Remove red pulse if exists
-  updateIdle();
+  // UI Updates
+  const idleBox = document.getElementById("idleBox");
+  if(idleBox) {
+      idleBox.classList.remove("hidden");
+      idleBox.classList.remove("critical");
+  }
+
+  // Instant update to prevent 1-second delay
+  updateIdle(customSeconds);
 
   idleTimer = setInterval(() => {
     const current = Date.now();
@@ -246,34 +254,38 @@ function startIdle(customSeconds = 1800) {
   }, 1000);
 }
 
-// The "Kick the Dog" function
+// 🟢 FIXED WATCHDOG FUNCTION (NO POPUPS)
 function resetWatchdog() {
-    // Visual Feedback
+    if(!UID) return; 
+
     const btn = document.querySelector('.watchdog-btn');
-    const originalText = btn.innerText;
-    btn.innerText = "TIMER RESET!";
-    btn.style.background = "#22c55e"; // Green flash
+    
+    // Check for Exam Mode
+    const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+    if(activeTest && activeTest.status === "RUNNING") {
+        // VISUAL WARNING ONLY (No Alert)
+        const originalText = btn.innerText;
+        btn.innerText = "NO RESET IN EXAM";
+        btn.style.background = "#ef4444"; // Red
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.style.background = "";
+        }, 1500);
+        return;
+    }
+
+    // Normal Study Mode: RESET
+    startIdle(1800); // Back to 30 mins
+    
+    // VISUAL SUCCESS (No Alert)
+    const originalText = "I AM STUDYING";
+    btn.innerText = "WATCHDOG RESET";
+    btn.style.background = "#22c55e"; // Green
     
     setTimeout(() => {
         btn.innerText = originalText;
-        btn.style.background = ""; // Revert
-    }, 800);
-
-    // Logic: Simply restart the idle timer with the original duration
-    // If a mock test is running, we calculate remaining mock time instead of default 30m
-    const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-    
-    if(activeTest && activeTest.status === "RUNNING") {
-        // Mock test logic: Don't reset to full duration, just keep counting down.
-        // Actually, for a mock test, the watchdog shouldn't "Reset" the exam time, 
-        // but the prompt implies a "Focus Watchdog".
-        // If it's a mock test, the timer is the EXAM timer. We shouldn't extend exam time.
-        // So this button essentially confirms presence but doesn't add time during exams.
-        alert("Exam in progress. Timer is fixed to Exam Duration.");
-    } else {
-        // Normal study mode: Reset the 30min watchdog
-        startIdle(1800); 
-    }
+        btn.style.background = ""; 
+    }, 1000);
 }
 
 function updateIdle(seconds) {
@@ -287,44 +299,41 @@ function updateIdle(seconds) {
   const m = Math.floor((displaySeconds % 3600) / 60);
   const s = displaySeconds % 60;
   
-  // Format MM:SS
   const text = `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
-  // If hours exist, add them
-  idleTime.innerText = h > 0 ? `${h}:${text}` : text;
+  const timeDisplay = document.getElementById("idleTime");
+  if(timeDisplay) {
+    timeDisplay.innerText = h > 0 ? `${h}:${text}` : text;
+  }
 
-  // 2. Update Ring (Innovative Part)
+  // 2. Update Ring
   const ring = document.getElementById("timerRing");
-  const maxDash = 339; // 2 * PI * 54 (radius)
-  
-  // Calculate percentage remaining (0 to 1)
-  const pct = displaySeconds / totalDuration;
-  
-  // Offset: Full (0) -> Empty (339)
-  // Logic: 339 - (339 * pct)
-  // Actually standard way: offset = circumference * (1-pct)
-  const offset = maxDash * (1 - pct);
-  ring.style.strokeDashoffset = offset;
+  if(ring) {
+      const maxDash = 339; // 2 * PI * 54
+      const pct = displaySeconds / totalDuration;
+      const offset = maxDash * (1 - pct);
+      ring.style.strokeDashoffset = offset;
 
-  // 3. Dynamic Coloring
-  if (pct > 0.5) {
-      ring.style.stroke = "#3b82f6"; // Blue
-      idleBox.classList.remove("critical");
-  } else if (pct > 0.15) {
-      ring.style.stroke = "#f59e0b"; // Orange/Yellow
-      idleBox.classList.remove("critical");
-  } else {
-      ring.style.stroke = "#ef4444"; // Red
-      // Add Pulse animation to the box when < 15% time left
-      idleBox.classList.add("critical");
+      // 3. Dynamic Coloring
+      const idleBox = document.getElementById("idleBox");
+      if (pct > 0.5) {
+          ring.style.stroke = "#3b82f6"; // Blue
+          idleBox.classList.remove("critical");
+      } else if (pct > 0.15) {
+          ring.style.stroke = "#f59e0b"; // Orange
+          idleBox.classList.remove("critical");
+      } else {
+          ring.style.stroke = "#ef4444"; // Red
+          idleBox.classList.add("critical");
+      }
   }
 }
 
 /* LOGOUTS & PENALTY LOGIC */
 function autoLogout() {
   clearInterval(idleTimer);
-  idleBox.classList.add("hidden");
+  const idleBox = document.getElementById("idleBox");
+  if(idleBox) idleBox.classList.add("hidden");
 
-  // 1. Strike Logic
   let currentStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
   currentStrikes++;
   
@@ -337,14 +346,12 @@ function autoLogout() {
   }
   localStorage.setItem(key("IDLE_STRIKES"), currentStrikes);
 
-  // 2. DETECT MOCK TEST TIMEOUT (The Rule)
   const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
   if(activeTest) {
       activeTest.status = "EXPIRED"; 
       localStorage.setItem(key("TEST_STATE"), JSON.stringify(activeTest));
   }
 
-  // 3. Log Logout
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
     const last = logs[logs.length - 1];
@@ -359,7 +366,8 @@ function autoLogout() {
 
 function bioBreak() {
   clearInterval(idleTimer);
-  idleBox.classList.add("hidden");
+  const idleBox = document.getElementById("idleBox");
+  if(idleBox) idleBox.classList.add("hidden");
   
   localStorage.setItem(key("IDLE_STRIKES"), "0");
 
@@ -435,9 +443,9 @@ function login() {
         startIdle(1);
       }
       
-      // Disable the reset button during exam
-      document.querySelector(".watchdog-btn").disabled = true;
-      document.querySelector(".watchdog-btn").innerText = "Exam Mode";
+      // Update Button Text for Exam Mode
+      const btn = document.querySelector(".watchdog-btn");
+      if(btn) btn.innerText = "EXAM MODE (NO RESET)";
 
       loadTasks(); 
       renderLogs();
@@ -504,9 +512,9 @@ function startMockTestSetup() {
   };
   localStorage.setItem(key("TEST_STATE"), JSON.stringify(testState));
 
-  // Disable Watchdog reset during exam
-  document.querySelector(".watchdog-btn").disabled = true;
-  document.querySelector(".watchdog-btn").innerText = "Exam Mode";
+  // Update button for Exam Mode
+  const btn = document.querySelector(".watchdog-btn");
+  if(btn) btn.innerText = "EXAM MODE (NO RESET)";
 
   startIdle(durationMins * 60);
 
@@ -577,8 +585,8 @@ function finishTestSequence(testState, loadDashboard = false) {
     localStorage.removeItem(key("TEST_STATE"));
     
     // Re-enable Watchdog for study mode
-    document.querySelector(".watchdog-btn").disabled = false;
-    document.querySelector(".watchdog-btn").innerText = "I AM STUDYING";
+    const btn = document.querySelector(".watchdog-btn");
+    if(btn) btn.innerText = "I AM STUDYING";
 
     if(loadDashboard) {
         startIdle(1800);
@@ -788,7 +796,8 @@ function getLabel(p) {
 /* DAY END */
 function openDayEnd() {
   clearInterval(idleTimer);
-  idleBox.classList.add("hidden");
+  const idleBox = document.getElementById("idleBox");
+  if(idleBox) idleBox.classList.add("hidden");
 
   nextInputs.innerHTML = "";
   for (let i = 0; i < 7; i++) {
