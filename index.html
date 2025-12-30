@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V8 (Sync Fix + Lock Reason)</title>
+<title>Focus Watchdog V9 (Real Logs + Unlock)</title>
 
 <style>
 *{box-sizing:border-box}
@@ -96,14 +96,16 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 }
 .modal-content {
     background: #0f172a; border: 1px solid #334155; border-radius: 12px;
-    width: 600px; max-height: 80vh; overflow-y: auto; padding: 20px;
+    width: 700px; max-height: 80vh; overflow-y: auto; padding: 20px;
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
 }
 .log-row {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 10px; border-bottom: 1px dashed #334155;
+    display: grid; grid-template-columns: 1fr 1fr 1fr 2fr 80px; gap: 10px;
+    padding: 10px; border-bottom: 1px dashed #334155; font-size: 12px;
+    align-items: start;
 }
 .log-row:hover { background: #1e293b; }
+.log-header { font-weight: bold; color: #94a3b8; text-transform: uppercase; background: #1e293b; border-bottom: none; }
 
 /* LEAVE STATUS */
 .leave-banner {
@@ -200,8 +202,15 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <div id="adminModal" class="modal-overlay hidden">
     <div class="modal-content">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #334155; padding-bottom:10px;">
-            <h3 style="margin:0; color:#38bdf8">Student Logs Inspector</h3>
+            <h3 style="margin:0; color:#38bdf8">Student Logs (Last 10 Entries)</h3>
             <button onclick="closeAdminModal()" style="width:auto; padding:5px 10px; background:#334155">Close</button>
+        </div>
+        <div class="log-row log-header">
+            <div>Login</div>
+            <div>Logout</div>
+            <div>Reason</div>
+            <div>Work Completed</div>
+            <div>Action</div>
         </div>
         <div id="modalBody">Loading...</div>
     </div>
@@ -319,7 +328,6 @@ async function handleLoginFlow() {
     const email = prompt("Enter Authorized Email:");
     if (!email) return;
 
-    // 1. STRICT WHITELIST CHECK
     if (!ALLOWED_EMAILS.includes(email.trim().toLowerCase())) {
         alert("ACCESS DENIED: You are not an enrolled student.");
         return;
@@ -427,7 +435,6 @@ async function refreshAdminView() {
                         `;
                         leaveDetails = `<div style="font-size:10px; color:#fde047; margin-top:2px;">Reason: ${u.leaveRequest.reason}</div>`;
                     } else {
-                        // Already decided
                         const s = u.leaveRequest.status;
                         const badgeClass = s === "Approved" ? "badge-green" : (s === "Half Approved" ? "badge-blue" : "badge-red");
                         leaveBadge = `<span class="admin-badge ${badgeClass}">${s}: ${u.leaveRequest.dates}</span>`;
@@ -441,7 +448,7 @@ async function refreshAdminView() {
                     leaveBadge += ` <span class="admin-badge badge-red">LOCKED (${timeLeft}m)</span>`;
                 }
 
-                // 4. Render Row
+                // 4. Render Row with UNLOCK BUTTON
                 html += `
                 <div class="admin-row">
                     <div>
@@ -460,8 +467,9 @@ async function refreshAdminView() {
 
                     <div class="admin-btn-group">
                         ${leaveActions}
-                        <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">Edit Logs</button>
+                        <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
                         <button style="background:#ea580c; margin-top:4px;" onclick="terminateStudent('${uid}')">Lock</button>
+                        ${isLocked ? `<button style="background:#22c55e; margin-top:4px;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
                         <button style="background:#ef4444; margin-top:4px;" onclick="deleteStudent('${uid}')">Delete User</button>
                     </div>
                 </div>`;
@@ -477,12 +485,12 @@ async function refreshAdminView() {
     }
 }
 
-// --- ADMIN LOG INSPECTOR ---
+// --- ADMIN LOG INSPECTOR (LAST 10 ONLY) ---
 window.openAdminModal = async function(uid, email) {
     const modal = document.getElementById("adminModal");
     const body = document.getElementById("modalBody");
     modal.classList.remove("hidden");
-    body.innerHTML = "Loading logs...";
+    body.innerHTML = "Loading live logs...";
     
     try {
         const snapshot = await get(child(ref(db), `users/${uid}/LOGS`));
@@ -492,35 +500,45 @@ window.openAdminModal = async function(uid, email) {
         }
         
         let logs = JSON.parse(snapshot.val() || "[]");
-        renderAdminLogs(uid, logs);
+        // Only show last 10 entries to match user experience
+        let startIndex = Math.max(0, logs.length - 10);
+        let displayLogs = logs.slice(startIndex);
+        
+        renderAdminLogs(uid, displayLogs, startIndex);
         
     } catch(e) {
         body.innerHTML = "Error loading logs: " + e.message;
     }
 };
 
-window.renderAdminLogs = function(uid, logs) {
+window.renderAdminLogs = function(uid, displayLogs, startIndex) {
     const body = document.getElementById("modalBody");
-    if(!logs || logs.length === 0) {
+    if(!displayLogs || displayLogs.length === 0) {
         body.innerHTML = "Log history is empty.";
         return;
     }
     
-    let html = `<div style="font-size:12px; margin-bottom:10px; color:#94a3b8">Total Entries: ${logs.length}</div>`;
+    let html = ``;
     
-    logs.forEach((log, index) => {
-        let completionText = "No Tasks";
+    displayLogs.forEach((log, i) => {
+        let workHtml = "-";
         if(log.completed && log.completed.length > 0) {
-            completionText = `<span style="color:#86efac">${log.completed.length} Tasks Done</span>`;
+             workHtml = log.completed.map(item => {
+                if(typeof item === 'string') return `<div style="font-size:10px">${item}</div>`;
+                return `<div style="font-size:10px; color:#86efac">${item.name}</div>`;
+             }).join("");
         }
+        
+        // Use true index for deletion reference
+        let trueIndex = startIndex + i; 
         
         html += `
         <div class="log-row">
-            <div style="font-size:13px;">
-                <div style="color:#fff; font-weight:bold">${log.login} <span style="color:#64748b">to</span> ${log.logout}</div>
-                <div style="font-size:11px; color:#cbd5e1">Reason: ${log.reason} | ${completionText}</div>
-            </div>
-            <button onclick="deleteLogEntry('${uid}', ${index})" style="width:auto; background:#7f1d1d; font-size:11px; padding:4px 8px;">Delete Slot</button>
+            <div>${log.login}</div>
+            <div>${log.logout}</div>
+            <div>${log.reason}</div>
+            <div>${workHtml}</div>
+            <button onclick="deleteLogEntry('${uid}', ${trueIndex})" style="width:auto; background:#7f1d1d; font-size:10px; padding:4px;">Delete</button>
         </div>`;
     });
     
@@ -528,7 +546,7 @@ window.renderAdminLogs = function(uid, logs) {
 };
 
 window.deleteLogEntry = async function(uid, index) {
-    if(!confirm("Delete this specific time slot log? Student will lose this record on next login.")) return;
+    if(!confirm("Delete this specific log entry? User will lose this data on next sync.")) return;
     
     try {
         const snapshot = await get(child(ref(db), `users/${uid}/LOGS`));
@@ -540,8 +558,8 @@ window.deleteLogEntry = async function(uid, index) {
         // Update DB
         await update(ref(db, `users/${uid}`), { LOGS: JSON.stringify(logs) });
         
-        // Re-render
-        renderAdminLogs(uid, logs);
+        // Re-render (re-fetch to ensure sync)
+        openAdminModal(uid, "User");
         
     } catch(e) { alert("Error deleting log: " + e.message); }
 };
@@ -597,6 +615,17 @@ window.terminateStudent = async function(uid) {
     } catch(e) { alert("Error: " + e.message); }
 };
 
+window.unlockStudent = async function(uid) {
+    if(confirm("Revoke Lockout? Student will be able to login immediately.")) {
+        try {
+            await remove(ref(db, `users/${uid}/lockout`));
+            await remove(ref(db, `users/${uid}/lockoutReason`));
+            alert("Unlocked.");
+            refreshAdminView();
+        } catch(e) { alert("Error: " + e.message); }
+    }
+};
+
 window.deleteStudent = async function(uid) {
     if(confirm("PERMANENTLY DELETE student data? (History, Logs, Tasks)")) {
         try {
@@ -610,6 +639,7 @@ window.refreshAdminView = refreshAdminView;
 window.openAdminModal = window.openAdminModal;
 window.deleteLogEntry = window.deleteLogEntry;
 window.closeAdminModal = window.closeAdminModal;
+window.unlockStudent = window.unlockStudent;
 
 // ==========================================
 // STUDENT LOGIC
@@ -772,7 +802,6 @@ async function downloadData(uid) {
             const data = snapshot.val();
             
             // --- STRICT SYNC: Overwrite Local with Server ---
-            // This ensures Admin deletions of LOGS are reflected immediately
             if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
             if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
             if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
@@ -789,7 +818,7 @@ async function downloadData(uid) {
             localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
             
             syncStatus.innerText = "Online";
-            return data; // Return full object for immediate checking
+            return data;
         }
         syncStatus.innerText = "Online (New)";
         return {};
@@ -809,7 +838,7 @@ function uploadData() {
 
     const payload = {
         profile: { email: currentUser.email }, 
-        stats: { percent: p.percent, rating: getLabel(p.percent) }, // SEND STATS
+        stats: { percent: p.percent, rating: getLabel(p.percent) }, 
         TASKS: localStorage.getItem(key("TASKS")),
         EXTRA: localStorage.getItem(key("EXTRA")),
         LOGS: localStorage.getItem(key("LOGS")),
@@ -1318,7 +1347,7 @@ function openDayEnd() {
   if(idleBox) idleBox.classList.add("hidden");
   const nextInputs = document.getElementById("nextInputs");
   nextInputs.innerHTML = "";
-  for (let i = 0; i < 7; i++) {
+  for (let i = 7; i < 7; i++) {
     nextInputs.innerHTML += `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">`;
   }
   document.getElementById("nextDayBox").classList.remove("hidden");
@@ -1481,6 +1510,7 @@ window.deleteStudent = window.deleteStudent;
 window.openAdminModal = window.openAdminModal;
 window.deleteLogEntry = window.deleteLogEntry;
 window.closeAdminModal = window.closeAdminModal;
+window.unlockStudent = window.unlockStudent;
 </script>
 </body>
 </html>
