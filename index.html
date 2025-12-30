@@ -2,195 +2,63 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Dashboard (Final)</title>
+<title>Focus Dashboard (Fixed Logic)</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
 
 <style>
-/* --- 1. GLOBAL STYLES --- */
+/* --- STYLES --- */
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
 body{background:#020617;color:#e5e7eb}
-
 .app{display:grid;grid-template-columns:280px 1fr;height:100vh}
 
-/* --- 2. SIDEBAR --- */
-.sidebar{
-  padding:20px;
-  border-right:1px solid #1e293b; 
-  display:flex; 
-  flex-direction:column;
-}
-.sidebar h2{
-  text-align:center;
-  color:#7dd3fc;
-  margin-bottom:12px; 
-  font-size: 1.2rem; 
-  letter-spacing: 1px;
-}
-.status{
-  padding:10px;
-  border:1px solid #334155;
-  border-radius:10px;
-  text-align:center;
-  margin-bottom:10px;
-  font-size:0.9rem;
-  transition: all 0.3s;
-}
+/* SIDEBAR */
+.sidebar{padding:20px;border-right:1px solid #1e293b; display:flex; flex-direction:column;}
+.sidebar h2{text-align:center;color:#7dd3fc;margin-bottom:12px; font-size: 1.2rem; letter-spacing: 1px;}
+.status{padding:10px;border:1px solid #334155;border-radius:10px;text-align:center;margin-bottom:10px;font-size:0.9rem;transition: all 0.3s;}
 
 /* BUTTONS */
-button{
-  width:100%;
-  padding:12px;
-  margin:6px 0;
-  border-radius:10px;
-  border:1px solid #334155;
-  background:#0f172a;
-  color:#e5e7eb;
-  cursor:pointer;
-  transition: all 0.2s; 
-  font-weight: 600;
-}
+button{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#e5e7eb;cursor:pointer;transition: all 0.2s; font-weight: 600;}
 button:hover:not(:disabled){ background: #1e293b; border-color: #7dd3fc; }
 button:active:not(:disabled){ transform: scale(0.98); }
 button:disabled{opacity:.4; cursor: not-allowed;}
 
-/* LOADING SPINNER */
-.loader { 
-  border: 3px solid #f3f3f3; 
-  border-top: 3px solid #3498db; 
-  border-radius: 50%; 
-  width: 14px; 
-  height: 14px; 
-  animation: spin 1s linear infinite; 
-  display:inline-block; 
-  vertical-align:middle; 
-  margin-left:5px;
-}
+/* LOADER */
+.loader { border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 14px; height: 14px; animation: spin 1s linear infinite; display:inline-block; vertical-align:middle; margin-left:5px;}
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
-/* --- 3. WATCHDOG TIMER UI --- */
-.idleBox{
-  padding:15px; 
-  border:1px solid #334155;
-  border-radius:16px; 
-  text-align:center;
-  margin-bottom:12px; 
-  background:#0f172a;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
-}
-
-.timer-container {
-    position: relative;
-    width: 120px;
-    height: 120px;
-    margin: 0 auto 10px;
-}
-
-.timer-svg {
-    transform: rotate(-90deg);
-    width: 100%;
-    height: 100%;
-}
-
-.timer-circle-bg {
-    fill: none;
-    stroke: #1e293b;
-    stroke-width: 8;
-}
-
-.timer-circle-fg {
-    fill: none;
-    stroke-width: 8;
-    stroke-linecap: round;
-    stroke-dasharray: 339; 
-    stroke-dashoffset: 0;
-    transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
-}
-
-.timer-label {
-    position: absolute;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    display: flex; flex-direction: column;
-    align-items: center;
-}
+/* TIMER */
+.idleBox{padding:15px; border:1px solid #334155; border-radius:16px; text-align:center; margin-bottom:12px; background:#0f172a; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);}
+.timer-container { position: relative; width: 120px; height: 120px; margin: 0 auto 10px; }
+.timer-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+.timer-circle-bg { fill: none; stroke: #1e293b; stroke-width: 8; }
+.timer-circle-fg { fill: none; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 339; stroke-dashoffset: 0; transition: stroke-dashoffset 1s linear, stroke 0.3s ease; }
+.timer-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; }
 .timer-time { font-size: 22px; font-weight: 800; color: #f8fafc; line-height: 1; }
 .timer-sub { font-size: 10px; color: #94a3b8; margin-top: 2px; text-transform: uppercase; }
+.critical { animation: pulse-red 1.5s infinite; border-color: #ef4444 !important; }
+@keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
 
-/* ANIMATIONS */
-@keyframes pulse-red {
-    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
-    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
-}
-
-.critical {
-    animation: pulse-red 1.5s infinite;
-    border-color: #ef4444 !important;
-}
-
-.watchdog-btn {
-    background: #0ea5e9; border:none; color:white;
-    text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px;
-}
-.watchdog-btn:hover { background: #0284c7; }
-
-/* --- 4. MAIN LAYOUT --- */
+/* MAIN */
 .main{padding:24px;overflow:auto}
-.card{
-  background:#020617;
-  border:1px solid #334155;
-  border-radius:14px;
-  padding:20px;
-  margin-bottom:20px
-}
+.card{background:#020617;border:1px solid #334155;border-radius:14px;padding:20px;margin-bottom:20px}
 .hidden{display:none}
+.nextInput{width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #334155; background:#020617; color:#e5e7eb;}
 
-/* INPUTS */
-.nextInput{
-  width:100%; padding:10px; margin:6px 0;
-  border-radius:8px; border:1px solid #334155;
-  background:#020617; color:#e5e7eb;
-}
-
-/* --- 5. SPEEDOMETER --- */
-.speedo{
-  width:300px;height:150px;border-radius:300px 300px 0 0;
-  background:conic-gradient(from -90deg,
-    #7f1d1d,#92400e,#a16207,#14532d,#312e81);
-  position:relative; margin: 0 auto;
-  box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b
-}
-.needle{
-  position:absolute;width:4px;height:110px;
-  background:#e5e7eb;left:50%;bottom:0;
-  transform-origin:bottom center;transform:rotate(-90deg);
-  transition:.6s cubic-bezier(.15,.85,.2,1)
-}
-.cap{
-  position:absolute;width:14px;height:14px;background:#e5e7eb;
-  border-radius:50%;left:50%;bottom:0;
-  transform:translate(-50%,50%)
-}
-
+/* SPEEDO */
+.speedo{width:300px;height:150px;border-radius:300px 300px 0 0; background:conic-gradient(from -90deg, #7f1d1d,#92400e,#a16207,#14532d,#312e81); position:relative; margin: 0 auto; box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b}
+.needle{position:absolute;width:4px;height:110px; background:#e5e7eb;left:50%;bottom:0; transform-origin:bottom center;transform:rotate(-90deg); transition:.6s cubic-bezier(.15,.85,.2,1)}
 .percent{text-align:center;font-size:36px;font-weight:800;color:#7dd3fc}
 .rating{text-align:center;font-size:18px;font-weight:700}
 .details{text-align:center;font-size:14px;color:#cbd5f5}
 
-/* --- 6. TABLES & HISTORY --- */
+/* TABLE */
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{border:1px solid #334155;padding:6px;text-align:center}
 th{background:#1e293b}
-
-.hist-item{ 
-    padding:15px; 
-    border-bottom:1px solid #334155; 
-    display:flex; 
-    justify-content:space-between; 
-    align-items:center; 
-}
+.hist-item{ padding:15px; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center; }
 .hist-score{ font-size:20px; font-weight:bold; color:#facc15; }
 .hist-date{ color:#94a3b8; font-size:12px; }
 </style>
@@ -198,10 +66,8 @@ th{background:#1e293b}
 
 <body>
 <div class="app">
-
 <div class="sidebar">
   <h2>FOCUS SYSTEM</h2>
-
   <div id="statusBox" class="status">Offline</div>
 
   <div id="idleBox" class="idleBox hidden">
@@ -210,22 +76,18 @@ th{background:#1e293b}
             <circle class="timer-circle-bg" cx="60" cy="60" r="54"></circle>
             <circle id="timerRing" class="timer-circle-fg" cx="60" cy="60" r="54"></circle>
         </svg>
-        <div class="timer-label">
-            <div id="idleTime" class="timer-time">30:00</div>
-            <div class="timer-sub">Watchdog</div>
-        </div>
+        <div class="timer-label"><div id="idleTime" class="timer-time">30:00</div><div class="timer-sub">Watchdog</div></div>
     </div>
-    <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
+    <button onclick="resetWatchdog()">I AM STUDYING</button>
   </div>
-
-  <div style="flex-grow:1"></div> <button onclick="loadHistory()" style="background:#334155; margin-bottom:10px">View History</button>
+  <div style="flex-grow:1"></div>
+  <button onclick="loadHistory()" style="background:#334155; margin-bottom:10px">View History</button>
   <button id="loginBtn" onclick="login()">Login (Firebase)</button>
   <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
   <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
 </div>
 
 <div class="main">
-
 <div id="historyBox" class="card hidden">
     <h3>Last 7 Days History</h3>
     <div id="historyList">Loading...</div>
@@ -234,7 +96,6 @@ th{background:#1e293b}
 
 <div id="taskBox" class="card hidden">
   <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
-
     <div>
       <h3>Assigned Tasks</h3>
       <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center">
@@ -246,29 +107,19 @@ th{background:#1e293b}
       <div id="extraList"></div>
       <button onclick="addExtra()" style="margin-top:10px">+ Add Extra Work</button>
     </div>
-
     <div>
       <h3 style="text-align:center">Live Progress</h3>
-      <div class="speedo">
-        <div id="needle" class="needle"></div>
-        <div class="cap"></div>
-      </div>
+      <div class="speedo"><div id="needle" class="needle"></div><div class="cap"></div></div>
       <div id="livePercent" class="percent">0%</div>
       <div id="liveRating" class="rating">Poor</div>
       <div id="liveDetails" class="details"></div>
     </div>
-
   </div>
 </div>
 
 <div id="logBox" class="card hidden">
   <h3>Daily Log (Synced)</h3>
-  <table>
-    <thead>
-      <tr><th>Login</th><th>Logout</th><th>Reason</th><th>Work Ticked</th></tr>
-    </thead>
-    <tbody id="logTable"></tbody>
-  </table>
+  <table><thead><tr><th>Login</th><th>Logout</th><th>Reason</th><th>Work Ticked</th></tr></thead><tbody id="logTable"></tbody></table>
 </div>
 
 <div id="nextDayBox" class="card hidden">
@@ -276,15 +127,12 @@ th{background:#1e293b}
   <div id="nextInputs"></div>
   <button onclick="finalDayEnd()">Submit & Save History</button>
 </div>
-
-<div id="reportBox" class="card hidden"></div>
-
 </div>
 </div>
 
 <script>
 // ======================================================
-// CONFIGURATION (UPDATED WITH YOUR CORRECT URL)
+// CONFIGURATION
 // ======================================================
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
@@ -293,11 +141,9 @@ const firebaseConfig = {
   storageBucket: "focus-dashboard-5965a.firebasestorage.app",
   messagingSenderId: "337204334808",
   appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad",
-  // ✅ YOUR CORRECT DATABASE URL:
   databaseURL: "https://focus-dashboard-5965a-default-rtdb.firebaseio.com"
 };
 
-// Initialize Firebase
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 // ======================================================
@@ -311,11 +157,7 @@ let idleStrikes = 0;
 
 const now = () => new Date().toLocaleString();
 const key = k => UID + "_" + k; 
-
-/* --- FIREBASE HELPERS --- */
-function sanitize(email) {
-    return email.replace(/\.|#|\$|\[|\]/g, '_').toLowerCase();
-}
+function sanitize(email) { return email.replace(/\.|#|\$|\[|\]/g, '_').toLowerCase(); }
 
 async function syncToFirebase() {
     if(!UID) return;
@@ -327,29 +169,20 @@ async function syncToFirebase() {
         strikes: idleStrikes,
         testState: JSON.parse(localStorage.getItem(key("TEST_STATE")) || "null")
     };
-    
-    // Background Sync (Does not block UI)
     const statusBox = document.getElementById("statusBox");
     statusBox.innerHTML = `Syncing... <div class="loader"></div>`;
-    
     db.ref('users/' + UID + '/current_state').set(state)
         .then(() => { statusBox.innerText = "Online & Synced"; })
         .catch(e => { statusBox.innerText = "Offline (Saved Locally)"; });
-        
-    updateProgress();
 }
 
-/* --- OPTIMIZED LOGIN (INSTANT LOAD) --- */
 function login() {
   const emailInput = prompt("Enter Email (e.g. name@mail.com):");
   if (!emailInput) return;
-  
   UID = sanitize(emailInput);
   
-  // 1. INSTANTLY LOAD LOCAL DATA (Zero Wait Time)
   doLoginSteps();
 
-  // 2. START NETWORK SYNC IN BACKGROUND
   const statusBox = document.getElementById("statusBox");
   statusBox.innerHTML = `Connecting... <div class="loader"></div>`;
 
@@ -357,53 +190,34 @@ function login() {
       .then((snapshot) => {
           const data = snapshot.val();
           if(data) {
-              // Found data on server, update local
               localStorage.setItem(key("TASKS"), JSON.stringify(data.tasks || []));
               localStorage.setItem(key("EXTRA"), JSON.stringify(data.extra || []));
               localStorage.setItem(key("LOGS"), JSON.stringify(data.logs || []));
               if(data.testState) localStorage.setItem(key("TEST_STATE"), JSON.stringify(data.testState));
               penalty = data.penalty || 0;
               idleStrikes = data.strikes || 0;
-              
               localStorage.setItem(key("PENALTY"), penalty);
               localStorage.setItem(key("IDLE_STRIKES"), idleStrikes);
               
-              // Refresh UI with server data
               loadTasks();
               renderLogs();
               updateProgress();
               statusBox.innerText = "Online & Synced";
-          } else {
-              statusBox.innerText = "Online (New User)";
-          }
+          } else { statusBox.innerText = "Online (New User)"; }
       })
       .catch((e) => {
-          console.error(e);
-          statusBox.innerText = "Offline Mode (Network Error)";
-          alert("Could not connect to database. Working in Offline Mode.\n\nCheck: 1. Internet 2. Database URL 3. Rules");
+          statusBox.innerText = "Offline Mode";
+          alert("Network Error or Rules Locked. Working Offline.");
       });
 }
 
 function doLoginSteps() {
-    // This runs immediately using whatever is in LocalStorage
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    
     if (logs.length) {
         const lastLog = logs[logs.length - 1];
-        if (lastLog.reason === "Pending") {
-            // We skip the prompt on initial load to make it faster
-            lastLog.reason = "Bio Break"; 
-        }
+        if (lastLog.reason === "Pending") lastLog.reason = "Bio Break"; 
     }
-
-    logs.push({ 
-        login: now(), 
-        loginTS: Date.now(), 
-        logout: "-", 
-        logoutTS: null, 
-        reason: "-", 
-        completed: [] 
-    });
+    logs.push({ login: now(), loginTS: Date.now(), logout: "-", logoutTS: null, reason: "-", completed: [] });
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 
     document.getElementById("statusBox").innerText = "Offline Mode";
@@ -413,23 +227,19 @@ function doLoginSteps() {
 
     updateStrikeDisplay();
 
-    // Check Mock Test State
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
     if (activeTest) {
         if(activeTest.status === "EXPIRED") {
              alert("Mock Test Time Ended! Please enter marks.");
-             finishTestSequence(activeTest, true); 
-             return;
+             finishTestSequence(activeTest, true); return;
         }
         restoreTestUI(activeTest);
         const elapsed = (Date.now() - activeTest.startTime) / 1000;
         const rem = (activeTest.durationMins * 60) - elapsed;
         startIdle(rem > 0 ? rem : 1);
-        document.querySelector(".watchdog-btn").innerText = "EXAM MODE (NO RESET)";
+        document.querySelector(".watchdog-btn").innerText = "EXAM MODE";
         document.querySelector(".watchdog-btn").disabled = true;
-    } else {
-        startIdle(1800); 
-    }
+    } else { startIdle(1800); }
 
     setupTasks();
     loadTasks();
@@ -440,11 +250,8 @@ function doLoginSteps() {
 function updateStrikeDisplay() {
   let box = document.getElementById("idleStrikeBox");
   if(!box) {
-    box = document.createElement("div");
-    box.id = "idleStrikeBox";
-    box.className = "status";
-    const sb = document.getElementById("statusBox");
-    sb.parentNode.insertBefore(box, sb.nextSibling);
+    box = document.createElement("div"); box.id = "idleStrikeBox"; box.className = "status";
+    const sb = document.getElementById("statusBox"); sb.parentNode.insertBefore(box, sb.nextSibling);
   }
   box.innerText = `Idle Strikes: ${idleStrikes}`;
   box.style.borderColor = idleStrikes > 0 ? "#f87171" : "#334155";
@@ -457,10 +264,7 @@ function startIdle(secs = 1800) {
     if(idleTimer) clearInterval(idleTimer);
     totalDuration = secs;
     targetTime = Date.now() + (secs * 1000);
-    const idleBox = document.getElementById("idleBox");
-    idleBox.classList.remove("hidden");
-    idleBox.classList.remove("critical");
-    
+    document.getElementById("idleBox").classList.remove("hidden","critical");
     updateIdle(secs);
     idleTimer = setInterval(() => {
         const rem = Math.ceil((targetTime - Date.now()) / 1000);
@@ -472,82 +276,46 @@ function startIdle(secs = 1800) {
 function updateIdle(secs) {
     let d = secs > 0 ? secs : 0;
     const h = Math.floor(d / 3600), m = Math.floor((d % 3600) / 60), s = d % 60;
-    const text = `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
-    document.getElementById("idleTime").innerText = h > 0 ? `${h}:${text}` : text;
-    
+    document.getElementById("idleTime").innerText = h > 0 ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}` : `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
     const ring = document.getElementById("timerRing");
     if(ring && totalDuration > 0) {
         const pct = d / totalDuration;
-        const maxDash = 339; 
-        ring.style.strokeDashoffset = maxDash * (1 - pct);
-        
-        const idleBox = document.getElementById("idleBox");
-        if(pct > 0.5) { 
-            ring.style.stroke = "#3b82f6"; idleBox.classList.remove("critical"); 
-        } else if(pct > 0.15) { 
-            ring.style.stroke = "#f59e0b"; idleBox.classList.remove("critical"); 
-        } else { 
-            ring.style.stroke = "#ef4444"; idleBox.classList.add("critical"); 
-        }
+        ring.style.strokeDashoffset = 339 * (1 - pct);
+        if(pct > 0.5) { ring.style.stroke = "#3b82f6"; document.getElementById("idleBox").classList.remove("critical"); }
+        else if(pct > 0.15) { ring.style.stroke = "#f59e0b"; document.getElementById("idleBox").classList.remove("critical"); }
+        else { ring.style.stroke = "#ef4444"; document.getElementById("idleBox").classList.add("critical"); }
     }
 }
 
 function resetWatchdog() {
     if(!UID) return;
-    const btn = document.querySelector(".watchdog-btn");
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-    if(activeTest && activeTest.status === "RUNNING") {
-        let old = btn.innerText; btn.innerText = "NO RESET IN EXAM"; btn.style.background="#ef4444";
-        setTimeout(()=> { btn.innerText = old; btn.style.background=""; }, 1500);
-        return;
-    }
+    if(activeTest && activeTest.status === "RUNNING") return alert("No Reset in Exam");
     startIdle(1800);
-    let old = "I AM STUDYING"; btn.innerText = "RESET SUCCESS"; btn.style.background="#22c55e";
-    setTimeout(()=> { btn.innerText = old; btn.style.background=""; }, 1000);
 }
 
-/* --- LOGOUTS --- */
 function autoLogout() {
-    clearInterval(idleTimer);
-    document.getElementById("idleBox").classList.add("hidden");
-    
+    clearInterval(idleTimer); document.getElementById("idleBox").classList.add("hidden");
     let strikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0") + 1;
-    if(strikes >= 2) {
-        penalty += 10;
-        strikes = 0;
-        alert("Watchdog bit you! -10% Penalty applied.");
-    }
+    if(strikes >= 2) { penalty += 10; strikes = 0; alert("Watchdog bit you! -10% Penalty applied."); }
     localStorage.setItem(key("IDLE_STRIKES"), strikes);
     localStorage.setItem(key("PENALTY"), penalty);
     idleStrikes = strikes;
-
-    const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-    if(activeTest) { 
-        activeTest.status = "EXPIRED"; 
-        localStorage.setItem(key("TEST_STATE"), JSON.stringify(activeTest)); 
-    }
     logoutLog("Timeout");
 }
-
 function bioBreak() {
-    clearInterval(idleTimer);
-    localStorage.setItem(key("IDLE_STRIKES"), "0");
-    logoutLog("Pending");
+    clearInterval(idleTimer); localStorage.setItem(key("IDLE_STRIKES"), "0"); logoutLog("Pending");
 }
-
 function logoutLog(reason) {
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if(logs.length) {
-        logs[logs.length-1].logout = now();
-        logs[logs.length-1].logoutTS = Date.now();
-        logs[logs.length-1].reason = reason;
+        logs[logs.length-1].logout = now(); logs[logs.length-1].reason = reason;
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
-    syncToFirebase();
-    location.reload();
+    syncToFirebase(); location.reload();
 }
 
-/* --- TASKS --- */
+/* --- TASKS (BUG FIX HERE) --- */
 function setupTasks() {
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     if(!tasks.length) {
@@ -562,6 +330,7 @@ function loadTasks() {
     const tList = document.getElementById("taskList"); tList.innerHTML = "";
     const eList = document.getElementById("extraList"); eList.innerHTML = "";
     
+    // READ ONCE
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
 
@@ -571,33 +340,48 @@ function loadTasks() {
         if(item.name.startsWith("MOCK TEST:")) cb.disabled = true;
         
         const sp = document.createElement("span"); 
+        // Display Logic for Checkbox Label
         sp.innerHTML = item.done ? ` ${item.name} <small style="color:#94a3b8">[${item.comment||""} | Due: <span style="color:#fca5a5">${item.due||""}</span>]</small>` : ` ${item.name}`;
         
         cb.onchange = () => {
             if(!confirm("Complete?")) { cb.checked = !cb.checked; return; }
+            
+            // 1. UPDATE THE ITEM IN MEMORY
+            item.done = cb.checked;
             if(cb.checked) {
                 item.comment = prompt("Comment?", "Done") || "-";
-                item.due = prompt("Pending work?", "None") || "-";
+                item.due = prompt("Pending work / Due Date?", "None") || "-";
             } else { item.comment = ""; item.due = ""; }
-            item.done = cb.checked;
             
-            // Update Log
-            const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-            if(logs.length) {
-                const active = logs[logs.length-1];
-                if(!active.completed) active.completed = [];
-                active.completed = active.completed.filter(i => (i.name || i) !== item.name);
-                if(item.done) active.completed.push({name:item.name, comment:item.comment, due:item.due});
-                localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-            }
-            saveAll();
-            loadTasks();
+            // 2. SAVE THE MODIFIED ARRAY IMMEDIATELY (FIXED LOGIC)
+            // We use the 'tasks' or 'extras' array variable which we are currently iterating over
+            if(isExtra) localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+            else localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
+            
+            // 3. Update Log
+            updateLogWithTask(item);
+
+            // 4. Refresh UI
+            syncToFirebase();
+            loadTasks(); // Re-render to show updated text
             renderLogs();
+            updateProgress();
         };
         div.append(cb, sp); list.append(div);
     };
     tasks.forEach(t => render(t, tList, false));
     extras.forEach(e => render(e, eList, true));
+}
+
+function updateLogWithTask(item) {
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    if(logs.length) {
+        const active = logs[logs.length-1];
+        if(!active.completed) active.completed = [];
+        active.completed = active.completed.filter(i => (i.name || i) !== item.name);
+        if(item.done) active.completed.push({name:item.name, comment:item.comment, due:item.due});
+        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
 }
 
 function addExtra() {
@@ -607,14 +391,6 @@ function addExtra() {
     extras.push({name, done:false, comment:"", due:""});
     localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
     loadTasks();
-    syncToFirebase();
-}
-
-function saveAll() {
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]"); 
-    localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
     syncToFirebase();
 }
 
@@ -636,16 +412,11 @@ async function finalDayEnd() {
     }
     
     const historyEntry = {
-        date: now(),
-        score: p.percent,
-        rating: getLabel(p.percent),
-        doneCount: p.doneCount,
+        date: now(), score: p.percent, rating: getLabel(p.percent), doneCount: p.doneCount,
         timestamp: firebase.database.ServerValue.TIMESTAMP
     };
 
     document.getElementById("statusBox").innerText = "Saving...";
-    
-    // Optimistic Save
     db.ref('users/' + UID + '/history').push(historyEntry);
     
     const newState = {
@@ -654,37 +425,28 @@ async function finalDayEnd() {
     };
     await db.ref('users/' + UID + '/current_state').set(newState);
 
-    alert("Day Saved! Good Job.");
-    localStorage.clear();
-    location.reload();
+    alert("Day Saved!"); localStorage.clear(); location.reload();
 }
 
 function loadHistory() {
     if(!UID) { alert("Please Login first."); return; }
     document.getElementById("historyBox").classList.remove("hidden");
-    const list = document.getElementById("historyList");
-    list.innerHTML = "Fetching... <div class='loader'></div>";
-    
+    const list = document.getElementById("historyList"); list.innerHTML = "Fetching... <div class='loader'></div>";
     db.ref('users/' + UID + '/history').limitToLast(7).once('value')
         .then(snap => {
-            const data = snap.val();
-            list.innerHTML = "";
+            const data = snap.val(); list.innerHTML = "";
             if(!data) { list.innerHTML = "No history found."; return; }
-            const entries = Object.values(data).reverse();
-            entries.forEach(h => {
+            Object.values(data).reverse().forEach(h => {
                 const div = document.createElement("div"); div.className = "hist-item";
                 div.innerHTML = `<div><div class="hist-date">${h.date.split(',')[0]}</div><div style="font-size:12px">${h.rating}</div></div><div class="hist-score">${h.score}%</div>`;
                 list.append(div);
             });
         })
-        .catch(e => {
-            list.innerHTML = "Connection Error. Check Database Rules.";
-        });
+        .catch(e => { list.innerHTML = "Connection Error."; });
 }
-
 function closeHistory() { document.getElementById("historyBox").classList.add("hidden"); }
 
-/* --- CALCS & UTILS --- */
+/* --- CALCS & RENDER --- */
 function calculate() {
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
@@ -704,77 +466,44 @@ function updateProgress() {
         document.getElementById("liveDetails").innerText = `Penalty: -${penalty}%`;
     }
 }
-
-function getLabel(p) {
-    if(p < 40) return "Poor";
-    if(p < 60) return "Average";
-    if(p < 80) return "Good";
-    return "Excellent";
-}
+function getLabel(p) { return p<40?"Poor":(p<60?"Average":(p<80?"Good":"Excellent")); }
 
 function renderLogs() {
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    const tbody = document.getElementById("logTable");
-    tbody.innerHTML = "";
+    const tbody = document.getElementById("logTable"); tbody.innerHTML = "";
     logs.forEach(l => {
         let w = "-";
         if(l.completed && l.completed.length) {
-            w = l.completed.map(c => `<div style="font-size:12px;color:#86efac; border-bottom:1px dashed #334155;">${c.name} <span style="color:#cbd5e1">(${c.comment})</span></div>`).join("");
+            w = l.completed.map(c => `<div style="font-size:12px;color:#86efac; border-bottom:1px dashed #334155;">${c.name} <span style="color:#cbd5e1">(${c.comment})</span> <span style="color:#fca5a5">[Due: ${c.due||"-"}]</span></div>`).join("");
         }
         tbody.innerHTML += `<tr><td style="vertical-align:top">${l.login.split(',')[1]}</td><td style="vertical-align:top">${l.logout==='-'?'-':l.logout.split(',')[1]}</td><td style="vertical-align:top">${l.reason}</td><td style="text-align:left;vertical-align:top">${w}</td></tr>`;
     });
 }
 
-/* --- MOCK TEST UTILS --- */
+/* --- MOCK TEST --- */
 function startMockTestSetup() {
     const name=prompt("Enter Test Name:"); if(!name) return;
     const marks=prompt("Enter Full Marks:"); if(!marks) return;
-    const mins=prompt("Enter Duration in MINUTES (e.g. 120):");
-    if(!mins || isNaN(mins)) { alert("Invalid Time."); return; }
-    
+    const mins=prompt("Enter Duration in MINUTES (e.g. 120):"); if(!mins) return;
     const st = { name: name, fullMarks: marks, durationMins: parseInt(mins), startTime: Date.now(), status: "RUNNING" };
     localStorage.setItem(key("TEST_STATE"), JSON.stringify(st));
-    syncToFirebase();
-    location.reload();
+    syncToFirebase(); location.reload();
 }
-
 function restoreTestUI(st) {
     const box = document.getElementById("taskBox");
     const hrs = Math.floor(st.durationMins/60), m = st.durationMins%60;
-    box.innerHTML = `
-    <div style="text-align:center; padding: 20px; border: 1px solid #facc15; border-radius: 10px;">
-      <h2 style="color:#facc15">MOCK TEST RUNNING</h2>
-      <h3 style="color:white">${st.name}</h3>
-      <p>Full Marks: ${st.fullMarks} | Duration: ${hrs}h ${m}m</p>
-      <div style="margin-top:10px; color:#cbd5e1; font-size:14px;">Watchdog locked to Exam Time.</div>
-      <hr style="border-color:#334155; margin: 20px 0;">
-      <button onclick="triggerEndTest()" style="background:#dc2626; border:none; padding:15px; font-size:18px; font-weight:bold;">EXAM DONE</button>
-    </div>`;
+    box.innerHTML = `<div style="text-align:center; padding: 20px; border: 1px solid #facc15; border-radius: 10px;"><h2 style="color:#facc15">MOCK TEST RUNNING</h2><h3 style="color:white">${st.name}</h3><p>Full Marks: ${st.fullMarks} | Duration: ${hrs}h ${m}m</p><button onclick="triggerEndTest()" style="background:#dc2626; border:none; padding:15px; font-size:18px; font-weight:bold;">EXAM DONE</button></div>`;
     box.classList.remove("hidden");
 }
-
 function triggerEndTest(){
     const st = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-    finishTestSequence(st, true);
-}
-
-function finishTestSequence(st, reload) {
-    let ob = prompt(`Exam Done: ${st.name}\nEnter Marks Obtained (out of ${st.fullMarks}):`);
-    if(ob === null && st.status === "EXPIRED") ob = "0";
-    if(ob === null) return; 
-
-    let acc = prompt("Enter Accuracy %:"); if(acc === null) acc = "0";
-    const msg = `Please Confirm Details:\n\nTest: ${st.name}\nScore: ${ob} / ${st.fullMarks}\nAccuracy: ${acc}%`;
-    
-    if(confirm(msg)) {
-        const extras = JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
-        extras.push({ name:`MOCK TEST: ${st.name}`, done:true, comment: `Score: ${ob}/${st.fullMarks} | Acc: ${acc}%`, due: "None" });
-        localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-        localStorage.removeItem(key("TEST_STATE"));
-        syncToFirebase().then(() => { if(reload) location.reload(); });
-    } else {
-        if(st.status === "EXPIRED") { alert("You must save marks to proceed."); finishTestSequence(st, true); }
-    }
+    let ob = prompt(`Exam Done: ${st.name}\nEnter Marks Obtained:`); if(ob===null) return;
+    let acc = prompt("Enter Accuracy %:");
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
+    extras.push({ name:`MOCK TEST: ${st.name}`, done:true, comment: `Score: ${ob}/${st.fullMarks} | Acc: ${acc}%`, due: "None" });
+    localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+    localStorage.removeItem(key("TEST_STATE"));
+    syncToFirebase().then(() => location.reload());
 }
 </script>
 </body>
