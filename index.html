@@ -2,32 +2,95 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus System</title>
+<title>Focus System + Watchdog</title>
 
 <style>
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
 body{background:#020617;color:#e5e7eb}
 
-.app{display:grid;grid-template-columns:260px 1fr;height:100vh}
+.app{display:grid;grid-template-columns:280px 1fr;height:100vh}
 
 /* SIDEBAR */
-.sidebar{padding:20px;border-right:1px solid #1e293b}
-.sidebar h2{text-align:center;color:#7dd3fc;margin-bottom:12px}
-.status{padding:10px;border:1px solid #334155;border-radius:10px;text-align:center;margin-bottom:10px}
+.sidebar{padding:20px;border-right:1px solid #1e293b; display:flex; flex-direction:column;}
+.sidebar h2{text-align:center;color:#7dd3fc;margin-bottom:12px; font-size: 1.2rem; letter-spacing: 1px;}
+.status{padding:10px;border:1px solid #334155;border-radius:10px;text-align:center;margin-bottom:10px;font-size:0.9rem}
+
 button{
   width:100%;padding:12px;margin:6px 0;
   border-radius:10px;border:1px solid #334155;
-  background:#020617;color:#e5e7eb;cursor:pointer
+  background:#0f172a;color:#e5e7eb;cursor:pointer;
+  transition: all 0.2s; font-weight: 600;
 }
-button:disabled{opacity:.4}
+button:hover:not(:disabled){ background: #1e293b; border-color: #7dd3fc; }
+button:active:not(:disabled){ transform: scale(0.98); }
+button:disabled{opacity:.4; cursor: not-allowed;}
 
-/* IDLE */
+/* INNOVATIVE WATCHDOG TIMER */
 .idleBox{
-  padding:12px;border:1px solid #38bdf8;
-  border-radius:12px;text-align:center;
-  margin-bottom:12px;background:#020617
+  padding:15px; border:1px solid #334155;
+  border-radius:16px; text-align:center;
+  margin-bottom:12px; background:#0f172a;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
 }
+
+.timer-container {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 10px;
+}
+
+/* Rotated so start point is top */
+.timer-svg {
+    transform: rotate(-90deg);
+    width: 100%;
+    height: 100%;
+}
+
+.timer-circle-bg {
+    fill: none;
+    stroke: #1e293b;
+    stroke-width: 8;
+}
+
+.timer-circle-fg {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+    /* Circumference of r=54 is approx 339 */
+    stroke-dasharray: 339; 
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
+}
+
+.timer-label {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column;
+    align-items: center;
+}
+.timer-time { font-size: 22px; font-weight: 800; color: #f8fafc; line-height: 1; }
+.timer-sub { font-size: 10px; color: #94a3b8; margin-top: 2px; text-transform: uppercase; }
+
+/* Watchdog Animations */
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.critical {
+    animation: pulse-red 1.5s infinite;
+    border-color: #ef4444 !important;
+}
+
+.watchdog-btn {
+    background: #0ea5e9; border:none; color:white;
+    text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px;
+}
+.watchdog-btn:hover { background: #0284c7; }
 
 /* MAIN */
 .main{padding:24px;overflow:auto}
@@ -39,13 +102,9 @@ button:disabled{opacity:.4}
 
 /* INPUT */
 .nextInput{
-  width:100%;
-  padding:10px;
-  margin:6px 0;
-  border-radius:8px;
-  border:1px solid #334155;
-  background:#020617;
-  color:#e5e7eb;
+  width:100%; padding:10px; margin:6px 0;
+  border-radius:8px; border:1px solid #334155;
+  background:#020617; color:#e5e7eb;
 }
 
 /* SPEEDOMETER */
@@ -53,7 +112,7 @@ button:disabled{opacity:.4}
   width:300px;height:150px;border-radius:300px 300px 0 0;
   background:conic-gradient(from -90deg,
     #7f1d1d,#92400e,#a16207,#14532d,#312e81);
-  position:relative;
+  position:relative; margin: 0 auto;
   box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b
 }
 .needle{
@@ -82,17 +141,24 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <div class="app">
 
 <div class="sidebar">
-  <h2>FOCUS SYSTEM</h2>
+  <h2>FOCUS WATCHDOG</h2>
 
   <div id="statusBox" class="status">Logged out</div>
 
   <div id="idleBox" class="idleBox hidden">
-    Idle Time Left:
-    <b><span id="idleTime">30:00</span></b><br><br>
-    <button onclick="resetIdle()">I am studying</button>
+    <div class="timer-container">
+        <svg class="timer-svg" viewBox="0 0 120 120">
+            <circle class="timer-circle-bg" cx="60" cy="60" r="54"></circle>
+            <circle id="timerRing" class="timer-circle-fg" cx="60" cy="60" r="54"></circle>
+        </svg>
+        <div class="timer-label">
+            <div id="idleTime" class="timer-time">30:00</div>
+            <div class="timer-sub">Watchdog</div>
+        </div>
+    </div>
+    <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
   </div>
-
-  <button id="loginBtn" onclick="login()">Login</button>
+  <div style="flex-grow:1"></div> <button id="loginBtn" onclick="login()">Login</button>
   <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
   <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
 </div>
@@ -105,10 +171,10 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     <div>
       <h3>Assigned Tasks</h3>
       <div id="taskList"></div>
-      <hr>
+      <hr style="border-color:#334155; margin:15px 0">
       <h4>Extra Work</h4>
       <div id="extraList"></div>
-      <button onclick="addExtra()">+ Add Extra Work</button>
+      <button onclick="addExtra()" style="margin-top:10px">+ Add Extra Work</button>
     </div>
 
     <div>
@@ -129,7 +195,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   <h3>Login / Logout Log</h3>
   <table>
     <thead>
-      <tr><th>Login</th><th>Logout</th><th>Reason</th></tr>
+      <tr><th>Login</th><th>Logout</th><th>Reason</th><th>Work Ticked</th></tr>
     </thead>
     <tbody id="logTable"></tbody>
   </table>
@@ -150,18 +216,22 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 let UID = null;
 let idleTimer = null;
 let targetTime = null;
+let totalDuration = 0; // Needed for the progress ring calculation
 let penalty = 0;
 let idleStrikes = 0; 
 
 const now = () => new Date().toLocaleString();
 const key = k => UID + "_" + k;
 
-/* 🔒 IDLE TIMER */
+/* 🔒 IDLE TIMER & WATCHDOG LOGIC */
+
 function startIdle(customSeconds = 1800) {
   clearInterval(idleTimer);
+  totalDuration = customSeconds; // Store Max time for Circle Calc
   targetTime = Date.now() + (customSeconds * 1000);
   
   idleBox.classList.remove("hidden");
+  idleBox.classList.remove("critical"); // Remove red pulse if exists
   updateIdle();
 
   idleTimer = setInterval(() => {
@@ -176,20 +246,76 @@ function startIdle(customSeconds = 1800) {
   }, 1000);
 }
 
+// The "Kick the Dog" function
+function resetWatchdog() {
+    // Visual Feedback
+    const btn = document.querySelector('.watchdog-btn');
+    const originalText = btn.innerText;
+    btn.innerText = "TIMER RESET!";
+    btn.style.background = "#22c55e"; // Green flash
+    
+    setTimeout(() => {
+        btn.innerText = originalText;
+        btn.style.background = ""; // Revert
+    }, 800);
+
+    // Logic: Simply restart the idle timer with the original duration
+    // If a mock test is running, we calculate remaining mock time instead of default 30m
+    const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+    
+    if(activeTest && activeTest.status === "RUNNING") {
+        // Mock test logic: Don't reset to full duration, just keep counting down.
+        // Actually, for a mock test, the watchdog shouldn't "Reset" the exam time, 
+        // but the prompt implies a "Focus Watchdog".
+        // If it's a mock test, the timer is the EXAM timer. We shouldn't extend exam time.
+        // So this button essentially confirms presence but doesn't add time during exams.
+        alert("Exam in progress. Timer is fixed to Exam Duration.");
+    } else {
+        // Normal study mode: Reset the 30min watchdog
+        startIdle(1800); 
+    }
+}
+
 function updateIdle(seconds) {
   if (seconds === undefined && targetTime) {
       seconds = Math.ceil((targetTime - Date.now()) / 1000);
   }
   let displaySeconds = seconds > 0 ? seconds : 0;
   
+  // 1. Update Text
   const h = Math.floor(displaySeconds / 3600);
   const m = Math.floor((displaySeconds % 3600) / 60);
   const s = displaySeconds % 60;
+  
+  // Format MM:SS
+  const text = `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  // If hours exist, add them
+  idleTime.innerText = h > 0 ? `${h}:${text}` : text;
 
-  if(h > 0) {
-    idleTime.innerText = `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  // 2. Update Ring (Innovative Part)
+  const ring = document.getElementById("timerRing");
+  const maxDash = 339; // 2 * PI * 54 (radius)
+  
+  // Calculate percentage remaining (0 to 1)
+  const pct = displaySeconds / totalDuration;
+  
+  // Offset: Full (0) -> Empty (339)
+  // Logic: 339 - (339 * pct)
+  // Actually standard way: offset = circumference * (1-pct)
+  const offset = maxDash * (1 - pct);
+  ring.style.strokeDashoffset = offset;
+
+  // 3. Dynamic Coloring
+  if (pct > 0.5) {
+      ring.style.stroke = "#3b82f6"; // Blue
+      idleBox.classList.remove("critical");
+  } else if (pct > 0.15) {
+      ring.style.stroke = "#f59e0b"; // Orange/Yellow
+      idleBox.classList.remove("critical");
   } else {
-    idleTime.innerText = `${m}:${String(s).padStart(2,"0")}`;
+      ring.style.stroke = "#ef4444"; // Red
+      // Add Pulse animation to the box when < 15% time left
+      idleBox.classList.add("critical");
   }
 }
 
@@ -207,12 +333,11 @@ function autoLogout() {
     currentPenalty += 10;
     localStorage.setItem(key("PENALTY"), currentPenalty);
     currentStrikes = 0; 
-    alert("⚠ 2 Consecutive Idle Timeouts! -10% Penalty Applied.");
+    alert("⚠ Watchdog bit you! 2 Timeouts = -10% Penalty.");
   }
   localStorage.setItem(key("IDLE_STRIKES"), currentStrikes);
 
   // 2. DETECT MOCK TEST TIMEOUT (The Rule)
-  // If a test is active when timeout hits, mark it EXPIRED.
   const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
   if(activeTest) {
       activeTest.status = "EXPIRED"; 
@@ -236,7 +361,6 @@ function bioBreak() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
   
-  // Bio break does NOT mark test as expired. It stays "RUNNING".
   localStorage.setItem(key("IDLE_STRIKES"), "0");
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
@@ -291,43 +415,42 @@ function login() {
   const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
   
   if (activeTest) {
-    // RULE: If Timeout caused logout, status is EXPIRED.
-    // ACTION: Force marks entry, then load dashboard.
     if (activeTest.status === "EXPIRED") {
        alert("Mock Test Time Ended! Please enter marks.");
-       // We pass 'true' to indicate we want to load dashboard after saving
        finishTestSequence(activeTest, true); 
        return;
     }
 
-    // RULE: If Bio Break caused logout, status is RUNNING (undefined/default).
-    // ACTION: Ask to Resume.
     if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
       restoreTestUI(activeTest);
       
       const elapsed = (Date.now() - activeTest.startTime) / 1000;
-      const totalDuration = activeTest.durationMins * 60;
-      const remaining = totalDuration - elapsed;
+      const totalDurationSecs = activeTest.durationMins * 60;
+      const remaining = totalDurationSecs - elapsed;
 
+      // During Mock Test, Watchdog behaves as EXAM TIMER (cannot reset)
       if(remaining > 0) {
         startIdle(remaining);
       } else {
         startIdle(1);
       }
       
+      // Disable the reset button during exam
+      document.querySelector(".watchdog-btn").disabled = true;
+      document.querySelector(".watchdog-btn").innerText = "Exam Mode";
+
       loadTasks(); 
       renderLogs();
       updateProgress();
       return; 
     } else {
-      // User manually chose NOT to resume
       finishTestSequence(activeTest, true);
       return;
     }
   }
 
-  // NORMAL LOGIN (No Test)
-  startIdle(); 
+  // NORMAL LOGIN (No Test) - Set Watchdog to 30 mins
+  startIdle(1800); 
   setupTasks();
   loadTasks();
   renderLogs();
@@ -381,6 +504,10 @@ function startMockTestSetup() {
   };
   localStorage.setItem(key("TEST_STATE"), JSON.stringify(testState));
 
+  // Disable Watchdog reset during exam
+  document.querySelector(".watchdog-btn").disabled = true;
+  document.querySelector(".watchdog-btn").innerText = "Exam Mode";
+
   startIdle(durationMins * 60);
 
   restoreTestUI(testState);
@@ -399,7 +526,7 @@ function restoreTestUI(testState) {
       <h3 style="color:white">${testState.name}</h3>
       <p>Full Marks: ${testState.fullMarks} | Duration: ${hrs}h ${mins}m</p>
       <div style="margin-top:10px; color:#cbd5e1; font-size:14px;">
-         Idle Timer set to Exam Duration. Do not close tab.
+         Watchdog locked to Exam Time. Good Luck.
       </div>
       <hr style="border-color:#334155; margin: 20px 0;">
       <button onclick="triggerEndTest()" style="background:#dc2626; border:none; padding:15px; font-size:18px; font-weight:bold;">EXAM DONE</button>
@@ -409,16 +536,14 @@ function restoreTestUI(testState) {
 
 function triggerEndTest() {
   const testState = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-  // Pass 'true' to load dashboard
   if(testState) finishTestSequence(testState, true);
 }
 
 function finishTestSequence(testState, loadDashboard = false) {
   let obtained = prompt(`Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`);
   
-  // Prevent escaping if test is expired
   if(obtained === null && testState.status === "EXPIRED") obtained = "0";
-  if(obtained === null) return; // Allow cancel only if manually triggered
+  if(obtained === null) return; 
 
   let accuracy = prompt("Enter Accuracy %:");
   if(accuracy === null) accuracy = "0";
@@ -451,7 +576,10 @@ function finishTestSequence(testState, loadDashboard = false) {
 
     localStorage.removeItem(key("TEST_STATE"));
     
-    // IMPORTANT: Reset Idle to 30 mins and Load Dashboard
+    // Re-enable Watchdog for study mode
+    document.querySelector(".watchdog-btn").disabled = false;
+    document.querySelector(".watchdog-btn").innerText = "I AM STUDYING";
+
     if(loadDashboard) {
         startIdle(1800);
         setupTasks();
@@ -462,7 +590,6 @@ function finishTestSequence(testState, loadDashboard = false) {
         location.reload(); 
     }
   } else {
-    // Loop if expired and they try to cancel confirmation
     if(testState.status === "EXPIRED") {
         alert("You must save marks to proceed.");
         finishTestSequence(testState, true);
@@ -769,17 +896,6 @@ function renderLogs() {
   const table = document.querySelector("table");
   if(!table) return;
 
-  table.innerHTML = `
-    <thead>
-      <tr>
-        <th>Login</th>
-        <th>Logout</th>
-        <th>Reason</th>
-        <th style="width:40%">Work Ticked</th>
-      </tr>
-    </thead>
-    <tbody id="logTable"></tbody> 
-  `;
   const tbody = document.getElementById("logTable");
   tbody.innerHTML = "";
 
