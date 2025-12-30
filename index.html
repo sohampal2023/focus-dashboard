@@ -245,12 +245,13 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 </div>
 
 <script type="module">
-// --- FIREBASE SETUP (Browser Version) ---
+// --- FIREBASE SETUP (WEB COMPATIBLE) ---
+// We use FULL URLs here so the browser can understand them without a build tool.
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, set, get, child, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
-// Your Configuration (I inserted your keys here)
+// --- YOUR CONFIGURATION (CORRECTLY INSERTED) ---
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
   authDomain: "focus-dashboard-5965a.firebaseapp.com",
@@ -266,7 +267,7 @@ const db = getDatabase(app);
 const auth = getAuth(app);
 
 // --- GLOBAL VARIABLES ---
-let currentUser = null; // Stores the auth object
+let currentUser = null; 
 let idleTimer = null;
 let targetTime = null;
 let totalDuration = 0;
@@ -274,7 +275,6 @@ let penalty = 0;
 let idleStrikes = 0;
 
 const now = () => new Date().toLocaleString();
-// Key helper now uses User UID for security
 const key = k => (currentUser ? currentUser.uid : "GUEST") + "_" + k;
 
 // --- CLOUD FUNCTIONS (SECURED) ---
@@ -284,7 +284,6 @@ async function downloadData(uid) {
     syncStatus.innerText = "Verifying Credentials...";
     
     try {
-        // This will FAIL if specific Security Rules aren't met
         const snapshot = await get(child(dbRef, `users/${uid}`));
         
         if (snapshot.exists()) {
@@ -353,7 +352,6 @@ async function handleLoginFlow() {
         postLoginInit();
     } catch (error) {
         if(error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
-            // Optional: Helper for first time setup
             if(confirm("User not found. Create new secure account with these credentials?")) {
                 try {
                     const newUser = await createUserWithEmailAndPassword(auth, email, password);
@@ -380,7 +378,6 @@ async function postLoginInit() {
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
     
-    // Download data using the secure UID
     await downloadData(currentUser.uid);
 
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
@@ -413,7 +410,6 @@ async function postLoginInit() {
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
     
-    // Initial Sync
     uploadData();
 
     // Check Mock Test
@@ -469,7 +465,6 @@ function toggleHistory() {
     const logBox = document.getElementById("logBox");
 
     if (histBox.classList.contains("hidden")) {
-        // OPEN HISTORY
         histBox.classList.remove("hidden");
         taskBox.classList.add("hidden");
         logBox.classList.add("hidden");
@@ -478,7 +473,6 @@ function toggleHistory() {
         const tbody = document.getElementById("historyTable");
         tbody.innerHTML = "";
         
-        // LIMIT TO 9 ENTRIES VISUALLY IF NEEDED, BUT ARRAY IS ALREADY LIMITED ON SAVE
         [...history].reverse().forEach(entry => {
             let color = "#e5e7eb";
             if(entry.rating === "Poor") color = "#f87171";
@@ -502,7 +496,6 @@ function toggleHistory() {
             tbody.innerHTML = `<tr><td colspan="5">No history records yet. Complete a day to see stats.</td></tr>`;
         }
     } else {
-        // CLOSE HISTORY
         histBox.classList.add("hidden");
         if(document.getElementById("reportBox").classList.contains("hidden")) {
             taskBox.classList.remove("hidden");
@@ -1149,7 +1142,7 @@ function renderLogs() {
   });
 }
 
-// --- ATTACH TO WINDOW ---
+// --- ATTACH TO WINDOW (CRITICAL FIX FOR MODULES) ---
 window.handleLoginFlow = handleLoginFlow;
 window.handleLogout = handleLogout;
 window.resetWatchdog = resetWatchdog;
