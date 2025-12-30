@@ -155,10 +155,10 @@ let penalty = 0;
 const now = () => new Date().toLocaleString();
 const key = k => UID + "_" + k;
 
-/* 🔒 HARD IDLE TIMER – SYSTEM CLOCK BASED */
+/* 🔒 HARD IDLE TIMER */
 function startIdle() {
   clearInterval(idleTimer);
-  targetTime = Date.now() + (1800 * 1000); // 30 minutes
+  targetTime = Date.now() + (1800 * 1000); // 30 mins
   
   idleBox.classList.remove("hidden");
   updateIdle();
@@ -186,20 +186,32 @@ function updateIdle(seconds) {
     String(displaySeconds % 60).padStart(2, "0");
 }
 
-function resetIdle() {
-  targetTime = Date.now() + (1800 * 1000);
-  updateIdle();
-}
-
-/* AUTO LOGOUT */
+/* LOGOUTS */
 function autoLogout() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
-    logs[logs.length - 1].logout = now();
-    logs[logs.length - 1].reason = "30 min Timeout";
+    const last = logs[logs.length - 1];
+    last.logout = now();
+    last.logoutTS = Date.now(); // Save timestamp for calc
+    last.reason = "30 min Timeout";
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+  }
+  location.reload();
+}
+
+function bioBreak() {
+  clearInterval(idleTimer);
+  idleBox.classList.add("hidden");
+
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  if (logs.length) {
+    const last = logs[logs.length - 1];
+    last.logout = now();
+    last.logoutTS = Date.now(); // Save timestamp for calc
+    last.reason = "Pending";
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
   location.reload();
@@ -212,7 +224,7 @@ function login() {
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
 
-  // CHECK PREVIOUS BREAK REASON
+  // Check previous break reason
   if (logs.length) {
     const lastLog = logs[logs.length - 1];
     if (lastLog.reason === "Pending") {
@@ -223,7 +235,15 @@ function login() {
 
   localStorage.removeItem(key("DAY_ENDED"));
 
-  logs.push({ login: now(), logout: "-", reason: "-" });
+  // New Log with Timestamps and Completed Array
+  logs.push({ 
+    login: now(), 
+    loginTS: Date.now(),
+    logout: "-", 
+    logoutTS: null,
+    reason: "-", 
+    completed: [] // Stores tasks done in this session
+  });
   localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 
   statusBox.innerText = "Logged in";
@@ -239,21 +259,7 @@ function login() {
   updateProgress();
 }
 
-/* BIO BREAK */
-function bioBreak() {
-  clearInterval(idleTimer);
-  idleBox.classList.add("hidden");
-
-  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-  if (logs.length) {
-    logs[logs.length - 1].logout = now();
-    logs[logs.length - 1].reason = "Pending";
-    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-  }
-  location.reload();
-}
-
-/* TASK LOGIC (FIXED: Extra work persists) */
+/* TASK SYSTEM */
 function setupTasks() {
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const next = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
@@ -269,10 +275,8 @@ function setupTasks() {
 
   localStorage.setItem(key("TASKS"), JSON.stringify(merged));
   localStorage.removeItem(key("NEXT_TASKS"));
+  // Extra work persists until Day End
   
-  // FIX: Removed the line that was deleting EXTRA work here.
-  // We only delete EXTRA work in finalDayEnd() now.
-
   taskBox.classList.remove("hidden");
   logBox.classList.remove("hidden");
   reportBox.classList.add("hidden");
@@ -284,6 +288,26 @@ function loadTasks() {
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
 
+  // Helper to update Current Log
+  const updateLogTask = (name, isChecked) => {
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    if(logs.length){
+      const active = logs[logs.length-1];
+      if(isChecked){
+        // Add if not present
+        if(!active.completed) active.completed = [];
+        active.completed.push(name);
+      } else {
+        // Remove if unchecked
+        if(active.completed){
+          active.completed = active.completed.filter(n => n !== name);
+        }
+      }
+      localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+      renderLogs(); // Refresh table immediately
+    }
+  };
+
   tasks.forEach(t => {
     const cb = document.createElement("input");
     cb.type = "checkbox";
@@ -294,6 +318,7 @@ function loadTasks() {
         return;
       }
       t.done = cb.checked;
+      updateLogTask(t.name, t.done);
       save(tasks, extras);
     };
     taskList.append(cb, " " + t.name, document.createElement("br"));
@@ -309,6 +334,7 @@ function loadTasks() {
         return;
       }
       e.done = cb.checked;
+      updateLogTask(e.name + " (Extra)", e.done);
       save(tasks, extras);
     };
     extraList.append(cb, " " + e.name, document.createElement("br"));
@@ -359,7 +385,7 @@ function getLabel(p) {
   return "Fabulous";
 }
 
-/* DAY END */
+/* DAY END & REPORT CARD */
 function openDayEnd() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
@@ -383,9 +409,23 @@ function finalDayEnd() {
   const p = calculate();
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   const carry = tasks.filter(t => !t.done);
 
-  // 🟢 CREATE COMPLETED SUBJECT LIST
+  // 1. CALCULATE TOTAL TIME
+  let totalMillis = 0;
+  logs.forEach(l => {
+    let end = l.logoutTS;
+    if(!end) end = Date.now(); // If current session, end is now
+    if(l.loginTS) totalMillis += (end - l.loginTS);
+  });
+  
+  const totalMin = Math.floor(totalMillis / 60000);
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  const timeStr = `${hrs} hr ${mins} min`;
+
+  // 2. DONE LIST
   const doneTasks = tasks.filter(t => t.done).map(t => t.name);
   const doneExtras = extras.filter(e => e.done).map(e => e.name + " (Extra)");
   const allDone = [...doneTasks, ...doneExtras];
@@ -400,16 +440,22 @@ function finalDayEnd() {
     </div>`;
   }
 
-  // SAVE CARRY, CLEAR EXTRA (ONLY HERE)
+  // CLEANUP
   localStorage.setItem(key("TASKS"), JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"), JSON.stringify([]));
   localStorage.removeItem(key("LOGS"));
   logTable.innerHTML = "";
 
+  // 3. RENDER REPORT
   reportBox.innerHTML = `
     <h3>Daily Report</h3>
     <div class="percent">${p.percent}%</div>
     <div class="rating">${getLabel(p.percent)}</div>
+    
+    <div style="font-size:20px;color:#facc15;margin:10px 0;font-weight:bold">
+      Total Study Time: ${timeStr}
+    </div>
+
     <div class="details">
       Assigned: ${tasks.length} |
       Carry Forward: ${carry.length} |
@@ -418,7 +464,6 @@ function finalDayEnd() {
     ${doneHtml}`;
     
   reportBox.classList.remove("hidden");
-
   taskBox.classList.add("hidden");
   logBox.classList.add("hidden");
   nextDayBox.classList.add("hidden");
@@ -429,13 +474,38 @@ function finalDayEnd() {
   dayBtn.disabled = true;
 }
 
-/* LOG TABLE */
+/* LOG TABLE (UPDATED) */
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-  logTable.innerHTML = "";
+  
+  // Re-write table header to ensure 'Work Done' exists
+  const table = document.querySelector("table");
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Login</th>
+        <th>Logout</th>
+        <th>Reason</th>
+        <th>Work Done</th>
+      </tr>
+    </thead>
+    <tbody id="logTableBody"></tbody>
+  `;
+  
+  const tbody = document.getElementById("logTableBody");
+  tbody.innerHTML = "";
+
   logs.forEach(l => {
-    logTable.innerHTML +=
-      `<tr><td>${l.login}</td><td>${l.logout}</td><td>${l.reason}</td></tr>`;
+    // If completed array exists and has items, join them. Else "-"
+    const work = (l.completed && l.completed.length) ? l.completed.join(", ") : "-";
+    
+    tbody.innerHTML += `
+      <tr>
+        <td>${l.login}</td>
+        <td>${l.logout}</td>
+        <td>${l.reason}</td>
+        <td style="color:#86efac">${work}</td>
+      </tr>`;
   });
 }
 </script>
