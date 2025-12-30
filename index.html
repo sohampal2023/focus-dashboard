@@ -257,17 +257,17 @@ function login() {
   updateProgress();
 }
 
-/* TASK SYSTEM */
+/* TASK SYSTEM (UPDATED PROMPTS) */
 function setupTasks() {
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const next = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
 
-  let merged = [...carried, ...next.map(n => ({ name: n, done: false }))];
+  let merged = [...carried, ...next.map(n => ({ name: n, done: false, comment: "", due: "" }))];
   if (!merged.length) {
     merged = [
-      { name: "Study", done: false },
-      { name: "Revise", done: false },
-      { name: "Practice", done: false }
+      { name: "Study", done: false, comment: "", due: "" },
+      { name: "Revise", done: false, comment: "", due: "" },
+      { name: "Practice", done: false, comment: "", due: "" }
     ];
   }
 
@@ -291,7 +291,7 @@ function loadTasks() {
       const active = logs[logs.length-1];
       if(isChecked){
         if(!active.completed) active.completed = [];
-        active.completed.push(name);
+        if(!active.completed.includes(name)) active.completed.push(name);
       } else {
         if(active.completed){
           active.completed = active.completed.filter(n => n !== name);
@@ -302,6 +302,7 @@ function loadTasks() {
     }
   };
 
+  // Render Assigned Tasks
   tasks.forEach(t => {
     const cb = document.createElement("input");
     cb.type = "checkbox";
@@ -311,6 +312,18 @@ function loadTasks() {
         cb.checked = !cb.checked;
         return;
       }
+      
+      // ASK SPECIFIC TO THIS TASK
+      if(cb.checked){
+        const remark = prompt(`Comment for ${t.name}?`, "Done");
+        const dueVal = prompt(`Any pending work/marks left for ${t.name}?`, "None");
+        t.comment = remark || "-";
+        t.due = dueVal || "-";
+      } else {
+        t.comment = "";
+        t.due = "";
+      }
+      
       t.done = cb.checked;
       updateLogTask(t.name, t.done);
       save(tasks, extras);
@@ -318,6 +331,7 @@ function loadTasks() {
     taskList.append(cb, " " + t.name, document.createElement("br"));
   });
 
+  // Render Extra Tasks
   extras.forEach(e => {
     const cb = document.createElement("input");
     cb.type = "checkbox";
@@ -327,6 +341,18 @@ function loadTasks() {
         cb.checked = !cb.checked;
         return;
       }
+      
+      // ASK SPECIFIC TO THIS TASK
+      if(cb.checked){
+        const remark = prompt(`Comment for ${e.name}?`, "Done");
+        const dueVal = prompt(`Any pending work/marks left for ${e.name}?`, "None");
+        e.comment = remark || "-";
+        e.due = dueVal || "-";
+      } else {
+        e.comment = "";
+        e.due = "";
+      }
+
       e.done = cb.checked;
       updateLogTask(e.name + " (Extra)", e.done);
       save(tasks, extras);
@@ -339,7 +365,7 @@ function addExtra() {
   const name = prompt("Extra work?");
   if (!name) return;
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  extras.push({ name, done: false });
+  extras.push({ name, done: false, comment: "", due: "" });
   localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
   loadTasks();
 }
@@ -419,19 +445,35 @@ function finalDayEnd() {
   const mins = totalMin % 60;
   const timeStr = `${hrs} hr ${mins} min`;
 
-  // 2. DONE LIST
-  const doneTasks = tasks.filter(t => t.done).map(t => t.name);
-  const doneExtras = extras.filter(e => e.done).map(e => e.name + " (Extra)");
+  // 2. CREATE DONE TABLE ROWS
+  const doneTasks = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
+  const doneExtras = extras.filter(e => e.done).map(e => ({name: e.name + " (Extra)", comment: e.comment, due: e.due}));
   const allDone = [...doneTasks, ...doneExtras];
 
-  let doneHtml = "";
+  let doneTable = "";
   if(allDone.length > 0){
-    doneHtml = `<div style="text-align:left;margin-top:20px;border-top:1px solid #334155;padding-top:10px">
-        <strong>Done:</strong>
-        <ul style="margin:10px 0;padding-left:20px;color:#86efac">
-          ${allDone.map(d => `<li>${d}</li>`).join("")}
-        </ul>
-    </div>`;
+    doneTable = `
+    <h4 style="margin-top:20px;text-align:left;border-top:1px solid #334155;padding-top:10px">Work Done Report</h4>
+    <table>
+        <thead>
+            <tr>
+                <th style="width:40%">Task</th>
+                <th style="width:30%">Comment</th>
+                <th style="width:30%">Due</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${allDone.map(d => `
+                <tr>
+                    <td style="color:#86efac">${d.name}</td>
+                    <td>${d.comment}</td>
+                    <td style="color:#fca5a5">${d.due}</td>
+                </tr>
+            `).join("")}
+        </tbody>
+    </table>`;
+  } else {
+    doneTable = `<div style="margin-top:20px;color:#fca5a5">No work completed.</div>`;
   }
 
   // CLEANUP
@@ -439,7 +481,6 @@ function finalDayEnd() {
   localStorage.setItem(key("EXTRA"), JSON.stringify([]));
   localStorage.removeItem(key("LOGS"));
   
-  // FIX: Safely clear table if it exists
   const tableRef = document.getElementById("logTable");
   if(tableRef) tableRef.innerHTML = "";
 
@@ -458,7 +499,7 @@ function finalDayEnd() {
       Carry Forward: ${carry.length} |
       Penalty: -${penalty}%
     </div>
-    ${doneHtml}`;
+    ${doneTable}`;
     
   reportBox.classList.remove("hidden");
   taskBox.classList.add("hidden");
@@ -471,11 +512,10 @@ function finalDayEnd() {
   dayBtn.disabled = true;
 }
 
-/* LOG TABLE (FIXED ID) */
+/* LOG TABLE */
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   
-  // Ensure the table structure exists with the CORRECT ID
   const table = document.querySelector("table");
   table.innerHTML = `
     <thead>
@@ -483,12 +523,11 @@ function renderLogs() {
         <th>Login</th>
         <th>Logout</th>
         <th>Reason</th>
-        <th>Work Done</th>
+        <th>Work Ticked</th>
       </tr>
     </thead>
     <tbody id="logTable"></tbody> 
   `;
-  // ^ Note: I restored id="logTable" so finalDayEnd() can find it.
   
   const tbody = document.getElementById("logTable");
   tbody.innerHTML = "";
