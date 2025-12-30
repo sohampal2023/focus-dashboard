@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog System (Firebase + History V2)</title>
+<title>Focus Watchdog (Secure + History V2)</title>
 
 <style>
 *{box-sizing:border-box}
@@ -146,7 +146,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <div class="app">
 
 <div class="sidebar">
-  <h2>FOCUS WATCHDOG</h2>
+  <h2>SECURE WATCHDOG</h2>
 
   <div id="statusBox" class="status">Logged out</div>
   <div id="syncStatus" class="sync-status">Offline</div>
@@ -165,18 +165,19 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
   </div>
   <div style="flex-grow:1"></div> 
-   
-  <button id="loginBtn" onclick="login()">Login (Cloud)</button>
+    
+  <button id="loginBtn" onclick="handleLoginFlow()">Secure Login</button>
   <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
-  <button id="histBtn" onclick="toggleHistory()" disabled>View History</button>
+  <button id="histBtn" onclick="toggleHistory()" disabled>View History (9 Days)</button>
   <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
+  <button id="logoutBtn" onclick="handleLogout()" class="hidden" style="background:#7f1d1d">Logout</button>
 </div>
 
 <div class="main">
 
 <div id="historyBox" class="card hidden">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
-        <h3>Last 9 Days History</h3>
+        <h3 style="color:#7dd3fc">History (Protected)</h3>
         <button onclick="toggleHistory()" style="width:auto; padding:5px 15px;">Close</button>
     </div>
     <table>
@@ -247,41 +248,45 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 // --- FIREBASE SETUP ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, set, get, child, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const firebaseConfig = {
-  // If you have an API Key, add it here: apiKey: "YOUR_API_KEY",
+  // REPLACE WITH YOUR CONFIG FROM FIREBASE CONSOLE
+  apiKey: "YOUR_API_KEY", 
+  authDomain: "focus-dashboard-5965a.firebaseapp.com",
   databaseURL: "https://focus-dashboard-5965a-default-rtdb.firebaseio.com/",
+  projectId: "focus-dashboard-5965a",
+  storageBucket: "focus-dashboard-5965a.appspot.com",
+  messagingSenderId: "YOUR_ID",
+  appId: "YOUR_APP_ID"
 };
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const auth = getAuth(app);
 
 // --- GLOBAL VARIABLES ---
-let UID = null;
+let currentUser = null; // Stores the auth object
 let idleTimer = null;
 let targetTime = null;
 let totalDuration = 0;
 let penalty = 0;
 let idleStrikes = 0;
-let sanitizedEmail = null;
 
 const now = () => new Date().toLocaleString();
-const key = k => UID + "_" + k;
+// Key helper now uses User UID for security
+const key = k => (currentUser ? currentUser.uid : "GUEST") + "_" + k;
 
-// Sanitize email for Firebase paths
-function getSafePath(email) {
-    return email.replace(/\./g, '_').replace(/@/g, '_at_');
-}
-
-// --- CLOUD FUNCTIONS ---
-async function downloadData(email) {
-    sanitizedEmail = getSafePath(email);
+// --- CLOUD FUNCTIONS (SECURED) ---
+async function downloadData(uid) {
     const dbRef = ref(db);
     const syncStatus = document.getElementById("syncStatus");
-    syncStatus.innerText = "Syncing...";
+    syncStatus.innerText = "Verifying Credentials...";
     
     try {
-        const snapshot = await get(child(dbRef, `users/${sanitizedEmail}`));
+        // This will FAIL if specific Security Rules aren't met
+        const snapshot = await get(child(dbRef, `users/${uid}`));
+        
         if (snapshot.exists()) {
             const data = snapshot.val();
             if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
@@ -289,28 +294,27 @@ async function downloadData(email) {
             if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
             if(data.TEST_STATE) localStorage.setItem(key("TEST_STATE"), data.TEST_STATE);
             if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
-            // Sync History
             if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
             
             localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
             localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
         } else {
-            console.log("No data available - New User");
+            console.log("New User - No data yet");
         }
-        syncStatus.innerText = "Cloud Synced";
+        syncStatus.innerText = "Secure Connection Active";
         return true;
     } catch (error) {
-        console.error(error);
-        alert("Error connecting to database. Check console.");
-        syncStatus.innerText = "Error";
+        console.error("Access Denied:", error);
+        alert("SECURITY ALERT: Access Denied. Database Locked.");
+        syncStatus.innerText = "Auth Error";
         return false;
     }
 }
 
 function uploadData() {
-    if(!sanitizedEmail) return;
+    if(!currentUser) return;
     const syncStatus = document.getElementById("syncStatus");
-    syncStatus.innerText = "Saving...";
+    syncStatus.innerText = "Encrypting...";
 
     const payload = {
         TASKS: localStorage.getItem(key("TASKS")),
@@ -323,19 +327,143 @@ function uploadData() {
         PENALTY: localStorage.getItem(key("PENALTY"))
     };
 
-    set(ref(db, `users/${sanitizedEmail}`), payload)
+    set(ref(db, `users/${currentUser.uid}`), payload)
     .then(() => {
-        syncStatus.innerText = "Saved to Cloud";
-        setTimeout(() => syncStatus.innerText = "Online", 2000);
+        syncStatus.innerText = "Saved Securely";
+        setTimeout(() => syncStatus.innerText = "Secured", 2000);
     })
     .catch((error) => {
         syncStatus.innerText = "Save Failed";
         console.error(error);
+        alert("Write Permission Denied. Check Account.");
     });
 }
 
-// --- HISTORY LOGIC (MODIFIED FOR SUBJECTS) ---
+// --- AUTHENTICATION FLOW ---
+async function handleLoginFlow() {
+    const email = prompt("Enter Authorized Email:");
+    if (!email) return;
+    const password = prompt("Enter Password:");
+    if (!password) return;
+
+    try {
+        document.getElementById("syncStatus").innerText = "Authenticating...";
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        currentUser = userCredential.user;
+        postLoginInit();
+    } catch (error) {
+        if(error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
+            // Optional: Helper for first time setup
+            if(confirm("User not found. Create new secure account with these credentials?")) {
+                try {
+                    const newUser = await createUserWithEmailAndPassword(auth, email, password);
+                    currentUser = newUser.user;
+                    postLoginInit();
+                } catch (createErr) {
+                    alert("Creation failed: " + createErr.message);
+                }
+            }
+        } else {
+            alert("Login Failed: " + error.message);
+        }
+        document.getElementById("syncStatus").innerText = "Auth Failed";
+    }
+}
+
+async function handleLogout() {
+    await signOut(auth);
+    location.reload();
+}
+
+async function postLoginInit() {
+    document.getElementById("statusBox").innerText = `ID: ${currentUser.email}`;
+    document.getElementById("loginBtn").classList.add("hidden");
+    document.getElementById("logoutBtn").classList.remove("hidden");
+    
+    // Download data using the secure UID
+    await downloadData(currentUser.uid);
+
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+    penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+
+    updateStrikeDisplay();
+
+    if (logs.length) {
+        const lastLog = logs[logs.length - 1];
+        if (lastLog.reason === "Pending") {
+            const userReason = prompt("Reason for previous break?", "Bio Break");
+            lastLog.reason = userReason || "Bio Break";
+        }
+    }
+
+    localStorage.removeItem(key("DAY_ENDED"));
+
+    logs.push({
+        login: now(),
+        loginTS: Date.now(),
+        logout: "-",
+        logoutTS: null,
+        reason: "-",
+        completed: []
+    });
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+
+    document.getElementById("bioBtn").disabled = false;
+    document.getElementById("histBtn").disabled = false;
+    document.getElementById("dayBtn").disabled = false;
+    
+    // Initial Sync
+    uploadData();
+
+    // Check Mock Test
+    const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+    if (activeTest) {
+        if (activeTest.status === "EXPIRED") {
+           alert("Mock Test Time Ended! Please enter marks.");
+           finishTestSequence(activeTest, true);
+           return;
+        }
+
+        if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
+            restoreTestUI(activeTest);
+            const elapsed = (Date.now() - activeTest.startTime) / 1000;
+            const totalDurationSecs = activeTest.durationMins * 60;
+            const remaining = totalDurationSecs - elapsed;
+
+            if(remaining > 0) {
+                startIdle(remaining);
+            } else {
+                startIdle(1);
+            }
+            
+            const btn = document.querySelector(".watchdog-btn");
+            if(btn) btn.innerText = "EXAM MODE (NO RESET)";
+
+            loadTasks();
+            renderLogs();
+            updateProgress();
+            return;
+        } else {
+            finishTestSequence(activeTest, true);
+            return;
+        }
+    }
+
+    startIdle(1800);
+    setupTasks();
+    loadTasks();
+    renderLogs();
+    updateProgress();
+}
+
+// --- HISTORY LOGIC (PROTECTED) ---
 function toggleHistory() {
+    if(!currentUser) {
+        alert("Security Alert: Login required to view history.");
+        return;
+    }
+
     const histBox = document.getElementById("historyBox");
     const taskBox = document.getElementById("taskBox");
     const logBox = document.getElementById("logBox");
@@ -350,14 +478,13 @@ function toggleHistory() {
         const tbody = document.getElementById("historyTable");
         tbody.innerHTML = "";
         
-        // Reverse to show newest first
+        // LIMIT TO 9 ENTRIES VISUALLY IF NEEDED, BUT ARRAY IS ALREADY LIMITED ON SAVE
         [...history].reverse().forEach(entry => {
             let color = "#e5e7eb";
             if(entry.rating === "Poor") color = "#f87171";
             if(entry.rating === "Good") color = "#facc15";
             if(entry.rating === "Excellent" || entry.rating === "Fabulous") color = "#4ade80";
 
-            // Fallback for old history records that didn't have subjects
             const subjectText = entry.subjects || "No Data";
 
             tbody.innerHTML += `
@@ -378,7 +505,6 @@ function toggleHistory() {
         // CLOSE HISTORY
         histBox.classList.add("hidden");
         if(document.getElementById("reportBox").classList.contains("hidden")) {
-            // Only show taskbox if report box isn't open (meaning day is active)
             taskBox.classList.remove("hidden");
             logBox.classList.remove("hidden");
         }
@@ -411,7 +537,7 @@ function startIdle(customSeconds = 1800) {
 }
 
 function resetWatchdog() {
-    if(!UID) return;
+    if(!currentUser) return;
 
     const btn = document.querySelector('.watchdog-btn');
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
@@ -506,7 +632,7 @@ function autoLogout() {
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
   
-  uploadData(); // Sync before reload
+  uploadData(); 
   setTimeout(() => location.reload(), 500);
 }
 
@@ -525,94 +651,8 @@ function bioBreak() {
     last.reason = "Pending";
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
-  uploadData(); // Sync before reload
-  setTimeout(() => location.reload(), 500);
-}
-
-// --- LOGIN (Async for Firebase) ---
-async function login() {
-  const emailInput = prompt("Email (Used for Cloud Save):");
-  if (!emailInput) return;
-  
-  UID = emailInput.trim();
-  
-  // Wait for cloud download before proceeding
-  await downloadData(UID);
-
-  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-  idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
-  penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
-
-  updateStrikeDisplay();
-
-  if (logs.length) {
-    const lastLog = logs[logs.length - 1];
-    if (lastLog.reason === "Pending") {
-      const userReason = prompt("Reason for previous break?", "Bio Break");
-      lastLog.reason = userReason || "Bio Break";
-    }
-  }
-
-  localStorage.removeItem(key("DAY_ENDED"));
-
-  logs.push({
-    login: now(),
-    loginTS: Date.now(),
-    logout: "-",
-    logoutTS: null,
-    reason: "-",
-    completed: []
-  });
-  localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-
-  document.getElementById("statusBox").innerText = `Logged in: ${UID}`;
-  document.getElementById("loginBtn").disabled = true;
-  document.getElementById("bioBtn").disabled = false;
-  document.getElementById("histBtn").disabled = false; // Enable History
-  document.getElementById("dayBtn").disabled = false;
-  
-  // Initial Sync after login
   uploadData();
-
-  // Check Mock Test
-  const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-  if (activeTest) {
-    if (activeTest.status === "EXPIRED") {
-       alert("Mock Test Time Ended! Please enter marks.");
-       finishTestSequence(activeTest, true);
-       return;
-    }
-
-    if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
-      restoreTestUI(activeTest);
-      const elapsed = (Date.now() - activeTest.startTime) / 1000;
-      const totalDurationSecs = activeTest.durationMins * 60;
-      const remaining = totalDurationSecs - elapsed;
-
-      if(remaining > 0) {
-        startIdle(remaining);
-      } else {
-        startIdle(1);
-      }
-      
-      const btn = document.querySelector(".watchdog-btn");
-      if(btn) btn.innerText = "EXAM MODE (NO RESET)";
-
-      loadTasks();
-      renderLogs();
-      updateProgress();
-      return;
-    } else {
-      finishTestSequence(activeTest, true);
-      return;
-    }
-  }
-
-  startIdle(1800);
-  setupTasks();
-  loadTasks();
-  renderLogs();
-  updateProgress();
+  setTimeout(() => location.reload(), 500);
 }
 
 function updateStrikeDisplay() {
@@ -660,7 +700,7 @@ function startMockTestSetup() {
     status: "RUNNING"
   };
   localStorage.setItem(key("TEST_STATE"), JSON.stringify(testState));
-  uploadData(); // Sync start
+  uploadData();
 
   const btn = document.querySelector(".watchdog-btn");
   if(btn) btn.innerText = "EXAM MODE (NO RESET)";
@@ -731,7 +771,7 @@ function finishTestSequence(testState, loadDashboard = false) {
     }
 
     localStorage.removeItem(key("TEST_STATE"));
-    uploadData(); // Sync result
+    uploadData();
     
     const btn = document.querySelector(".watchdog-btn");
     if(btn) btn.innerText = "I AM STUDYING";
@@ -769,7 +809,7 @@ function setupTasks() {
 
   localStorage.setItem(key("TASKS"), JSON.stringify(merged));
   localStorage.removeItem(key("NEXT_TASKS"));
-  uploadData(); // Sync Setup
+  uploadData();
   
   const taskBox = document.getElementById("taskBox");
   taskBox.innerHTML = `
@@ -910,7 +950,7 @@ function save(tasks, extras) {
   localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
   localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
   updateProgress();
-  uploadData(); // Trigger Cloud Sync
+  uploadData();
 }
 
 // --- PROGRESS ---
@@ -1042,7 +1082,7 @@ function finalDayEnd() {
   localStorage.setItem(key("IDLE_STRIKES"), "0");
   localStorage.setItem(key("PENALTY"), "0");
   
-  uploadData(); // Sync End of Day (Includes History)
+  uploadData(); 
 
   const tableRef = document.getElementById("logTable");
   if(tableRef) tableRef.innerHTML = "";
@@ -1070,10 +1110,12 @@ function finalDayEnd() {
   document.getElementById("historyBox").classList.add("hidden");
 
   document.getElementById("statusBox").innerText = "Day End – Thank you";
-  document.getElementById("loginBtn").disabled = false;
+  document.getElementById("loginBtn").classList.remove("hidden");
+  document.getElementById("logoutBtn").classList.add("hidden");
   document.getElementById("bioBtn").disabled = true;
   document.getElementById("dayBtn").disabled = true;
   document.getElementById("histBtn").disabled = true;
+  currentUser = null;
 }
 
 function renderLogs() {
@@ -1107,8 +1149,9 @@ function renderLogs() {
   });
 }
 
-// --- ATTACH TO WINDOW (Required for module scripts) ---
-window.login = login;
+// --- ATTACH TO WINDOW ---
+window.handleLoginFlow = handleLoginFlow;
+window.handleLogout = handleLogout;
 window.resetWatchdog = resetWatchdog;
 window.bioBreak = bioBreak;
 window.openDayEnd = openDayEnd;
