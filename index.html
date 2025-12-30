@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog (Admin Edition)</title>
+<title>Focus Watchdog (Admin V2)</title>
 
 <style>
 *{box-sizing:border-box}
@@ -26,7 +26,7 @@ button:hover:not(:disabled){ background: #1e293b; border-color: #7dd3fc; }
 button:active:not(:disabled){ transform: scale(0.98); }
 button:disabled{opacity:.4; cursor: not-allowed;}
 
-/* INNOVATIVE WATCHDOG TIMER */
+/* WATCHDOG TIMER */
 .idleBox{
   padding:15px; border:1px solid #334155;
   border-radius:16px; text-align:center;
@@ -35,12 +35,8 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 }
 
 .timer-container {
-    position: relative;
-    width: 120px;
-    height: 120px;
-    margin: 0 auto 10px;
+    position: relative; width: 120px; height: 120px; margin: 0 auto 10px;
 }
-
 .timer-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
 .timer-circle-bg { fill: none; stroke: #1e293b; stroke-width: 8; }
 .timer-circle-fg {
@@ -48,7 +44,6 @@ button:disabled{opacity:.4; cursor: not-allowed;}
     stroke-dasharray: 339; stroke-dashoffset: 0;
     transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
 }
-
 .timer-label {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%);
@@ -97,13 +92,6 @@ button:disabled{opacity:.4; cursor: not-allowed;}
     border-radius: 8px; margin-bottom: 10px; text-align: center; font-size: 13px;
 }
 
-/* INPUT */
-.nextInput{
-  width:100%; padding:10px; margin:6px 0;
-  border-radius:8px; border:1px solid #334155;
-  background:#020617; color:#e5e7eb;
-}
-
 /* SPEEDOMETER */
 .speedo{
   width:300px;height:150px;border-radius:300px 300px 0 0;
@@ -131,10 +119,8 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{border:1px solid #334155;padding:6px;text-align:center}
 
-/* FIREBASE STATUS INDICATOR */
-.sync-status {
-    font-size: 10px; color: #64748b; text-align: center; margin-top:5px;
-}
+.sync-status { font-size: 10px; color: #64748b; text-align: center; margin-top:5px; }
+.nextInput{ width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #334155; background:#020617; color:#e5e7eb; }
 </style>
 </head>
 
@@ -208,7 +194,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
     <div id="taskBox" class="card hidden">
       <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
-
         <div>
           <h3>Assigned Tasks</h3>
           <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center">
@@ -220,7 +205,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
           <div id="extraList"></div>
           <button onclick="addExtra()" style="margin-top:10px">+ Add Extra Work</button>
         </div>
-
         <div>
           <h3 style="text-align:center">Live Progress</h3>
           <div class="speedo">
@@ -231,13 +215,12 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
           <div id="liveRating" class="rating">Poor</div>
           <div id="liveDetails" class="details"></div>
         </div>
-
       </div>
     </div>
 
     <div id="logBox" class="card hidden">
       <h3>Login / Logout Log</h3>
-      <table>
+      <table style="width:100%">
         <thead>
           <tr><th>Login</th><th>Logout</th><th>Reason</th><th>Work Ticked</th></tr>
         </thead>
@@ -260,7 +243,8 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <script type="module">
 // --- FIREBASE SETUP ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-import { getDatabase, ref, set, get, child, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+// ADDED 'remove' to imports below:
+import { getDatabase, ref, set, get, child, update, remove } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 const firebaseConfig = {
@@ -348,9 +332,10 @@ async function initAdminDashboard() {
 
 async function refreshAdminView() {
     const listDiv = document.getElementById("studentList");
-    listDiv.innerHTML = "Fetching Data...";
+    listDiv.innerHTML = "Fetching Data... (Ensure Rules are updated!)";
     
     try {
+        // ADMIN READS ALL USERS
         const snapshot = await get(ref(db, 'users'));
         if (snapshot.exists()) {
             const users = snapshot.val();
@@ -385,13 +370,11 @@ async function refreshAdminView() {
                     }
                 }
 
-                // Lockout Badge
                 if(isLocked) {
                     const timeLeft = Math.ceil((u.lockout - Date.now())/1000/60);
                     leaveBadge += ` <span class="admin-badge badge-red">LOCKED (${timeLeft}m)</span>`;
                 }
 
-                // Render Row
                 html += `
                 <div class="admin-row">
                     <div>
@@ -404,7 +387,8 @@ async function refreshAdminView() {
                     </div>
                     <div class="admin-btn-group">
                         ${leaveActions}
-                        <button style="background:#ea580c" onclick="terminateStudent('${uid}')">Terminate (Lock)</button>
+                        <button style="background:#ea580c" onclick="terminateStudent('${uid}')">Lock</button>
+                        <button style="background:#ef4444" onclick="deleteStudent('${uid}')">Delete Data</button>
                     </div>
                 </div>`;
             });
@@ -415,11 +399,11 @@ async function refreshAdminView() {
         }
     } catch (e) {
         console.error(e);
-        listDiv.innerHTML = "Error fetching data.";
+        listDiv.innerHTML = `<div style="color:#f87171">Error: ${e.message}<br>Check Firebase Rules!</div>`;
     }
 }
 
-// Admin Actions attached to window
+// --- ADMIN ACTIONS ---
 window.handleLeave = async function(uid, approve) {
     const status = approve ? "Approved" : "Rejected";
     try {
@@ -440,7 +424,19 @@ window.terminateStudent = async function(uid) {
         refreshAdminView();
     } catch(e) { alert("Error: " + e.message); }
 };
+
+window.deleteStudent = async function(uid) {
+    if(confirm("PERMANENTLY DELETE this student's history, tasks, and logs?\n\n(Note: This removes data from the list. If they log in again, they will reappear as a fresh user.)")) {
+        try {
+            await remove(ref(db, `users/${uid}`));
+            alert("Data deleted successfully.");
+            refreshAdminView();
+        } catch(e) { alert("Error: " + e.message); }
+    }
+};
+
 window.refreshAdminView = refreshAdminView;
+
 
 // ==========================================
 // STUDENT DASHBOARD LOGIC
@@ -464,13 +460,11 @@ async function initStudentDashboard() {
                 <button onclick="location.reload()" style="width:200px;margin-top:20px;">Try Again</button>
             </div>
         `;
-        return; // Stop execution
+        return; 
     }
 
-    // Check Leave Status
     checkLeaveStatus();
 
-    // Standard Init
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
@@ -494,12 +488,11 @@ async function initStudentDashboard() {
     });
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 
-    // Enable Buttons
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
     
-    uploadData(); // Saves email profile + logs
+    uploadData(); 
 
     // Check Mock Test
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
@@ -545,17 +538,15 @@ async function requestLeave() {
         timestamp: Date.now()
     };
     
-    // Save locally and push to DB specific node
     localStorage.setItem(key("LEAVE_REQ"), JSON.stringify(payload));
     
     try {
         await update(ref(db, `users/${currentUser.uid}/leaveRequest`), payload);
-        checkLeaveStatus(); // Refresh UI
+        checkLeaveStatus();
     } catch(e) { alert("Failed to send request"); }
 }
 
 function checkLeaveStatus() {
-    // We check local storage for immediate feedback, but verify with DB in downloadData
     const req = JSON.parse(localStorage.getItem(key("LEAVE_REQ")));
     const box = document.getElementById("leaveStatusBox");
     
@@ -613,7 +604,7 @@ function uploadData() {
     const syncStatus = document.getElementById("syncStatus");
     
     const payload = {
-        profile: { email: currentUser.email }, // CRITICAL FOR ADMIN TO SEE WHO IS WHO
+        profile: { email: currentUser.email }, 
         TASKS: localStorage.getItem(key("TASKS")),
         EXTRA: localStorage.getItem(key("EXTRA")),
         LOGS: localStorage.getItem(key("LOGS")),
@@ -707,7 +698,6 @@ function startIdle(customSeconds = 1800) {
 
 function resetWatchdog() {
     if(!currentUser) return;
-
     const btn = document.querySelector('.watchdog-btn');
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
     
@@ -721,7 +711,6 @@ function resetWatchdog() {
         }, 1500);
         return;
     }
-
     startIdle(1800); 
     const originalText = "I AM STUDYING";
     btn.innerText = "WATCHDOG RESET";
@@ -747,14 +736,12 @@ function updateIdle(seconds) {
   if(timeDisplay) {
     timeDisplay.innerText = h > 0 ? `${h}:${text}` : text;
   }
-
   const ring = document.getElementById("timerRing");
   if(ring) {
       const maxDash = 339;
       const pct = displaySeconds / totalDuration;
       const offset = maxDash * (1 - pct);
       ring.style.strokeDashoffset = offset;
-
       const idleBox = document.getElementById("idleBox");
       if (pct > 0.5) {
           ring.style.stroke = "#3b82f6";
@@ -800,7 +787,6 @@ function autoLogout() {
     last.reason = "Timeout";
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
-  
   uploadData(); 
   setTimeout(() => location.reload(), 500);
 }
@@ -811,7 +797,6 @@ function bioBreak() {
   if(idleBox) idleBox.classList.add("hidden");
   
   localStorage.setItem(key("IDLE_STRIKES"), "0");
-
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
     const last = logs[logs.length - 1];
@@ -916,13 +901,10 @@ function finishTestSequence(testState, loadDashboard = false) {
       });
       localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
-
     localStorage.removeItem(key("TEST_STATE"));
     uploadData();
-    
     const btn = document.querySelector(".watchdog-btn");
     if(btn) btn.innerText = "I AM STUDYING";
-
     if(loadDashboard) {
         startIdle(1800);
         setupTasks();
@@ -994,13 +976,10 @@ function loadTasks() {
   const tList = document.getElementById("taskList");
   const eList = document.getElementById("extraList");
   if(!tList || !eList) return;
-
   tList.innerHTML = "";
   eList.innerHTML = "";
-  
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-
   const updateLogTask = (name, isChecked, comment, due) => {
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if(logs.length){
@@ -1016,7 +995,6 @@ function loadTasks() {
       renderLogs();
     }
   };
-
   tasks.forEach(t => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
@@ -1048,7 +1026,6 @@ function loadTasks() {
     container.append(cb, label);
     tList.append(container);
   });
-
   extras.forEach(e => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
@@ -1115,12 +1092,10 @@ function updateProgress() {
   const needle = document.getElementById("needle");
   if(!needle) return;
   const p = calculate();
-  needle.style.transform =
-    `rotate(${(Math.min(p.percent, 300) / 300) * 180 - 90}deg)`;
+  needle.style.transform = `rotate(${(Math.min(p.percent, 300) / 300) * 180 - 90}deg)`;
   document.getElementById("livePercent").innerText = p.percent + "%";
   document.getElementById("liveRating").innerText = getLabel(p.percent);
-  document.getElementById("liveDetails").innerText =
-    `Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${penalty}%`;
+  document.getElementById("liveDetails").innerText = `Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${penalty}%`;
 }
 
 function getLabel(p) {
@@ -1136,12 +1111,10 @@ function openDayEnd() {
   clearInterval(idleTimer);
   const idleBox = document.getElementById("idleBox");
   if(idleBox) idleBox.classList.add("hidden");
-
   const nextInputs = document.getElementById("nextInputs");
   nextInputs.innerHTML = "";
   for (let i = 0; i < 7; i++) {
-    nextInputs.innerHTML +=
-      `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">`;
+    nextInputs.innerHTML += `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">`;
   }
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
@@ -1171,7 +1144,6 @@ function finalDayEnd() {
   const mins = totalMin % 60;
   const timeStr = `${hrs} hr ${mins} min`;
 
-  // --- SAVE HISTORY WITH SUBJECTS ---
   const doneTasks = tasks.filter(t => t.done).map(t => t.name);
   const doneExtras = extras.filter(e => e.done).map(e => e.name + " (Extra)");
   const subjectsCovered = [...doneTasks, ...doneExtras].join(", ");
@@ -1188,7 +1160,6 @@ function finalDayEnd() {
   history.push(historyEntry);
   if (history.length > 9) history.shift(); 
   localStorage.setItem(key("HISTORY"), JSON.stringify(history));
-  // ----------------------------------
 
   const doneReportItems = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
   const doneExtraItems = extras.filter(e => e.done).map(e => ({name: e.name + " (Extra)", comment: e.comment, due: e.due}));
@@ -1242,9 +1213,7 @@ function finalDayEnd() {
       Total Study Time: ${timeStr}
     </div>
     <div class="details">
-      Assigned: ${tasks.length} |
-      Carry Forward: ${carry.length} |
-      Penalty: -${penalty}%
+      Assigned: ${tasks.length} | Carry Forward: ${carry.length} | Penalty: -${penalty}%
     </div>
     <div style="margin-top:10px; color:#94a3b8; font-size:12px;">(Data added to History)</div>
     ${doneTable}`;
@@ -1265,9 +1234,7 @@ function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   const tbody = document.getElementById("logTable");
   if(!tbody) return;
-
   tbody.innerHTML = "";
-
   logs.forEach(l => {
     let workHtml = "-";
     if (l.completed && l.completed.length) {
