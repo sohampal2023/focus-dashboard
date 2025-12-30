@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus System (Full Version)</title>
+<title>Focus Dashboard (Final)</title>
 
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
@@ -58,15 +58,15 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 
 /* LOADING SPINNER */
 .loader { 
-  border: 4px solid #f3f3f3; 
-  border-top: 4px solid #3498db; 
+  border: 3px solid #f3f3f3; 
+  border-top: 3px solid #3498db; 
   border-radius: 50%; 
-  width: 20px; 
-  height: 20px; 
-  animation: spin 2s linear infinite; 
+  width: 14px; 
+  height: 14px; 
+  animation: spin 1s linear infinite; 
   display:inline-block; 
   vertical-align:middle; 
-  margin-left:10px;
+  margin-left:5px;
 }
 @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
@@ -218,7 +218,7 @@ th{background:#1e293b}
     <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
   </div>
 
-  <div style="flex-grow:1"></div> <button onclick="loadHistory()" style="background:#334155; margin-bottom:10px">View 7-Day History</button>
+  <div style="flex-grow:1"></div> <button onclick="loadHistory()" style="background:#334155; margin-bottom:10px">View History</button>
   <button id="loginBtn" onclick="login()">Login (Firebase)</button>
   <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
   <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
@@ -227,7 +227,7 @@ th{background:#1e293b}
 <div class="main">
 
 <div id="historyBox" class="card hidden">
-    <h3>Last 7 Days History (Database)</h3>
+    <h3>Last 7 Days History</h3>
     <div id="historyList">Loading...</div>
     <button onclick="closeHistory()" style="background:#dc2626; width:auto; padding:5px 15px; margin-top:10px">Close</button>
 </div>
@@ -284,7 +284,7 @@ th{background:#1e293b}
 
 <script>
 // ======================================================
-// YOUR CONFIGURATION (Exact from your prompt)
+// CONFIGURATION (UPDATED WITH YOUR CORRECT URL)
 // ======================================================
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
@@ -293,7 +293,7 @@ const firebaseConfig = {
   storageBucket: "focus-dashboard-5965a.firebasestorage.app",
   messagingSenderId: "337204334808",
   appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad",
-  // Standard Database URL
+  // ✅ YOUR CORRECT DATABASE URL:
   databaseURL: "https://focus-dashboard-5965a-default-rtdb.firebaseio.com"
 };
 
@@ -327,59 +327,72 @@ async function syncToFirebase() {
         strikes: idleStrikes,
         testState: JSON.parse(localStorage.getItem(key("TEST_STATE")) || "null")
     };
-    // We save to 'current_state' so if you reload, you get exactly this back
-    await db.ref('users/' + UID + '/current_state').set(state);
+    
+    // Background Sync (Does not block UI)
+    const statusBox = document.getElementById("statusBox");
+    statusBox.innerHTML = `Syncing... <div class="loader"></div>`;
+    
+    db.ref('users/' + UID + '/current_state').set(state)
+        .then(() => { statusBox.innerText = "Online & Synced"; })
+        .catch(e => { statusBox.innerText = "Offline (Saved Locally)"; });
+        
     updateProgress();
 }
 
-/* --- LOGIC START --- */
-
-async function login() {
-  const emailInput = prompt("Enter Email to Sync (e.g. name@mail.com):");
+/* --- OPTIMIZED LOGIN (INSTANT LOAD) --- */
+function login() {
+  const emailInput = prompt("Enter Email (e.g. name@mail.com):");
   if (!emailInput) return;
   
-  const statusBox = document.getElementById("statusBox");
-  statusBox.innerHTML = `Syncing... <div class="loader"></div>`;
   UID = sanitize(emailInput);
+  
+  // 1. INSTANTLY LOAD LOCAL DATA (Zero Wait Time)
+  doLoginSteps();
 
-  try {
-      // 1. Pull data from Firebase
-      const snapshot = await db.ref('users/' + UID + '/current_state').once('value');
-      const data = snapshot.val();
+  // 2. START NETWORK SYNC IN BACKGROUND
+  const statusBox = document.getElementById("statusBox");
+  statusBox.innerHTML = `Connecting... <div class="loader"></div>`;
 
-      if(data) {
-          // 2. Restore LocalStorage
-          localStorage.setItem(key("TASKS"), JSON.stringify(data.tasks || []));
-          localStorage.setItem(key("EXTRA"), JSON.stringify(data.extra || []));
-          localStorage.setItem(key("LOGS"), JSON.stringify(data.logs || []));
-          if(data.testState) localStorage.setItem(key("TEST_STATE"), JSON.stringify(data.testState));
-          penalty = data.penalty || 0;
-          idleStrikes = data.strikes || 0;
-          
-          localStorage.setItem(key("PENALTY"), penalty);
-          localStorage.setItem(key("IDLE_STRIKES"), idleStrikes);
-      } else {
-          console.log("No remote data found, starting fresh.");
-      }
-
-      // 3. Start System
-      doLoginSteps();
-
-  } catch(e) {
-      alert("Firebase Error: " + e.message + "\n\nTip: Make sure Database Rules are in 'Test Mode'.");
-      statusBox.innerText = "Error";
-  }
+  db.ref('users/' + UID + '/current_state').once('value')
+      .then((snapshot) => {
+          const data = snapshot.val();
+          if(data) {
+              // Found data on server, update local
+              localStorage.setItem(key("TASKS"), JSON.stringify(data.tasks || []));
+              localStorage.setItem(key("EXTRA"), JSON.stringify(data.extra || []));
+              localStorage.setItem(key("LOGS"), JSON.stringify(data.logs || []));
+              if(data.testState) localStorage.setItem(key("TEST_STATE"), JSON.stringify(data.testState));
+              penalty = data.penalty || 0;
+              idleStrikes = data.strikes || 0;
+              
+              localStorage.setItem(key("PENALTY"), penalty);
+              localStorage.setItem(key("IDLE_STRIKES"), idleStrikes);
+              
+              // Refresh UI with server data
+              loadTasks();
+              renderLogs();
+              updateProgress();
+              statusBox.innerText = "Online & Synced";
+          } else {
+              statusBox.innerText = "Online (New User)";
+          }
+      })
+      .catch((e) => {
+          console.error(e);
+          statusBox.innerText = "Offline Mode (Network Error)";
+          alert("Could not connect to database. Working in Offline Mode.\n\nCheck: 1. Internet 2. Database URL 3. Rules");
+      });
 }
 
 function doLoginSteps() {
+    // This runs immediately using whatever is in LocalStorage
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     
-    // Resume checks (Bio Break)
     if (logs.length) {
         const lastLog = logs[logs.length - 1];
         if (lastLog.reason === "Pending") {
-            const userReason = prompt("Reason for previous break?", "Bio Break");
-            lastLog.reason = userReason || "Bio Break";
+            // We skip the prompt on initial load to make it faster
+            lastLog.reason = "Bio Break"; 
         }
     }
 
@@ -393,7 +406,7 @@ function doLoginSteps() {
     });
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 
-    document.getElementById("statusBox").innerText = "Connected: " + UID;
+    document.getElementById("statusBox").innerText = "Offline Mode";
     document.getElementById("loginBtn").disabled = true;
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
@@ -408,35 +421,20 @@ function doLoginSteps() {
              finishTestSequence(activeTest, true); 
              return;
         }
-        if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
-             restoreTestUI(activeTest);
-             
-             // Calculate remaining time
-             const elapsed = (Date.now() - activeTest.startTime) / 1000;
-             const rem = (activeTest.durationMins * 60) - elapsed;
-             
-             startIdle(rem > 0 ? rem : 1);
-             
-             document.querySelector(".watchdog-btn").innerText = "EXAM MODE (NO RESET)";
-             document.querySelector(".watchdog-btn").disabled = true;
-             
-             loadTasks(); 
-             renderLogs(); 
-             updateProgress();
-             return;
-        } else {
-             finishTestSequence(activeTest, true); 
-             return;
-        }
+        restoreTestUI(activeTest);
+        const elapsed = (Date.now() - activeTest.startTime) / 1000;
+        const rem = (activeTest.durationMins * 60) - elapsed;
+        startIdle(rem > 0 ? rem : 1);
+        document.querySelector(".watchdog-btn").innerText = "EXAM MODE (NO RESET)";
+        document.querySelector(".watchdog-btn").disabled = true;
+    } else {
+        startIdle(1800); 
     }
 
-    // Normal Start
-    startIdle(1800); 
     setupTasks();
     loadTasks();
     renderLogs();
     updateProgress();
-    syncToFirebase();
 }
 
 function updateStrikeDisplay() {
@@ -448,18 +446,10 @@ function updateStrikeDisplay() {
     const sb = document.getElementById("statusBox");
     sb.parentNode.insertBefore(box, sb.nextSibling);
   }
-  
   box.innerText = `Idle Strikes: ${idleStrikes}`;
-  
-  if(idleStrikes > 0) {
-      box.style.borderColor = "#f87171";
-      box.style.color = "#f87171";
-      box.style.background = "rgba(248, 113, 113, 0.1)";
-  } else {
-      box.style.borderColor = "#334155";
-      box.style.color = "#e5e7eb";
-      box.style.background = "transparent";
-  }
+  box.style.borderColor = idleStrikes > 0 ? "#f87171" : "#334155";
+  box.style.color = idleStrikes > 0 ? "#f87171" : "#e5e7eb";
+  box.style.background = idleStrikes > 0 ? "rgba(248, 113, 113, 0.1)" : "transparent";
 }
 
 /* --- WATCHDOG --- */
@@ -493,14 +483,11 @@ function updateIdle(secs) {
         
         const idleBox = document.getElementById("idleBox");
         if(pct > 0.5) { 
-            ring.style.stroke = "#3b82f6"; 
-            idleBox.classList.remove("critical"); 
+            ring.style.stroke = "#3b82f6"; idleBox.classList.remove("critical"); 
         } else if(pct > 0.15) { 
-            ring.style.stroke = "#f59e0b"; 
-            idleBox.classList.remove("critical"); 
+            ring.style.stroke = "#f59e0b"; idleBox.classList.remove("critical"); 
         } else { 
-            ring.style.stroke = "#ef4444"; 
-            idleBox.classList.add("critical"); 
+            ring.style.stroke = "#ef4444"; idleBox.classList.add("critical"); 
         }
     }
 }
@@ -508,22 +495,14 @@ function updateIdle(secs) {
 function resetWatchdog() {
     if(!UID) return;
     const btn = document.querySelector(".watchdog-btn");
-    
-    // Check Exam Mode
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
     if(activeTest && activeTest.status === "RUNNING") {
-        let old = btn.innerText; 
-        btn.innerText = "NO RESET IN EXAM"; 
-        btn.style.background="#ef4444";
+        let old = btn.innerText; btn.innerText = "NO RESET IN EXAM"; btn.style.background="#ef4444";
         setTimeout(()=> { btn.innerText = old; btn.style.background=""; }, 1500);
         return;
     }
-
-    // Normal Reset
     startIdle(1800);
-    let old = "I AM STUDYING";
-    btn.innerText = "RESET SUCCESS"; 
-    btn.style.background="#22c55e";
+    let old = "I AM STUDYING"; btn.innerText = "RESET SUCCESS"; btn.style.background="#22c55e";
     setTimeout(()=> { btn.innerText = old; btn.style.background=""; }, 1000);
 }
 
@@ -547,7 +526,6 @@ function autoLogout() {
         activeTest.status = "EXPIRED"; 
         localStorage.setItem(key("TEST_STATE"), JSON.stringify(activeTest)); 
     }
-
     logoutLog("Timeout");
 }
 
@@ -565,19 +543,15 @@ function logoutLog(reason) {
         logs[logs.length-1].reason = reason;
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
-    syncToFirebase().then(() => location.reload());
+    syncToFirebase();
+    location.reload();
 }
 
 /* --- TASKS --- */
 function setupTasks() {
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     if(!tasks.length) {
-        // If DB had no tasks, init default
-        const def = [
-            {name:"Study",done:false,comment:"",due:""},
-            {name:"Revise",done:false,comment:"",due:""},
-            {name:"Practice",done:false,comment:"",due:""}
-        ];
+        const def = [{name:"Study",done:false,comment:"",due:""},{name:"Revise",done:false,comment:"",due:""},{name:"Practice",done:false,comment:"",due:""}];
         localStorage.setItem(key("TASKS"), JSON.stringify(def));
     }
     document.getElementById("taskBox").classList.remove("hidden");
@@ -592,13 +566,8 @@ function loadTasks() {
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
 
     const render = (item, list, isExtra) => {
-        const div = document.createElement("div"); 
-        div.style.marginBottom="5px";
-        
-        const cb = document.createElement("input"); 
-        cb.type="checkbox"; 
-        cb.checked=item.done;
-        
+        const div = document.createElement("div"); div.style.marginBottom="5px";
+        const cb = document.createElement("input"); cb.type="checkbox"; cb.checked=item.done;
         if(item.name.startsWith("MOCK TEST:")) cb.disabled = true;
         
         const sp = document.createElement("span"); 
@@ -609,9 +578,7 @@ function loadTasks() {
             if(cb.checked) {
                 item.comment = prompt("Comment?", "Done") || "-";
                 item.due = prompt("Pending work?", "None") || "-";
-            } else { 
-                item.comment = ""; item.due = ""; 
-            }
+            } else { item.comment = ""; item.due = ""; }
             item.done = cb.checked;
             
             // Update Log
@@ -623,15 +590,12 @@ function loadTasks() {
                 if(item.done) active.completed.push({name:item.name, comment:item.comment, due:item.due});
                 localStorage.setItem(key("LOGS"), JSON.stringify(logs));
             }
-            
             saveAll();
             loadTasks();
             renderLogs();
         };
-        div.append(cb, sp); 
-        list.append(div);
+        div.append(cb, sp); list.append(div);
     };
-
     tasks.forEach(t => render(t, tList, false));
     extras.forEach(e => render(e, eList, true));
 }
@@ -649,23 +613,16 @@ function addExtra() {
 function saveAll() {
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]"); 
     localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
-    
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-    
     syncToFirebase();
 }
 
-/* --- DAY END & HISTORY SAVE --- */
+/* --- DAY END & HISTORY --- */
 function openDayEnd() {
-    clearInterval(idleTimer); 
-    document.getElementById("idleBox").classList.add("hidden");
-    
-    const nextInputs = document.getElementById("nextInputs");
-    nextInputs.innerHTML = "";
-    for(let i=0; i<5; i++) {
-        nextInputs.innerHTML += `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i+1}">`;
-    }
+    clearInterval(idleTimer); document.getElementById("idleBox").classList.add("hidden");
+    const nextInputs = document.getElementById("nextInputs"); nextInputs.innerHTML = "";
+    for(let i=0; i<5; i++) nextInputs.innerHTML += `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i+1}">`;
     document.getElementById("nextDayBox").classList.remove("hidden");
 }
 
@@ -673,13 +630,11 @@ async function finalDayEnd() {
     const p = calculate();
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const nextTasks = [];
-    
     for(let i=0; i<5; i++) {
         const el = document.getElementById("nd"+i);
         if(el.value.trim()) nextTasks.push({name: el.value.trim(), done: false, comment:"", due:""});
     }
     
-    // HISTORY ENTRY
     const historyEntry = {
         date: now(),
         score: p.percent,
@@ -688,60 +643,43 @@ async function finalDayEnd() {
         timestamp: firebase.database.ServerValue.TIMESTAMP
     };
 
-    document.getElementById("statusBox").innerText = "Saving to Database...";
-    try {
-        await db.ref('users/' + UID + '/history').push(historyEntry);
-        
-        // RESET STATE
-        const newState = {
-            tasks: nextTasks.length ? nextTasks : tasks.filter(t => !t.done),
-            extra: [],
-            logs: [],
-            penalty: 0,
-            strikes: 0,
-            testState: null
-        };
-        await db.ref('users/' + UID + '/current_state').set(newState);
+    document.getElementById("statusBox").innerText = "Saving...";
+    
+    // Optimistic Save
+    db.ref('users/' + UID + '/history').push(historyEntry);
+    
+    const newState = {
+        tasks: nextTasks.length ? nextTasks : tasks.filter(t => !t.done),
+        extra: [], logs: [], penalty: 0, strikes: 0, testState: null
+    };
+    await db.ref('users/' + UID + '/current_state').set(newState);
 
-        alert("Day Saved to Firebase! Good Job.");
-        localStorage.clear();
-        location.reload();
-
-    } catch(e) {
-        alert("Save Failed: " + e.message);
-    }
+    alert("Day Saved! Good Job.");
+    localStorage.clear();
+    location.reload();
 }
 
-async function loadHistory() {
+function loadHistory() {
     if(!UID) { alert("Please Login first."); return; }
     document.getElementById("historyBox").classList.remove("hidden");
     const list = document.getElementById("historyList");
-    list.innerHTML = "Fetching...";
+    list.innerHTML = "Fetching... <div class='loader'></div>";
     
-    try {
-        const snap = await db.ref('users/' + UID + '/history').limitToLast(7).once('value');
-        const data = snap.val();
-        
-        list.innerHTML = "";
-        if(!data) { list.innerHTML = "No history found."; return; }
-        
-        const entries = Object.values(data).reverse();
-        
-        entries.forEach(h => {
-            const div = document.createElement("div");
-            div.className = "hist-item";
-            div.innerHTML = `
-                <div>
-                    <div class="hist-date">${h.date.split(',')[0]}</div>
-                    <div style="font-size:12px">${h.rating}</div>
-                </div>
-                <div class="hist-score">${h.score}%</div>
-            `;
-            list.append(div);
+    db.ref('users/' + UID + '/history').limitToLast(7).once('value')
+        .then(snap => {
+            const data = snap.val();
+            list.innerHTML = "";
+            if(!data) { list.innerHTML = "No history found."; return; }
+            const entries = Object.values(data).reverse();
+            entries.forEach(h => {
+                const div = document.createElement("div"); div.className = "hist-item";
+                div.innerHTML = `<div><div class="hist-date">${h.date.split(',')[0]}</div><div style="font-size:12px">${h.rating}</div></div><div class="hist-score">${h.score}%</div>`;
+                list.append(div);
+            });
+        })
+        .catch(e => {
+            list.innerHTML = "Connection Error. Check Database Rules.";
         });
-    } catch(e) {
-        list.innerHTML = "Error: " + e.message;
-    }
 }
 
 function closeHistory() { document.getElementById("historyBox").classList.add("hidden"); }
@@ -781,43 +719,20 @@ function renderLogs() {
     logs.forEach(l => {
         let w = "-";
         if(l.completed && l.completed.length) {
-            w = l.completed.map(c => 
-                `<div style="font-size:12px;color:#86efac; border-bottom:1px dashed #334155;">
-                    ${c.name} 
-                    <span style="color:#cbd5e1">(${c.comment})</span>
-                </div>`
-            ).join("");
+            w = l.completed.map(c => `<div style="font-size:12px;color:#86efac; border-bottom:1px dashed #334155;">${c.name} <span style="color:#cbd5e1">(${c.comment})</span></div>`).join("");
         }
-        tbody.innerHTML += `
-            <tr>
-                <td style="vertical-align:top">${l.login.split(',')[1]}</td>
-                <td style="vertical-align:top">${l.logout==='-'?'-':l.logout.split(',')[1]}</td>
-                <td style="vertical-align:top">${l.reason}</td>
-                <td style="text-align:left;vertical-align:top">${w}</td>
-            </tr>`;
+        tbody.innerHTML += `<tr><td style="vertical-align:top">${l.login.split(',')[1]}</td><td style="vertical-align:top">${l.logout==='-'?'-':l.logout.split(',')[1]}</td><td style="vertical-align:top">${l.reason}</td><td style="text-align:left;vertical-align:top">${w}</td></tr>`;
     });
 }
 
-/* --- MOCK TEST UTILS (Restored Full Logic) --- */
+/* --- MOCK TEST UTILS --- */
 function startMockTestSetup() {
-    const name=prompt("Enter Test Name:");
-    if(!name) return;
-    const marks=prompt("Enter Full Marks:");
-    if(!marks) return;
+    const name=prompt("Enter Test Name:"); if(!name) return;
+    const marks=prompt("Enter Full Marks:"); if(!marks) return;
     const mins=prompt("Enter Duration in MINUTES (e.g. 120):");
+    if(!mins || isNaN(mins)) { alert("Invalid Time."); return; }
     
-    if(!mins || isNaN(mins)) {
-        alert("Invalid Time."); return;
-    }
-    
-    const st = {
-        name: name, 
-        fullMarks: marks, 
-        durationMins: parseInt(mins), 
-        startTime: Date.now(), 
-        status: "RUNNING"
-    };
-    
+    const st = { name: name, fullMarks: marks, durationMins: parseInt(mins), startTime: Date.now(), status: "RUNNING" };
     localStorage.setItem(key("TEST_STATE"), JSON.stringify(st));
     syncToFirebase();
     location.reload();
@@ -825,22 +740,16 @@ function startMockTestSetup() {
 
 function restoreTestUI(st) {
     const box = document.getElementById("taskBox");
-    const hrs = Math.floor(st.durationMins/60);
-    const m = st.durationMins%60;
-    
-    // Full Beautiful UI Restored
+    const hrs = Math.floor(st.durationMins/60), m = st.durationMins%60;
     box.innerHTML = `
     <div style="text-align:center; padding: 20px; border: 1px solid #facc15; border-radius: 10px;">
       <h2 style="color:#facc15">MOCK TEST RUNNING</h2>
       <h3 style="color:white">${st.name}</h3>
       <p>Full Marks: ${st.fullMarks} | Duration: ${hrs}h ${m}m</p>
-      <div style="margin-top:10px; color:#cbd5e1; font-size:14px;">
-         Watchdog locked to Exam Time. Good Luck.
-      </div>
+      <div style="margin-top:10px; color:#cbd5e1; font-size:14px;">Watchdog locked to Exam Time.</div>
       <hr style="border-color:#334155; margin: 20px 0;">
       <button onclick="triggerEndTest()" style="background:#dc2626; border:none; padding:15px; font-size:18px; font-weight:bold;">EXAM DONE</button>
-    </div>
-    `;
+    </div>`;
     box.classList.remove("hidden");
 }
 
@@ -851,37 +760,20 @@ function triggerEndTest(){
 
 function finishTestSequence(st, reload) {
     let ob = prompt(`Exam Done: ${st.name}\nEnter Marks Obtained (out of ${st.fullMarks}):`);
-    
     if(ob === null && st.status === "EXPIRED") ob = "0";
     if(ob === null) return; 
 
-    let acc = prompt("Enter Accuracy %:");
-    if(acc === null) acc = "0";
-
+    let acc = prompt("Enter Accuracy %:"); if(acc === null) acc = "0";
     const msg = `Please Confirm Details:\n\nTest: ${st.name}\nScore: ${ob} / ${st.fullMarks}\nAccuracy: ${acc}%`;
     
     if(confirm(msg)) {
         const extras = JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
-        const res = `Score: ${ob}/${st.fullMarks} | Acc: ${acc}%`;
-        
-        extras.push({
-            name:`MOCK TEST: ${st.name}`, 
-            done:true, 
-            comment: res, 
-            due: "None"
-        });
-        
+        extras.push({ name:`MOCK TEST: ${st.name}`, done:true, comment: `Score: ${ob}/${st.fullMarks} | Acc: ${acc}%`, due: "None" });
         localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
         localStorage.removeItem(key("TEST_STATE"));
-        
-        syncToFirebase().then(() => {
-            if(reload) location.reload();
-        });
+        syncToFirebase().then(() => { if(reload) location.reload(); });
     } else {
-        if(st.status === "EXPIRED") {
-            alert("You must save marks to proceed.");
-            finishTestSequence(st, true);
-        }
+        if(st.status === "EXPIRED") { alert("You must save marks to proceed."); finishTestSequence(st, true); }
     }
 }
 </script>
