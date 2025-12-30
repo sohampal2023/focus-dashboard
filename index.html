@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V9 (Real Logs + Unlock)</title>
+<title>Focus Watchdog V10 (Fix Progress + Temp Msg)</title>
 
 <style>
 *{box-sizing:border-box}
@@ -111,6 +111,7 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 .leave-banner {
     background: #312e81; color: #c7d2fe; padding: 10px;
     border-radius: 8px; margin-bottom: 10px; text-align: center; font-size: 13px; border:1px solid #6366f1;
+    transition: opacity 1s ease-out;
 }
 
 /* SPEEDOMETER */
@@ -500,7 +501,7 @@ window.openAdminModal = async function(uid, email) {
         }
         
         let logs = JSON.parse(snapshot.val() || "[]");
-        // Only show last 10 entries to match user experience
+        // Only show last 10 entries
         let startIndex = Math.max(0, logs.length - 10);
         let displayLogs = logs.slice(startIndex);
         
@@ -529,7 +530,6 @@ window.renderAdminLogs = function(uid, displayLogs, startIndex) {
              }).join("");
         }
         
-        // Use true index for deletion reference
         let trueIndex = startIndex + i; 
         
         html += `
@@ -558,7 +558,7 @@ window.deleteLogEntry = async function(uid, index) {
         // Update DB
         await update(ref(db, `users/${uid}`), { LOGS: JSON.stringify(logs) });
         
-        // Re-render (re-fetch to ensure sync)
+        // Re-render
         openAdminModal(uid, "User");
         
     } catch(e) { alert("Error deleting log: " + e.message); }
@@ -649,10 +649,8 @@ async function initStudentDashboard() {
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 1. DOWNLOAD SERVER DATA FIRST (Source of Truth)
     const serverData = await downloadData(currentUser.uid);
     
-    // 2. CHECK LOCKOUT IMMEDIATELY FROM SERVER DATA
     if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
         const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
         const reason = serverData.lockoutReason || "Admin Disciplinary Action";
@@ -666,12 +664,11 @@ async function initStudentDashboard() {
                 <button onclick="location.reload()" style="width:200px;margin-top:20px;">Try Again</button>
             </div>
         `;
-        return; // STOP HERE. Do not load dashboard.
+        return; 
     }
 
     checkLeaveStatus();
 
-    // 3. LOAD LOGS (Synced from Server in downloadData)
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
@@ -686,7 +683,6 @@ async function initStudentDashboard() {
 
     localStorage.removeItem(key("DAY_ENDED"));
     
-    // Add new Login Entry
     logs.push({
         login: now(),
         loginTS: Date.now(),
@@ -703,7 +699,6 @@ async function initStudentDashboard() {
     
     uploadData(); 
 
-    // Check Mock Test
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
     if (activeTest) {
         if (activeTest.status === "EXPIRED") {
@@ -777,12 +772,24 @@ function checkLeaveStatus() {
             statusText = `<span style="color:#fca5a5">✖ REJECTED</span>`;
         }
         
-        // Show Admin Comment Prominently
-        const commentHtml = req.adminComment ? 
-            `<div style="margin-top:8px; background:rgba(0,0,0,0.3); padding:5px; border-radius:4px; border:1px solid rgba(255,255,255,0.2);">
+        // --- TRANSIENT COMMENT (Visible only for 1 min) ---
+        let commentHtml = "";
+        if (req.adminComment) {
+             commentHtml = 
+            `<div id="adminMsgFade" style="margin-top:8px; background:rgba(0,0,0,0.3); padding:5px; border-radius:4px; border:1px solid rgba(255,255,255,0.2);">
                 <span style="color:#cbd5e1; font-weight:bold; font-size:11px;">ADMIN MSG:</span>
                 <div style="color:#fff; font-style:italic;">"${req.adminComment}"</div>
-             </div>` : "";
+             </div>`;
+             
+             // FADE OUT TIMER (60 seconds)
+             setTimeout(() => {
+                 const el = document.getElementById("adminMsgFade");
+                 if(el) {
+                     el.style.opacity = '0';
+                     setTimeout(() => el.remove(), 1000);
+                 }
+             }, 60000); 
+        }
              
         box.innerHTML = statusText + commentHtml;
 
@@ -801,7 +808,6 @@ async function downloadData(uid) {
         if (snapshot.exists()) {
             const data = snapshot.val();
             
-            // --- STRICT SYNC: Overwrite Local with Server ---
             if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
             if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
             if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
@@ -810,7 +816,6 @@ async function downloadData(uid) {
             if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
             if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
             
-            // Sync Admin Controlled Fields
             if(data.lockout) localStorage.setItem(key("LOCKOUT"), data.lockout);
             if(data.leaveRequest) localStorage.setItem(key("LEAVE_REQ"), JSON.stringify(data.leaveRequest));
             
@@ -833,7 +838,6 @@ function uploadData() {
     if(!currentUser) return;
     const syncStatus = document.getElementById("syncStatus");
     
-    // CALCULATE STATS FOR ADMIN VIEW
     const p = calculate();
 
     const payload = {
@@ -1347,7 +1351,7 @@ function openDayEnd() {
   if(idleBox) idleBox.classList.add("hidden");
   const nextInputs = document.getElementById("nextInputs");
   nextInputs.innerHTML = "";
-  for (let i = 7; i < 7; i++) {
+  for (let i = 0; i < 7; i++) {
     nextInputs.innerHTML += `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">`;
   }
   document.getElementById("nextDayBox").classList.remove("hidden");
