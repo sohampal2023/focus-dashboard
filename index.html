@@ -151,14 +151,17 @@ let UID = null;
 let idleTimer = null;
 let targetTime = null;
 let penalty = 0;
+let idleStrikes = 0; // New Counter
 
 const now = () => new Date().toLocaleString();
 const key = k => UID + "_" + k;
 
-/* 🔒 HARD IDLE TIMER */
-function startIdle() {
+/* 🔒 IDLE TIMER – DYNAMIC DURATION */
+function startIdle(customSeconds = 1800) {
   clearInterval(idleTimer);
-  targetTime = Date.now() + (1800 * 1000); // 30 mins
+  
+  // Set target based on custom input or default 30 mins (1800s)
+  targetTime = Date.now() + (customSeconds * 1000);
   
   idleBox.classList.remove("hidden");
   updateIdle();
@@ -181,22 +184,40 @@ function updateIdle(seconds) {
   }
   let displaySeconds = seconds > 0 ? seconds : 0;
   
-  idleTime.innerText =
-    Math.floor(displaySeconds / 60) + ":" +
-    String(displaySeconds % 60).padStart(2, "0");
+  const h = Math.floor(displaySeconds / 3600);
+  const m = Math.floor((displaySeconds % 3600) / 60);
+  const s = displaySeconds % 60;
+
+  // Format: HH:MM:SS or MM:SS depending on duration
+  if(h > 0) {
+    idleTime.innerText = `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  } else {
+    idleTime.innerText = `${m}:${String(s).padStart(2,"0")}`;
+  }
 }
 
-/* LOGOUTS */
+/* LOGOUTS & PENALTY LOGIC */
 function autoLogout() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
+
+  // 1. Handle Idle Strikes
+  idleStrikes++;
+  if(idleStrikes >= 2) {
+    penalty += 10; // Charge 10% penalty
+    idleStrikes = 0; // Reset after charging to count next pair
+    alert("⚠ 2 Consecutive Idle Timeouts! -10% Penalty Applied.");
+  }
+  
+  localStorage.setItem(key("IDLE_STRIKES"), idleStrikes);
+  localStorage.setItem(key("PENALTY"), penalty);
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
     const last = logs[logs.length - 1];
     last.logout = now();
     last.logoutTS = Date.now();
-    last.reason = "30 min Timeout";
+    last.reason = "Timeout";
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
   location.reload();
@@ -205,6 +226,10 @@ function autoLogout() {
 function bioBreak() {
   clearInterval(idleTimer);
   idleBox.classList.add("hidden");
+  
+  // Bio Break breaks the consecutive idle streak
+  idleStrikes = 0; 
+  localStorage.setItem(key("IDLE_STRIKES"), idleStrikes);
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
@@ -224,7 +249,14 @@ function login() {
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
 
-  // 1. Handle Previous Bio Break Reason
+  // Restore Strikes & Penalty
+  idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+  penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+
+  // Show Idle Strike Count in Sidebar
+  updateStrikeDisplay();
+
+  // Handle Previous Bio Break Reason
   if (logs.length) {
     const lastLog = logs[logs.length - 1];
     if (lastLog.reason === "Pending") {
@@ -250,28 +282,51 @@ function login() {
   bioBtn.disabled = false;
   dayBtn.disabled = false;
 
-  penalty = 0;
-  startIdle();
-
-  // 2. CHECK FOR ACTIVE TEST (RESUME LOGIC)
+  // CHECK FOR ACTIVE TEST
   const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
   if (activeTest) {
     if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
       restoreTestUI(activeTest);
-      loadTasks(); // Load background data
+      
+      // RESUME TEST TIMER: Calculate remaining time based on original duration
+      const elapsed = (Date.now() - activeTest.startTime) / 1000;
+      const totalDuration = activeTest.durationMins * 60;
+      const remaining = totalDuration - elapsed;
+
+      if(remaining > 0) {
+        startIdle(remaining);
+      } else {
+        startIdle(1); // Expires immediately
+      }
+      
+      loadTasks(); 
       renderLogs();
       updateProgress();
-      return; // Stop here, don't show normal task box
+      return; 
     } else {
-      // User says NO, end the test now
       finishTestSequence(activeTest);
     }
   }
 
+  startIdle(); // Default 30 mins
   setupTasks();
   loadTasks();
   renderLogs();
   updateProgress();
+}
+
+function updateStrikeDisplay() {
+  // Create or Update Idle Counter in Sidebar
+  let box = document.getElementById("idleStrikeBox");
+  if(!box) {
+    box = document.createElement("div");
+    box.id = "idleStrikeBox";
+    box.className = "status";
+    box.style.borderColor = "#f87171";
+    box.style.color = "#f87171";
+    statusBox.parentNode.insertBefore(box, statusBox.nextSibling);
+  }
+  box.innerText = `Idle Strikes: ${idleStrikes}`;
 }
 
 /* --- MOCK TEST LOGIC --- */
@@ -281,33 +336,48 @@ function startMockTestSetup() {
   if(!name) return;
   const fullMarks = prompt("Enter Full Marks:");
   if(!fullMarks) return;
-  const time = prompt("Total Time (e.g. 2 hours):");
+  
+  // KEY CHANGE: Ask for Minutes specifically for the timer
+  const durationInput = prompt("Enter Duration in MINUTES (e.g. 120):");
+  const durationMins = parseInt(durationInput);
+  
+  if(!durationMins || isNaN(durationMins)) {
+    alert("Invalid Time. Test Cancelled.");
+    return;
+  }
 
   // Save State
   const testState = {
     name: name,
     fullMarks: fullMarks,
-    time: time,
-    startTime: now()
+    durationMins: durationMins,
+    startTime: Date.now()
   };
   localStorage.setItem(key("TEST_STATE"), JSON.stringify(testState));
+
+  // Change Idle Timer to Test Duration
+  startIdle(durationMins * 60);
 
   restoreTestUI(testState);
 }
 
 function restoreTestUI(testState) {
-  // Hide Task Box, Show Test Box (Injecting UI dynamically)
-  taskBox.classList.remove("hidden"); // Ensure container is visible
-  
-  // Clear current view
+  taskBox.classList.remove("hidden");
   const container = document.getElementById("taskBox");
+  
+  // Format readable time
+  const hrs = Math.floor(testState.durationMins / 60);
+  const mins = testState.durationMins % 60;
+  
   container.innerHTML = `
     <div style="text-align:center; padding: 20px; border: 1px solid #facc15; border-radius: 10px;">
       <h2 style="color:#facc15">MOCK TEST RUNNING</h2>
       <h3 style="color:white">${testState.name}</h3>
-      <p>Full Marks: ${testState.fullMarks} | Duration: ${testState.time}</p>
+      <p>Full Marks: ${testState.fullMarks} | Duration: ${hrs}h ${mins}m</p>
+      <div style="margin-top:10px; color:#cbd5e1; font-size:14px;">
+         Idle Timer set to Exam Duration. Do not close tab.
+      </div>
       <hr style="border-color:#334155; margin: 20px 0;">
-      <p>When you are finished, click below:</p>
       <button onclick="triggerEndTest()" style="background:#dc2626; border:none; padding:15px; font-size:18px; font-weight:bold;">EXAM DONE</button>
     </div>
   `;
@@ -320,32 +390,27 @@ function triggerEndTest() {
 
 function finishTestSequence(testState) {
   const obtained = prompt(`Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`);
-  if(obtained === null) return; // Cancelled
+  if(obtained === null) return; 
   
   const accuracy = prompt("Enter Accuracy %:");
   if(accuracy === null) return;
 
-  // CONFIRMATION
   const msg = `Please Confirm Details:\n\nTest: ${testState.name}\nScore: ${obtained} / ${testState.fullMarks}\nAccuracy: ${accuracy}%`;
   
   if(confirm(msg)) {
-    // 1. Save as a completed Extra Task
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     
-    // Create detailed comment
     const resultComment = `Score: ${obtained}/${testState.fullMarks} | Acc: ${accuracy}%`;
     
     extras.push({
       name: `MOCK TEST: ${testState.name}`,
       done: true,
       comment: resultComment,
-      due: "None" // Usually no due work immediately after test
+      due: "None"
     });
     
     localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
     
-    // 2. Add to Log
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if(logs.length){
       const active = logs[logs.length-1];
@@ -358,11 +423,11 @@ function finishTestSequence(testState) {
       localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // 3. Clear Test State
     localStorage.removeItem(key("TEST_STATE"));
-
-    // 4. Reload UI
-    location.reload(); // Refresh to go back to normal view
+    
+    // Reset Idle Timer to standard 30 mins
+    startIdle(1800);
+    location.reload(); 
   }
 }
 
@@ -384,7 +449,6 @@ function setupTasks() {
   localStorage.setItem(key("TASKS"), JSON.stringify(merged));
   localStorage.removeItem(key("NEXT_TASKS"));
   
-  // Restore standard UI structure in case it was overwritten by Test Mode
   taskBox.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
       <div>
@@ -421,8 +485,7 @@ function setupTasks() {
 function loadTasks() {
   const tList = document.getElementById("taskList");
   const eList = document.getElementById("extraList");
-  
-  if(!tList || !eList) return; // Safety check
+  if(!tList || !eList) return; 
 
   tList.innerHTML = "";
   eList.innerHTML = "";
@@ -446,15 +509,12 @@ function loadTasks() {
     }
   };
 
-  // Render Tasks
   tasks.forEach(t => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
-
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = t.done;
-    
     const label = document.createElement("span");
     const updateLabel = () => {
        if(t.done){
@@ -464,21 +524,14 @@ function loadTasks() {
        }
     };
     updateLabel();
-
     cb.onchange = () => {
-      if (!confirm("Confirm task completion?")) {
-        cb.checked = !cb.checked;
-        return;
-      }
+      if (!confirm("Confirm task completion?")) { cb.checked = !cb.checked; return; }
       if(cb.checked){
         const remark = prompt(`Comment for ${t.name}?`, "Done");
         const dueVal = prompt(`Any pending work/marks left for ${t.name}?`, "None");
         t.comment = remark || "-";
         t.due = dueVal || "-";
-      } else {
-        t.comment = "";
-        t.due = "";
-      }
+      } else { t.comment = ""; t.due = ""; }
       t.done = cb.checked;
       updateLabel();
       updateLogTask(t.name, t.done, t.comment, t.due);
@@ -488,20 +541,13 @@ function loadTasks() {
     tList.append(container);
   });
 
-  // Render Extras
   extras.forEach(e => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
-
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = e.done;
-    
-    // MOCK TESTS ARE READ-ONLY IN LIST (They are created via button)
-    if(e.name.startsWith("MOCK TEST:")) {
-       cb.disabled = true;
-    }
-
+    if(e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
     const label = document.createElement("span");
     const updateLabel = () => {
        if(e.done){
@@ -511,21 +557,14 @@ function loadTasks() {
        }
     };
     updateLabel();
-
     cb.onchange = () => {
-      if (!confirm("Confirm extra work completion?")) {
-        cb.checked = !cb.checked;
-        return;
-      }
+      if (!confirm("Confirm extra work completion?")) { cb.checked = !cb.checked; return; }
       if(cb.checked){
         const remark = prompt(`Comment for ${e.name}?`, "Done");
         const dueVal = prompt(`Any pending work/marks left for ${e.name}?`, "None");
         e.comment = remark || "-";
         e.due = dueVal || "-";
-      } else {
-        e.comment = "";
-        e.due = "";
-      }
+      } else { e.comment = ""; e.due = ""; }
       e.done = cb.checked;
       updateLabel();
       updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
@@ -563,10 +602,8 @@ function calculate() {
 }
 
 function updateProgress() {
-  // Check if elements exist (might not in Test Mode)
   const needle = document.getElementById("needle");
   if(!needle) return;
-
   const p = calculate();
   needle.style.transform =
     `rotate(${(Math.min(p.percent, 300) / 300) * 180 - 90}deg)`;
@@ -590,7 +627,6 @@ function openDayEnd() {
   idleBox.classList.add("hidden");
 
   nextInputs.innerHTML = "";
-  // UPDATED: Loop 7 times for 7 slots
   for (let i = 0; i < 7; i++) {
     nextInputs.innerHTML +=
       `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">`;
@@ -600,7 +636,6 @@ function openDayEnd() {
 
 function finalDayEnd() {
   const next = [];
-  // UPDATED: Loop 7 times
   for (let i = 0; i < 7; i++) {
     const el = document.getElementById("nd" + i);
     if(el && el.value.trim()) next.push(el.value.trim());
@@ -613,20 +648,17 @@ function finalDayEnd() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   const carry = tasks.filter(t => !t.done);
 
-  // Time Calc
   let totalMillis = 0;
   logs.forEach(l => {
     let end = l.logoutTS;
     if(!end) end = Date.now();
     if(l.loginTS) totalMillis += (end - l.loginTS);
   });
-  
   const totalMin = Math.floor(totalMillis / 60000);
   const hrs = Math.floor(totalMin / 60);
   const mins = totalMin % 60;
   const timeStr = `${hrs} hr ${mins} min`;
 
-  // Done Table
   const doneTasks = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
   const doneExtras = extras.filter(e => e.done).map(e => ({name: e.name + " (Extra)", comment: e.comment, due: e.due}));
   const allDone = [...doneTasks, ...doneExtras];
@@ -657,25 +689,25 @@ function finalDayEnd() {
     doneTable = `<div style="margin-top:20px;color:#fca5a5">No work completed.</div>`;
   }
 
-  // Cleanup
   localStorage.setItem(key("TASKS"), JSON.stringify(carry));
   localStorage.setItem(key("EXTRA"), JSON.stringify([]));
   localStorage.removeItem(key("LOGS"));
-  localStorage.removeItem(key("TEST_STATE")); // Ensure test state is clear
+  localStorage.removeItem(key("TEST_STATE"));
+  
+  // RESET IDLE & PENALTY
+  localStorage.setItem(key("IDLE_STRIKES"), "0");
+  localStorage.setItem(key("PENALTY"), "0");
   
   const tableRef = document.getElementById("logTable");
   if(tableRef) tableRef.innerHTML = "";
 
-  // Render Report
   reportBox.innerHTML = `
     <h3>Daily Report</h3>
     <div class="percent">${p.percent}%</div>
     <div class="rating">${getLabel(p.percent)}</div>
-    
     <div style="font-size:20px;color:#facc15;margin:10px 0;font-weight:bold">
       Total Study Time: ${timeStr}
     </div>
-
     <div class="details">
       Assigned: ${tasks.length} |
       Carry Forward: ${carry.length} |
@@ -684,7 +716,7 @@ function finalDayEnd() {
     ${doneTable}`;
     
   reportBox.classList.remove("hidden");
-  if(taskBox) taskBox.classList.add("hidden"); // check existence
+  if(taskBox) taskBox.classList.add("hidden");
   logBox.classList.add("hidden");
   nextDayBox.classList.add("hidden");
 
@@ -697,9 +729,8 @@ function finalDayEnd() {
 /* LOG TABLE */
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-  
   const table = document.querySelector("table");
-  if(!table) return; // in case hidden
+  if(!table) return;
 
   table.innerHTML = `
     <thead>
@@ -712,18 +743,14 @@ function renderLogs() {
     </thead>
     <tbody id="logTable"></tbody> 
   `;
-  
   const tbody = document.getElementById("logTable");
   tbody.innerHTML = "";
 
   logs.forEach(l => {
     let workHtml = "-";
-    
     if (l.completed && l.completed.length) {
       workHtml = l.completed.map(item => {
-        if(typeof item === 'string'){
-           return `<div>${item}</div>`;
-        }
+        if(typeof item === 'string'){ return `<div>${item}</div>`; }
         return `
         <div style="border-bottom:1px dashed #334155; padding:4px 0;">
             <div style="color:#86efac;font-weight:bold">${item.name}</div>
@@ -733,7 +760,6 @@ function renderLogs() {
         </div>`;
       }).join("");
     }
-    
     tbody.innerHTML += `
       <tr>
         <td style="vertical-align:top">${l.login}</td>
