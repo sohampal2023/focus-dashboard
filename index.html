@@ -2,54 +2,131 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Dashboard (Mock Test Fixed)</title>
-
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+<title>Focus Watchdog System (Firebase)</title>
 
 <style>
-/* --- STYLES --- */
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
 body{background:#020617;color:#e5e7eb}
+
 .app{display:grid;grid-template-columns:280px 1fr;height:100vh}
 
 /* SIDEBAR */
 .sidebar{padding:20px;border-right:1px solid #1e293b; display:flex; flex-direction:column;}
 .sidebar h2{text-align:center;color:#7dd3fc;margin-bottom:12px; font-size: 1.2rem; letter-spacing: 1px;}
-.status{padding:10px;border:1px solid #334155;border-radius:10px;text-align:center;margin-bottom:10px;font-size:0.9rem;transition: all 0.3s;}
+.status{padding:10px;border:1px solid #334155;border-radius:10px;text-align:center;margin-bottom:10px;font-size:0.9rem}
 
-/* BUTTONS */
-button{width:100%;padding:12px;margin:6px 0;border-radius:10px;border:1px solid #334155;background:#0f172a;color:#e5e7eb;cursor:pointer;transition: all 0.2s; font-weight: 600;}
+button{
+  width:100%;padding:12px;margin:6px 0;
+  border-radius:10px;border:1px solid #334155;
+  background:#0f172a;color:#e5e7eb;cursor:pointer;
+  transition: all 0.2s; font-weight: 600;
+}
 button:hover:not(:disabled){ background: #1e293b; border-color: #7dd3fc; }
 button:active:not(:disabled){ transform: scale(0.98); }
 button:disabled{opacity:.4; cursor: not-allowed;}
 
-/* LOADER */
-.loader { border: 3px solid #f3f3f3; border-top: 3px solid #3498db; border-radius: 50%; width: 14px; height: 14px; animation: spin 1s linear infinite; display:inline-block; vertical-align:middle; margin-left:5px;}
-@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+/* INNOVATIVE WATCHDOG TIMER */
+.idleBox{
+  padding:15px; border:1px solid #334155;
+  border-radius:16px; text-align:center;
+  margin-bottom:12px; background:#0f172a;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+}
 
-/* TIMER */
-.idleBox{padding:15px; border:1px solid #334155; border-radius:16px; text-align:center; margin-bottom:12px; background:#0f172a; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);}
-.timer-container { position: relative; width: 120px; height: 120px; margin: 0 auto 10px; }
-.timer-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
-.timer-circle-bg { fill: none; stroke: #1e293b; stroke-width: 8; }
-.timer-circle-fg { fill: none; stroke-width: 8; stroke-linecap: round; stroke-dasharray: 339; stroke-dashoffset: 0; transition: stroke-dashoffset 1s linear, stroke 0.3s ease; }
-.timer-label { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; }
+.timer-container {
+    position: relative;
+    width: 120px;
+    height: 120px;
+    margin: 0 auto 10px;
+}
+
+/* Rotated so start point is top */
+.timer-svg {
+    transform: rotate(-90deg);
+    width: 100%;
+    height: 100%;
+}
+
+.timer-circle-bg {
+    fill: none;
+    stroke: #1e293b;
+    stroke-width: 8;
+}
+
+.timer-circle-fg {
+    fill: none;
+    stroke-width: 8;
+    stroke-linecap: round;
+    /* Circumference of r=54 is approx 339 */
+    stroke-dasharray: 339;
+    stroke-dashoffset: 0;
+    transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
+}
+
+.timer-label {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    display: flex; flex-direction: column;
+    align-items: center;
+}
 .timer-time { font-size: 22px; font-weight: 800; color: #f8fafc; line-height: 1; }
 .timer-sub { font-size: 10px; color: #94a3b8; margin-top: 2px; text-transform: uppercase; }
-.critical { animation: pulse-red 1.5s infinite; border-color: #ef4444 !important; }
-@keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); } 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+
+/* Watchdog Animations */
+@keyframes pulse-red {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+    70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.critical {
+    animation: pulse-red 1.5s infinite;
+    border-color: #ef4444 !important;
+}
+
+.watchdog-btn {
+    background: #0ea5e9; border:none; color:white;
+    text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px;
+}
+.watchdog-btn:hover { background: #0284c7; }
 
 /* MAIN */
 .main{padding:24px;overflow:auto}
-.card{background:#020617;border:1px solid #334155;border-radius:14px;padding:20px;margin-bottom:20px}
+.card{
+  background:#020617;border:1px solid #334155;
+  border-radius:14px;padding:20px;margin-bottom:20px
+}
 .hidden{display:none}
-.nextInput{width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #334155; background:#020617; color:#e5e7eb;}
 
-/* SPEEDO */
-.speedo{width:300px;height:150px;border-radius:300px 300px 0 0; background:conic-gradient(from -90deg, #7f1d1d,#92400e,#a16207,#14532d,#312e81); position:relative; margin: 0 auto; box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b}
-.needle{position:absolute;width:4px;height:110px; background:#e5e7eb;left:50%;bottom:0; transform-origin:bottom center;transform:rotate(-90deg); transition:.6s cubic-bezier(.15,.85,.2,1)}
+/* INPUT */
+.nextInput{
+  width:100%; padding:10px; margin:6px 0;
+  border-radius:8px; border:1px solid #334155;
+  background:#020617; color:#e5e7eb;
+}
+
+/* SPEEDOMETER */
+.speedo{
+  width:300px;height:150px;border-radius:300px 300px 0 0;
+  background:conic-gradient(from -90deg,
+    #7f1d1d,#92400e,#a16207,#14532d,#312e81);
+  position:relative; margin: 0 auto;
+  box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b
+}
+.needle{
+  position:absolute;width:4px;height:110px;
+  background:#e5e7eb;left:50%;bottom:0;
+  transform-origin:bottom center;transform:rotate(-90deg);
+  transition:.6s cubic-bezier(.15,.85,.2,1)
+}
+.cap{
+  position:absolute;width:14px;height:14px;background:#e5e7eb;
+  border-radius:50%;left:50%;bottom:0;
+  transform:translate(-50%,50%)
+}
+
 .percent{text-align:center;font-size:36px;font-weight:800;color:#7dd3fc}
 .rating{text-align:center;font-size:18px;font-weight:700}
 .details{text-align:center;font-size:14px;color:#cbd5f5}
@@ -57,18 +134,22 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 /* TABLE */
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{border:1px solid #334155;padding:6px;text-align:center}
-th{background:#1e293b}
-.hist-item{ padding:15px; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center; }
-.hist-score{ font-size:20px; font-weight:bold; color:#facc15; }
-.hist-date{ color:#94a3b8; font-size:12px; }
+
+/* FIREBASE STATUS INDICATOR */
+.sync-status {
+    font-size: 10px; color: #64748b; text-align: center; margin-top:5px;
+}
 </style>
 </head>
 
 <body>
 <div class="app">
+
 <div class="sidebar">
-  <h2>FOCUS SYSTEM</h2>
-  <div id="statusBox" class="status">Offline</div>
+  <h2>FOCUS WATCHDOG</h2>
+
+  <div id="statusBox" class="status">Logged out</div>
+  <div id="syncStatus" class="sync-status">Offline</div>
 
   <div id="idleBox" class="idleBox hidden">
     <div class="timer-container">
@@ -76,30 +157,27 @@ th{background:#1e293b}
             <circle class="timer-circle-bg" cx="60" cy="60" r="54"></circle>
             <circle id="timerRing" class="timer-circle-fg" cx="60" cy="60" r="54"></circle>
         </svg>
-        <div class="timer-label"><div id="idleTime" class="timer-time">30:00</div><div class="timer-sub">Watchdog</div></div>
+        <div class="timer-label">
+            <div id="idleTime" class="timer-time">30:00</div>
+            <div class="timer-sub">Watchdog</div>
+        </div>
     </div>
-    <button onclick="resetWatchdog()">I AM STUDYING</button>
+    <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
   </div>
-  <div style="flex-grow:1"></div>
-  <button onclick="loadHistory()" style="background:#334155; margin-bottom:10px">View History</button>
-  <button id="loginBtn" onclick="login()">Login (Firebase)</button>
+  <div style="flex-grow:1"></div> <button id="loginBtn" onclick="login()">Login (Cloud)</button>
   <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
   <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
 </div>
 
 <div class="main">
-<div id="historyBox" class="card hidden">
-    <h3>Last 7 Days History</h3>
-    <div id="historyList">Loading...</div>
-    <button onclick="closeHistory()" style="background:#dc2626; width:auto; padding:5px 15px; margin-top:10px">Close</button>
-</div>
 
 <div id="taskBox" class="card hidden">
   <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
+
     <div>
       <h3>Assigned Tasks</h3>
       <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center">
-          <button onclick="startMockTestSetup()" style="background:#a16207; width:auto; padding:8px 20px; font-weight:bold">Start Mock Test</button>
+           <button onclick="startMockTestSetup()" style="background:#a16207; width:auto; padding:8px 20px;">Start Mock Test</button>
       </div>
       <div id="taskList"></div>
       <hr style="border-color:#334155; margin:15px 0">
@@ -107,418 +185,837 @@ th{background:#1e293b}
       <div id="extraList"></div>
       <button onclick="addExtra()" style="margin-top:10px">+ Add Extra Work</button>
     </div>
+
     <div>
       <h3 style="text-align:center">Live Progress</h3>
-      <div class="speedo"><div id="needle" class="needle"></div><div class="cap"></div></div>
+      <div class="speedo">
+        <div id="needle" class="needle"></div>
+        <div class="cap"></div>
+      </div>
       <div id="livePercent" class="percent">0%</div>
       <div id="liveRating" class="rating">Poor</div>
       <div id="liveDetails" class="details"></div>
     </div>
+
   </div>
 </div>
 
 <div id="logBox" class="card hidden">
-  <h3>Daily Log (Synced)</h3>
-  <table><thead><tr><th>Login</th><th>Logout</th><th>Reason</th><th>Work Ticked</th></tr></thead><tbody id="logTable"></tbody></table>
+  <h3>Login / Logout Log</h3>
+  <table>
+    <thead>
+      <tr><th>Login</th><th>Logout</th><th>Reason</th><th>Work Ticked</th></tr>
+    </thead>
+    <tbody id="logTable"></tbody>
+  </table>
 </div>
 
 <div id="nextDayBox" class="card hidden">
   <h3>Enter Next Day Tasks</h3>
   <div id="nextInputs"></div>
-  <button onclick="finalDayEnd()">Submit & Save History</button>
+  <button onclick="finalDayEnd()">Submit</button>
 </div>
+
+<div id="reportBox" class="card hidden"></div>
+
 </div>
 </div>
 
-<script>
-// ======================================================
-// CONFIGURATION
-// ======================================================
+<script type="module">
+// --- FIREBASE SETUP ---
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getDatabase, ref, set, get, child, update } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
 const firebaseConfig = {
-  apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
-  authDomain: "focus-dashboard-5965a.firebaseapp.com",
-  projectId: "focus-dashboard-5965a",
-  storageBucket: "focus-dashboard-5965a.firebasestorage.app",
-  messagingSenderId: "337204334808",
-  appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad",
-  databaseURL: "https://focus-dashboard-5965a-default-rtdb.firebaseio.com"
+  // If you have an API Key, add it here: apiKey: "YOUR_API_KEY",
+  databaseURL: "https://focus-dashboard-5965a-default-rtdb.firebaseio.com/",
 };
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-// ======================================================
+const app = initializeApp(firebaseConfig);
+const db = getDatabase(app);
 
-let UID = null; 
+// --- GLOBAL VARIABLES ---
+let UID = null;
 let idleTimer = null;
 let targetTime = null;
 let totalDuration = 0;
 let penalty = 0;
-let idleStrikes = 0; 
+let idleStrikes = 0;
+let sanitizedEmail = null;
 
 const now = () => new Date().toLocaleString();
-const key = k => UID + "_" + k; 
-function sanitize(email) { return email.replace(/\.|#|\$|\[|\]/g, '_').toLowerCase(); }
+const key = k => UID + "_" + k;
 
-async function syncToFirebase() {
-    if(!UID) return;
-    const state = {
-        tasks: JSON.parse(localStorage.getItem(key("TASKS")) || "[]"),
-        extra: JSON.parse(localStorage.getItem(key("EXTRA")) || "[]"),
-        logs: JSON.parse(localStorage.getItem(key("LOGS")) || "[]"),
-        penalty: penalty,
-        strikes: idleStrikes,
-        testState: JSON.parse(localStorage.getItem(key("TEST_STATE")) || "null")
-    };
-    const statusBox = document.getElementById("statusBox");
-    statusBox.innerHTML = `Syncing... <div class="loader"></div>`;
-    db.ref('users/' + UID + '/current_state').set(state)
-        .then(() => { statusBox.innerText = "Online & Synced"; })
-        .catch(e => { statusBox.innerText = "Offline (Saved Locally)"; });
+// Sanitize email for Firebase paths (remove periods)
+function getSafePath(email) {
+    return email.replace(/\./g, '_').replace(/@/g, '_at_');
 }
 
-function login() {
-  const emailInput = prompt("Enter Email (e.g. name@mail.com):");
-  if (!emailInput) return;
-  UID = sanitize(emailInput);
-  
-  doLoginSteps();
-
-  const statusBox = document.getElementById("statusBox");
-  statusBox.innerHTML = `Connecting... <div class="loader"></div>`;
-
-  db.ref('users/' + UID + '/current_state').once('value')
-      .then((snapshot) => {
-          const data = snapshot.val();
-          if(data) {
-              localStorage.setItem(key("TASKS"), JSON.stringify(data.tasks || []));
-              localStorage.setItem(key("EXTRA"), JSON.stringify(data.extra || []));
-              localStorage.setItem(key("LOGS"), JSON.stringify(data.logs || []));
-              if(data.testState) localStorage.setItem(key("TEST_STATE"), JSON.stringify(data.testState));
-              penalty = data.penalty || 0;
-              idleStrikes = data.strikes || 0;
-              localStorage.setItem(key("PENALTY"), penalty);
-              localStorage.setItem(key("IDLE_STRIKES"), idleStrikes);
-              
-              loadTasks();
-              renderLogs();
-              updateProgress();
-              statusBox.innerText = "Online & Synced";
-          } else { statusBox.innerText = "Online (New User)"; }
-      })
-      .catch((e) => {
-          statusBox.innerText = "Offline Mode";
-          alert("Network Error or Rules Locked. Working Offline.");
-      });
-}
-
-function doLoginSteps() {
-    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    if (logs.length) {
-        const lastLog = logs[logs.length - 1];
-        if (lastLog.reason === "Pending") lastLog.reason = "Bio Break"; 
-    }
-    logs.push({ login: now(), loginTS: Date.now(), logout: "-", logoutTS: null, reason: "-", completed: [] });
-    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-
-    document.getElementById("statusBox").innerText = "Offline Mode";
-    document.getElementById("loginBtn").disabled = true;
-    document.getElementById("bioBtn").disabled = false;
-    document.getElementById("dayBtn").disabled = false;
-
-    updateStrikeDisplay();
-
-    const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-    if (activeTest) {
-        if(activeTest.status === "EXPIRED") {
-             alert("Mock Test Time Ended! Please enter marks.");
-             finishTestSequence(activeTest, true); return;
+// --- CLOUD FUNCTIONS ---
+async function downloadData(email) {
+    sanitizedEmail = getSafePath(email);
+    const dbRef = ref(db);
+    const syncStatus = document.getElementById("syncStatus");
+    syncStatus.innerText = "Syncing...";
+    
+    try {
+        const snapshot = await get(child(dbRef, `users/${sanitizedEmail}`));
+        if (snapshot.exists()) {
+            const data = snapshot.val();
+            // Populate LocalStorage from Cloud Data
+            if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
+            if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
+            if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
+            if(data.TEST_STATE) localStorage.setItem(key("TEST_STATE"), data.TEST_STATE);
+            if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
+            localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
+            localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
+        } else {
+            console.log("No data available - New User");
         }
-        restoreTestUI(activeTest);
-        const elapsed = (Date.now() - activeTest.startTime) / 1000;
-        const rem = (activeTest.durationMins * 60) - elapsed;
-        startIdle(rem > 0 ? rem : 1);
-        document.querySelector(".watchdog-btn").innerText = "EXAM MODE";
-        document.querySelector(".watchdog-btn").disabled = true;
-    } else { startIdle(1800); }
+        syncStatus.innerText = "Cloud Synced";
+        return true;
+    } catch (error) {
+        console.error(error);
+        alert("Error connecting to database. Check console.");
+        syncStatus.innerText = "Error";
+        return false;
+    }
+}
 
-    setupTasks();
-    loadTasks();
-    renderLogs();
-    updateProgress();
+function uploadData() {
+    if(!sanitizedEmail) return;
+    const syncStatus = document.getElementById("syncStatus");
+    syncStatus.innerText = "Saving...";
+
+    const payload = {
+        TASKS: localStorage.getItem(key("TASKS")),
+        EXTRA: localStorage.getItem(key("EXTRA")),
+        LOGS: localStorage.getItem(key("LOGS")),
+        TEST_STATE: localStorage.getItem(key("TEST_STATE")),
+        NEXT_TASKS: localStorage.getItem(key("NEXT_TASKS")),
+        IDLE_STRIKES: localStorage.getItem(key("IDLE_STRIKES")),
+        PENALTY: localStorage.getItem(key("PENALTY"))
+    };
+
+    set(ref(db, `users/${sanitizedEmail}`), payload)
+    .then(() => {
+        syncStatus.innerText = "Saved to Cloud";
+        setTimeout(() => syncStatus.innerText = "Online", 2000);
+    })
+    .catch((error) => {
+        syncStatus.innerText = "Save Failed";
+        console.error(error);
+    });
+}
+
+// --- IDLE TIMER & WATCHDOG LOGIC ---
+function startIdle(customSeconds = 1800) {
+  if(idleTimer) clearInterval(idleTimer);
+  
+  totalDuration = customSeconds;
+  targetTime = Date.now() + (customSeconds * 1000);
+  
+  const idleBox = document.getElementById("idleBox");
+  if(idleBox) {
+      idleBox.classList.remove("hidden");
+      idleBox.classList.remove("critical");
+  }
+
+  updateIdle(customSeconds);
+
+  idleTimer = setInterval(() => {
+    const current = Date.now();
+    const remainingSeconds = Math.ceil((targetTime - current) / 1000);
+    updateIdle(remainingSeconds);
+    if (remainingSeconds <= 0) {
+      autoLogout();
+    }
+  }, 1000);
+}
+
+function resetWatchdog() {
+    if(!UID) return;
+
+    const btn = document.querySelector('.watchdog-btn');
+    const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+    
+    if(activeTest && activeTest.status === "RUNNING") {
+        const originalText = btn.innerText;
+        btn.innerText = "NO RESET IN EXAM";
+        btn.style.background = "#ef4444"; 
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.style.background = "";
+        }, 1500);
+        return;
+    }
+
+    startIdle(1800); 
+    const originalText = "I AM STUDYING";
+    btn.innerText = "WATCHDOG RESET";
+    btn.style.background = "#22c55e"; 
+    setTimeout(() => {
+        btn.innerText = originalText;
+        btn.style.background = "";
+    }, 1000);
+}
+
+function updateIdle(seconds) {
+  if (seconds === undefined && targetTime) {
+      seconds = Math.ceil((targetTime - Date.now()) / 1000);
+  }
+  let displaySeconds = seconds > 0 ? seconds : 0;
+  
+  const h = Math.floor(displaySeconds / 3600);
+  const m = Math.floor((displaySeconds % 3600) / 60);
+  const s = displaySeconds % 60;
+  
+  const text = `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+  const timeDisplay = document.getElementById("idleTime");
+  if(timeDisplay) {
+    timeDisplay.innerText = h > 0 ? `${h}:${text}` : text;
+  }
+
+  const ring = document.getElementById("timerRing");
+  if(ring) {
+      const maxDash = 339;
+      const pct = displaySeconds / totalDuration;
+      const offset = maxDash * (1 - pct);
+      ring.style.strokeDashoffset = offset;
+
+      const idleBox = document.getElementById("idleBox");
+      if (pct > 0.5) {
+          ring.style.stroke = "#3b82f6";
+          idleBox.classList.remove("critical");
+      } else if (pct > 0.15) {
+          ring.style.stroke = "#f59e0b";
+          idleBox.classList.remove("critical");
+      } else {
+          ring.style.stroke = "#ef4444";
+          idleBox.classList.add("critical");
+      }
+  }
+}
+
+function autoLogout() {
+  clearInterval(idleTimer);
+  const idleBox = document.getElementById("idleBox");
+  if(idleBox) idleBox.classList.add("hidden");
+
+  let currentStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+  currentStrikes++;
+  
+  if(currentStrikes >= 2) {
+    let currentPenalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+    currentPenalty += 10;
+    localStorage.setItem(key("PENALTY"), currentPenalty);
+    currentStrikes = 0;
+    alert(" Watchdog bit you! 2 Timeouts = -10% Penalty.");
+  }
+  localStorage.setItem(key("IDLE_STRIKES"), currentStrikes);
+
+  const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+  if(activeTest) {
+      activeTest.status = "EXPIRED";
+      localStorage.setItem(key("TEST_STATE"), JSON.stringify(activeTest));
+  }
+
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  if (logs.length) {
+    const last = logs[logs.length - 1];
+    last.logout = now();
+    last.logoutTS = Date.now();
+    last.reason = "Timeout";
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+  }
+  
+  uploadData(); // Sync before reload
+  setTimeout(() => location.reload(), 500);
+}
+
+function bioBreak() {
+  clearInterval(idleTimer);
+  const idleBox = document.getElementById("idleBox");
+  if(idleBox) idleBox.classList.add("hidden");
+  
+  localStorage.setItem(key("IDLE_STRIKES"), "0");
+
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  if (logs.length) {
+    const last = logs[logs.length - 1];
+    last.logout = now();
+    last.logoutTS = Date.now();
+    last.reason = "Pending";
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+  }
+  uploadData(); // Sync before reload
+  setTimeout(() => location.reload(), 500);
+}
+
+// --- LOGIN (Async for Firebase) ---
+async function login() {
+  const emailInput = prompt("Email (Used for Cloud Save):");
+  if (!emailInput) return;
+  
+  UID = emailInput.trim();
+  
+  // Wait for cloud download before proceeding
+  await downloadData(UID);
+
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+  penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+
+  updateStrikeDisplay();
+
+  if (logs.length) {
+    const lastLog = logs[logs.length - 1];
+    if (lastLog.reason === "Pending") {
+      const userReason = prompt("Reason for previous break?", "Bio Break");
+      lastLog.reason = userReason || "Bio Break";
+    }
+  }
+
+  localStorage.removeItem(key("DAY_ENDED"));
+
+  logs.push({
+    login: now(),
+    loginTS: Date.now(),
+    logout: "-",
+    logoutTS: null,
+    reason: "-",
+    completed: []
+  });
+  localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+
+  document.getElementById("statusBox").innerText = `Logged in: ${UID}`;
+  document.getElementById("loginBtn").disabled = true;
+  document.getElementById("bioBtn").disabled = false;
+  document.getElementById("dayBtn").disabled = false;
+  
+  // Initial Sync after login
+  uploadData();
+
+  // Check Mock Test
+  const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+  if (activeTest) {
+    if (activeTest.status === "EXPIRED") {
+       alert("Mock Test Time Ended! Please enter marks.");
+       finishTestSequence(activeTest, true);
+       return;
+    }
+
+    if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
+      restoreTestUI(activeTest);
+      const elapsed = (Date.now() - activeTest.startTime) / 1000;
+      const totalDurationSecs = activeTest.durationMins * 60;
+      const remaining = totalDurationSecs - elapsed;
+
+      if(remaining > 0) {
+        startIdle(remaining);
+      } else {
+        startIdle(1);
+      }
+      
+      const btn = document.querySelector(".watchdog-btn");
+      if(btn) btn.innerText = "EXAM MODE (NO RESET)";
+
+      loadTasks();
+      renderLogs();
+      updateProgress();
+      return;
+    } else {
+      finishTestSequence(activeTest, true);
+      return;
+    }
+  }
+
+  startIdle(1800);
+  setupTasks();
+  loadTasks();
+  renderLogs();
+  updateProgress();
 }
 
 function updateStrikeDisplay() {
   let box = document.getElementById("idleStrikeBox");
   if(!box) {
-    box = document.createElement("div"); box.id = "idleStrikeBox"; box.className = "status";
-    const sb = document.getElementById("statusBox"); sb.parentNode.insertBefore(box, sb.nextSibling);
+    box = document.createElement("div");
+     box.id = "idleStrikeBox";
+    box.className = "status";
+    document.getElementById("statusBox").parentNode.insertBefore(box, document.getElementById("statusBox").nextSibling);
   }
+  
   box.innerText = `Idle Strikes: ${idleStrikes}`;
-  box.style.borderColor = idleStrikes > 0 ? "#f87171" : "#334155";
-  box.style.color = idleStrikes > 0 ? "#f87171" : "#e5e7eb";
-  box.style.background = idleStrikes > 0 ? "rgba(248, 113, 113, 0.1)" : "transparent";
+  
+  if(idleStrikes > 0) {
+      box.style.borderColor = "#f87171";
+      box.style.color = "#f87171";
+      box.style.background = "rgba(248, 113, 113, 0.1)";
+  } else {
+      box.style.borderColor = "#334155";
+      box.style.color = "#e5e7eb";
+      box.style.background = "transparent";
+  }
 }
 
-/* --- WATCHDOG --- */
-function startIdle(secs = 1800) {
-    if(idleTimer) clearInterval(idleTimer);
-    totalDuration = secs;
-    targetTime = Date.now() + (secs * 1000);
-    document.getElementById("idleBox").classList.remove("hidden","critical");
-    updateIdle(secs);
-    idleTimer = setInterval(() => {
-        const rem = Math.ceil((targetTime - Date.now()) / 1000);
-        updateIdle(rem);
-        if (rem <= 0) autoLogout();
-    }, 1000);
+// --- MOCK TEST LOGIC ---
+function startMockTestSetup() {
+  const name = prompt("Enter Test Name:");
+  if(!name) return;
+  const fullMarks = prompt("Enter Full Marks:");
+  if(!fullMarks) return;
+  
+  const durationInput = prompt("Enter Duration in MINUTES (e.g. 120):");
+  const durationMins = parseInt(durationInput);
+  
+  if(!durationMins || isNaN(durationMins)) {
+    alert("Invalid Time. Test Cancelled.");
+    return;
+  }
+
+  const testState = {
+    name: name,
+    fullMarks: fullMarks,
+    durationMins: durationMins,
+    startTime: Date.now(),
+    status: "RUNNING"
+  };
+  localStorage.setItem(key("TEST_STATE"), JSON.stringify(testState));
+  uploadData(); // Sync start
+
+  const btn = document.querySelector(".watchdog-btn");
+  if(btn) btn.innerText = "EXAM MODE (NO RESET)";
+
+  startIdle(durationMins * 60);
+  restoreTestUI(testState);
 }
 
-function updateIdle(secs) {
-    let d = secs > 0 ? secs : 0;
-    const h = Math.floor(d / 3600), m = Math.floor((d % 3600) / 60), s = d % 60;
-    document.getElementById("idleTime").innerText = h > 0 ? `${h}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}` : `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
-    const ring = document.getElementById("timerRing");
-    if(ring && totalDuration > 0) {
-        const pct = d / totalDuration;
-        ring.style.strokeDashoffset = 339 * (1 - pct);
-        if(pct > 0.5) { ring.style.stroke = "#3b82f6"; document.getElementById("idleBox").classList.remove("critical"); }
-        else if(pct > 0.15) { ring.style.stroke = "#f59e0b"; document.getElementById("idleBox").classList.remove("critical"); }
-        else { ring.style.stroke = "#ef4444"; document.getElementById("idleBox").classList.add("critical"); }
-    }
+function restoreTestUI(testState) {
+  const container = document.getElementById("taskBox");
+  container.classList.remove("hidden");
+  
+  const hrs = Math.floor(testState.durationMins / 60);
+  const mins = testState.durationMins % 60;
+  
+  container.innerHTML = `
+    <div style="text-align:center; padding: 20px; border: 1px solid #facc15; border-radius: 10px;">
+      <h2 style="color:#facc15">MOCK TEST RUNNING</h2>
+      <h3 style="color:white">${testState.name}</h3>
+      <p>Full Marks: ${testState.fullMarks} | Duration: ${hrs}h ${mins}m</p>
+      <div style="margin-top:10px; color:#cbd5e1; font-size:14px;">
+         Watchdog locked to Exam Time. Good Luck.
+      </div>
+      <hr style="border-color:#334155; margin: 20px 0;">
+      <button onclick="triggerEndTest()" style="background:#dc2626; border:none; padding:15px; font-size:18px; font-weight:bold;">EXAM DONE</button>
+    </div>
+  `;
 }
 
-function resetWatchdog() {
-    if(!UID) return;
-    const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-    if(activeTest && activeTest.status === "RUNNING") return alert("No Reset in Exam");
-    startIdle(1800);
+function triggerEndTest() {
+  const testState = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+  if(testState) finishTestSequence(testState, true);
 }
 
-function autoLogout() {
-    clearInterval(idleTimer); document.getElementById("idleBox").classList.add("hidden");
-    let strikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0") + 1;
-    if(strikes >= 2) { penalty += 10; strikes = 0; alert("Watchdog bit you! -10% Penalty applied."); }
-    localStorage.setItem(key("IDLE_STRIKES"), strikes);
-    localStorage.setItem(key("PENALTY"), penalty);
-    idleStrikes = strikes;
-    logoutLog("Timeout");
-}
-function bioBreak() {
-    clearInterval(idleTimer); localStorage.setItem(key("IDLE_STRIKES"), "0"); logoutLog("Pending");
-}
-function logoutLog(reason) {
+function finishTestSequence(testState, loadDashboard = false) {
+  let obtained = prompt(`Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`);
+  
+  if(obtained === null && testState.status === "EXPIRED") obtained = "0";
+  if(obtained === null) return;
+
+  let accuracy = prompt("Enter Accuracy %:");
+  if(accuracy === null) accuracy = "0";
+
+  const msg = `Please Confirm Details:\n\nTest: ${testState.name}\nScore: ${obtained} / ${testState.fullMarks}\nAccuracy: ${accuracy}%`;
+  
+  if(confirm(msg)) {
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+    const resultComment = `Score: ${obtained}/${testState.fullMarks} | Acc: ${accuracy}%`;
+    
+    extras.push({
+      name: `MOCK TEST: ${testState.name}`,
+      done: true,
+      comment: resultComment,
+      due: "None"
+    });
+    localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+    
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    if(logs.length) {
-        logs[logs.length-1].logout = now(); logs[logs.length-1].reason = reason;
-        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    if(logs.length){
+      const active = logs[logs.length-1];
+      if(!active.completed) active.completed = [];
+      active.completed.push({
+        name: `MOCK TEST: ${testState.name}`,
+        comment: resultComment,
+        due: "None"
+      });
+      localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
-    syncToFirebase(); location.reload();
+
+    localStorage.removeItem(key("TEST_STATE"));
+    uploadData(); // Sync result
+    
+    const btn = document.querySelector(".watchdog-btn");
+    if(btn) btn.innerText = "I AM STUDYING";
+
+    if(loadDashboard) {
+        startIdle(1800);
+        setupTasks();
+        loadTasks();
+        renderLogs();
+        updateProgress();
+    } else {
+        location.reload();
+    }
+  } else {
+    if(testState.status === "EXPIRED") {
+        alert("You must save marks to proceed.");
+        finishTestSequence(testState, true);
+    }
+  }
 }
 
-/* --- TASKS --- */
+// --- STANDARD TASK SYSTEM ---
 function setupTasks() {
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    if(!tasks.length) {
-        const def = [{name:"Study",done:false,comment:"",due:""},{name:"Revise",done:false,comment:"",due:""},{name:"Practice",done:false,comment:"",due:""}];
-        localStorage.setItem(key("TASKS"), JSON.stringify(def));
-    }
-    document.getElementById("taskBox").classList.remove("hidden");
-    document.getElementById("logBox").classList.remove("hidden");
+  const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  const next = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
+
+  let merged = [...carried, ...next.map(n => ({ name: n, done: false, comment: "", due: "" }))];
+  if (!merged.length) {
+    merged = [
+      { name: "Study", done: false, comment: "", due: "" },
+      { name: "Revise", done: false, comment: "", due: "" },
+      { name: "Practice", done: false, comment: "", due: "" }
+    ];
+  }
+
+  localStorage.setItem(key("TASKS"), JSON.stringify(merged));
+  localStorage.removeItem(key("NEXT_TASKS"));
+  uploadData(); // Sync Setup
+  
+  const taskBox = document.getElementById("taskBox");
+  taskBox.innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
+      <div>
+        <h3>Assigned Tasks</h3>
+        <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center">
+             <button onclick="startMockTestSetup()" style="background:#a16207; width:auto; padding:8px 20px;">Start Mock Test</button>
+        </div>
+        <div id="taskList"></div>
+        <hr>
+        <h4>Extra Work</h4>
+        <div id="extraList"></div>
+        <button onclick="addExtra()">+ Add Extra Work</button>
+      </div>
+      <div>
+        <h3 style="text-align:center">Live Progress</h3>
+        <div class="speedo">
+          <div id="needle" class="needle"></div>
+          <div class="cap"></div>
+        </div>
+        <div id="livePercent" class="percent">0%</div>
+        <div id="liveRating" class="rating">Poor</div>
+        <div id="liveDetails" class="details"></div>
+      </div>
+    </div>
+  `;
+
+  taskBox.classList.remove("hidden");
+  document.getElementById("logBox").classList.remove("hidden");
+  document.getElementById("reportBox").classList.add("hidden");
 }
 
 function loadTasks() {
-    const tList = document.getElementById("taskList"); tList.innerHTML = "";
-    const eList = document.getElementById("extraList"); eList.innerHTML = "";
-    
-    // READ ONCE
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  const tList = document.getElementById("taskList");
+  const eList = document.getElementById("extraList");
+  if(!tList || !eList) return;
 
-    const render = (item, list, isExtra) => {
-        const div = document.createElement("div"); div.style.marginBottom="5px";
-        const cb = document.createElement("input"); cb.type="checkbox"; cb.checked=item.done;
-        if(item.name.startsWith("MOCK TEST:")) cb.disabled = true;
-        
-        const sp = document.createElement("span"); 
-        // Display Logic for Checkbox Label
-        sp.innerHTML = item.done ? ` ${item.name} <small style="color:#94a3b8">[${item.comment||""} | Due: <span style="color:#fca5a5">${item.due||""}</span>]</small>` : ` ${item.name}`;
-        
-        cb.onchange = () => {
-            if(!confirm("Complete?")) { cb.checked = !cb.checked; return; }
-            
-            // 1. UPDATE THE ITEM IN MEMORY
-            item.done = cb.checked;
-            if(cb.checked) {
-                item.comment = prompt("Comment?", "Done") || "-";
-                item.due = prompt("Pending work / Due Date?", "None") || "-";
-            } else { item.comment = ""; item.due = ""; }
-            
-            // 2. SAVE THE MODIFIED ARRAY IMMEDIATELY
-            if(isExtra) localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-            else localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
-            
-            // 3. Update Log
-            updateLogWithTask(item);
+  tList.innerHTML = "";
+  eList.innerHTML = "";
+  
+  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
 
-            // 4. Refresh UI
-            syncToFirebase();
-            loadTasks(); // Re-render to show updated text
-            renderLogs();
-            updateProgress();
-        };
-        div.append(cb, sp); list.append(div);
-    };
-    tasks.forEach(t => render(t, tList, false));
-    extras.forEach(e => render(e, eList, true));
-}
-
-function updateLogWithTask(item) {
+  const updateLogTask = (name, isChecked, comment, due) => {
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    if(logs.length) {
-        const active = logs[logs.length-1];
-        if(!active.completed) active.completed = [];
-        active.completed = active.completed.filter(i => (i.name || i) !== item.name);
-        if(item.done) active.completed.push({name:item.name, comment:item.comment, due:item.due});
-        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    if(logs.length){
+      const active = logs[logs.length-1];
+      if(!active.completed) active.completed = [];
+      if(isChecked){
+        active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
+        active.completed.push({ name: name, comment: comment, due: due });
+      } else {
+        active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
+      }
+      localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+      renderLogs();
     }
+  };
+
+  tasks.forEach(t => {
+    const container = document.createElement("div");
+    container.style.marginBottom = "4px";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = t.done;
+    const label = document.createElement("span");
+    const updateLabel = () => {
+       if(t.done){
+           label.innerHTML = ` ${t.name} <span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>`;
+       } else {
+           label.innerText = " " + t.name;
+       }
+    };
+    updateLabel();
+    cb.onchange = () => {
+      if (!confirm("Confirm task completion?")) { cb.checked = !cb.checked; return; }
+      if(cb.checked){
+        const remark = prompt(`Comment for ${t.name}?`, "Done");
+        const dueVal = prompt(`Any pending work/marks left for ${t.name}?`, "None");
+        t.comment = remark || "-";
+        t.due = dueVal || "-";
+      } else { t.comment = ""; t.due = ""; }
+      t.done = cb.checked;
+      updateLabel();
+      updateLogTask(t.name, t.done, t.comment, t.due);
+      save(tasks, extras);
+    };
+    container.append(cb, label);
+    tList.append(container);
+  });
+
+  extras.forEach(e => {
+    const container = document.createElement("div");
+    container.style.marginBottom = "4px";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = e.done;
+    if(e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
+    const label = document.createElement("span");
+    const updateLabel = () => {
+       if(e.done){
+           label.innerHTML = ` ${e.name} <span style="font-size:12px;color:#94a3b8">[${e.comment}]</span>`;
+       } else {
+           label.innerText = " " + e.name;
+       }
+    };
+    updateLabel();
+    cb.onchange = () => {
+      if (!confirm("Confirm extra work completion?")) { cb.checked = !cb.checked; return; }
+      if(cb.checked){
+        const remark = prompt(`Comment for ${e.name}?`, "Done");
+        const dueVal = prompt(`Any pending work/marks left for ${e.name}?`, "None");
+        e.comment = remark || "-";
+        e.due = dueVal || "-";
+      } else { e.comment = ""; e.due = ""; }
+      e.done = cb.checked;
+      updateLabel();
+      updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
+      save(tasks, extras);
+    };
+    container.append(cb, label);
+    eList.append(container);
+  });
 }
 
 function addExtra() {
-    const name = prompt("Extra work?");
-    if(!name) return;
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    extras.push({name, done:false, comment:"", due:""});
-    localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-    loadTasks();
-    syncToFirebase();
+  const name = prompt("Extra work?");
+  if (!name) return;
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  extras.push({ name, done: false, comment: "", due: "" });
+  localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+  loadTasks();
+  uploadData();
 }
 
-/* --- DAY END & HISTORY --- */
-function openDayEnd() {
-    clearInterval(idleTimer); document.getElementById("idleBox").classList.add("hidden");
-    const nextInputs = document.getElementById("nextInputs"); nextInputs.innerHTML = "";
-    for(let i=0; i<5; i++) nextInputs.innerHTML += `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i+1}">`;
-    document.getElementById("nextDayBox").classList.remove("hidden");
+function save(tasks, extras) {
+  localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
+  localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+  updateProgress();
+  uploadData(); // Trigger Cloud Sync
 }
 
-async function finalDayEnd() {
-    const p = calculate();
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    const nextTasks = [];
-    for(let i=0; i<5; i++) {
-        const el = document.getElementById("nd"+i);
-        if(el.value.trim()) nextTasks.push({name: el.value.trim(), done: false, comment:"", due:""});
-    }
-    
-    const historyEntry = {
-        date: now(), score: p.percent, rating: getLabel(p.percent), doneCount: p.doneCount,
-        timestamp: firebase.database.ServerValue.TIMESTAMP
-    };
-
-    document.getElementById("statusBox").innerText = "Saving...";
-    db.ref('users/' + UID + '/history').push(historyEntry);
-    
-    const newState = {
-        tasks: nextTasks.length ? nextTasks : tasks.filter(t => !t.done),
-        extra: [], logs: [], penalty: 0, strikes: 0, testState: null
-    };
-    await db.ref('users/' + UID + '/current_state').set(newState);
-
-    alert("Day Saved!"); localStorage.clear(); location.reload();
-}
-
-function loadHistory() {
-    if(!UID) { alert("Please Login first."); return; }
-    document.getElementById("historyBox").classList.remove("hidden");
-    const list = document.getElementById("historyList"); list.innerHTML = "Fetching... <div class='loader'></div>";
-    db.ref('users/' + UID + '/history').limitToLast(7).once('value')
-        .then(snap => {
-            const data = snap.val(); list.innerHTML = "";
-            if(!data) { list.innerHTML = "No history found."; return; }
-            Object.values(data).reverse().forEach(h => {
-                const div = document.createElement("div"); div.className = "hist-item";
-                div.innerHTML = `<div><div class="hist-date">${h.date.split(',')[0]}</div><div style="font-size:12px">${h.rating}</div></div><div class="hist-score">${h.score}%</div>`;
-                list.append(div);
-            });
-        })
-        .catch(e => { list.innerHTML = "Connection Error."; });
-}
-function closeHistory() { document.getElementById("historyBox").classList.add("hidden"); }
-
-/* --- CALCS & RENDER --- */
+// --- PROGRESS ---
 function calculate() {
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    const done = tasks.filter(t=>t.done).length + extras.filter(e=>e.done).length;
-    const total = tasks.length;
-    const pct = total ? Math.max(0, Math.round((done/total)*100 - penalty)) : 0;
-    return { percent: pct, doneCount: done };
+  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  const done = tasks.filter(t => t.done).length +
+    extras.filter(e => e.done).length;
+  const percent = tasks.length ?
+    Math.max(0, Math.round((done / tasks.length) * 100 - penalty)) : 0;
+  return { percent, assigned: tasks.length, extra: extras.length };
 }
 
 function updateProgress() {
-    const p = calculate();
-    const needle = document.getElementById("needle");
-    if(needle) {
-        needle.style.transform = `rotate(${(Math.min(p.percent, 300)/300)*180 - 90}deg)`;
-        document.getElementById("livePercent").innerText = p.percent + "%";
-        document.getElementById("liveRating").innerText = getLabel(p.percent);
-        document.getElementById("liveDetails").innerText = `Penalty: -${penalty}%`;
-    }
+  const needle = document.getElementById("needle");
+  if(!needle) return;
+  const p = calculate();
+  needle.style.transform =
+    `rotate(${(Math.min(p.percent, 300) / 300) * 180 - 90}deg)`;
+  document.getElementById("livePercent").innerText = p.percent + "%";
+  document.getElementById("liveRating").innerText = getLabel(p.percent);
+  document.getElementById("liveDetails").innerText =
+    `Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${penalty}%`;
 }
-function getLabel(p) { return p<40?"Poor":(p<60?"Average":(p<80?"Good":"Excellent")); }
+
+function getLabel(p) {
+  if (p < 40) return "Poor";
+  if (p < 60) return "Average";
+  if (p < 80) return "Good";
+  if (p <= 100) return "Excellent";
+  return "Fabulous";
+}
+
+// --- DAY END ---
+function openDayEnd() {
+  clearInterval(idleTimer);
+  const idleBox = document.getElementById("idleBox");
+  if(idleBox) idleBox.classList.add("hidden");
+
+  const nextInputs = document.getElementById("nextInputs");
+  nextInputs.innerHTML = "";
+  for (let i = 0; i < 7; i++) {
+    nextInputs.innerHTML +=
+      `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">`;
+  }
+  document.getElementById("nextDayBox").classList.remove("hidden");
+}
+
+function finalDayEnd() {
+  const next = [];
+  for (let i = 0; i < 7; i++) {
+    const el = document.getElementById("nd" + i);
+    if(el && el.value.trim()) next.push(el.value.trim());
+  }
+  localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
+
+  const p = calculate();
+  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  const carry = tasks.filter(t => !t.done);
+
+  let totalMillis = 0;
+  logs.forEach(l => {
+    let end = l.logoutTS;
+    if(!end) end = Date.now();
+    if(l.loginTS) totalMillis += (end - l.loginTS);
+  });
+  const totalMin = Math.floor(totalMillis / 60000);
+  const hrs = Math.floor(totalMin / 60);
+  const mins = totalMin % 60;
+  const timeStr = `${hrs} hr ${mins} min`;
+
+  const doneTasks = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
+  const doneExtras = extras.filter(e => e.done).map(e => ({name: e.name + " (Extra)", comment: e.comment, due: e.due}));
+  const allDone = [...doneTasks, ...doneExtras];
+
+  let doneTable = "";
+  if(allDone.length > 0){
+    doneTable = `
+    <h4 style="margin-top:20px;text-align:left;border-top:1px solid #334155;padding-top:10px">Work Done Report</h4>
+    <table>
+        <thead>
+            <tr>
+                <th style="width:40%">Task</th>
+                <th style="width:30%">Comment</th>
+                <th style="width:30%">Due</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${allDone.map(d => `
+                <tr>
+                    <td style="color:#86efac">${d.name}</td>
+                    <td>${d.comment}</td>
+                    <td style="color:#fca5a5">${d.due}</td>
+                </tr>
+            `).join("")}
+        </tbody>
+    </table>`;
+  } else {
+    doneTable = `<div style="margin-top:20px;color:#fca5a5">No work completed.</div>`;
+  }
+
+  localStorage.setItem(key("TASKS"), JSON.stringify(carry));
+  localStorage.setItem(key("EXTRA"), JSON.stringify([]));
+  localStorage.removeItem(key("LOGS"));
+  localStorage.removeItem(key("TEST_STATE"));
+  
+  localStorage.setItem(key("IDLE_STRIKES"), "0");
+  localStorage.setItem(key("PENALTY"), "0");
+  
+  uploadData(); // Sync End of Day
+
+  const tableRef = document.getElementById("logTable");
+  if(tableRef) tableRef.innerHTML = "";
+
+  const reportBox = document.getElementById("reportBox");
+  reportBox.innerHTML = `
+    <h3>Daily Report</h3>
+    <div class="percent">${p.percent}%</div>
+    <div class="rating">${getLabel(p.percent)}</div>
+    <div style="font-size:20px;color:#facc15;margin:10px 0;font-weight:bold">
+      Total Study Time: ${timeStr}
+    </div>
+    <div class="details">
+      Assigned: ${tasks.length} |
+      Carry Forward: ${carry.length} |
+      Penalty: -${penalty}%
+    </div>
+    ${doneTable}`;
+    
+  reportBox.classList.remove("hidden");
+  document.getElementById("taskBox").classList.add("hidden");
+  document.getElementById("logBox").classList.add("hidden");
+  document.getElementById("nextDayBox").classList.add("hidden");
+
+  document.getElementById("statusBox").innerText = "Day End – Thank you";
+  document.getElementById("loginBtn").disabled = false;
+  document.getElementById("bioBtn").disabled = true;
+  document.getElementById("dayBtn").disabled = true;
+}
 
 function renderLogs() {
-    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    const tbody = document.getElementById("logTable"); tbody.innerHTML = "";
-    logs.forEach(l => {
-        let w = "-";
-        if(l.completed && l.completed.length) {
-            w = l.completed.map(c => `<div style="font-size:12px;color:#86efac; border-bottom:1px dashed #334155;">${c.name} <span style="color:#cbd5e1">(${c.comment})</span> <span style="color:#fca5a5">[Due: ${c.due||"-"}]</span></div>`).join("");
-        }
-        tbody.innerHTML += `<tr><td style="vertical-align:top">${l.login.split(',')[1]}</td><td style="vertical-align:top">${l.logout==='-'?'-':l.logout.split(',')[1]}</td><td style="vertical-align:top">${l.reason}</td><td style="text-align:left;vertical-align:top">${w}</td></tr>`;
-    });
-}
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  const tbody = document.getElementById("logTable");
+  if(!tbody) return;
 
-/* --- MOCK TEST (FIXED) --- */
-function startMockTestSetup() {
-    const name=prompt("Enter Test Name:"); if(!name) return;
-    const marks=prompt("Enter Full Marks:"); if(!marks) return;
-    const mins=prompt("Enter Duration in MINUTES (e.g. 120):"); if(!mins) return;
-    const st = { name: name, fullMarks: marks, durationMins: parseInt(mins), startTime: Date.now(), status: "RUNNING" };
-    localStorage.setItem(key("TEST_STATE"), JSON.stringify(st));
-    syncToFirebase(); location.reload();
-}
-function restoreTestUI(st) {
-    const box = document.getElementById("taskBox");
-    const hrs = Math.floor(st.durationMins/60), m = st.durationMins%60;
-    box.innerHTML = `<div style="text-align:center; padding: 20px; border: 1px solid #facc15; border-radius: 10px;"><h2 style="color:#facc15">MOCK TEST RUNNING</h2><h3 style="color:white">${st.name}</h3><p>Full Marks: ${st.fullMarks} | Duration: ${hrs}h ${m}m</p><button onclick="triggerEndTest()" style="background:#dc2626; border:none; padding:15px; font-size:18px; font-weight:bold;">EXAM DONE</button></div>`;
-    box.classList.remove("hidden");
-}
-function triggerEndTest(){
-    const st = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-    let ob = prompt(`Exam Done: ${st.name}\nEnter Marks Obtained:`); if(ob===null) return;
-    let acc = prompt("Enter Accuracy %:");
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA"))||"[]");
-    extras.push({ name:`MOCK TEST: ${st.name}`, done:true, comment: `Score: ${ob}/${st.fullMarks} | Acc: ${acc}%`, due: "None" });
-    localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-    
-    // --- THIS IS THE FIX ---
-    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    if(logs.length){
-        const active = logs[logs.length-1];
-        if(!active.completed) active.completed = [];
-        active.completed.push({
-            name: `MOCK TEST: ${st.name}`, 
-            comment: `Score: ${ob}/${st.fullMarks} | Acc: ${acc}%`, 
-            due: "None"
-        });
-        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+  tbody.innerHTML = "";
+
+  logs.forEach(l => {
+    let workHtml = "-";
+    if (l.completed && l.completed.length) {
+      workHtml = l.completed.map(item => {
+        if(typeof item === 'string'){ return `<div>${item}</div>`; }
+        return `
+        <div style="border-bottom:1px dashed #334155; padding:4px 0;">
+            <div style="color:#86efac;font-weight:bold">${item.name}</div>
+            <div style="font-size:12px;color:#cbd5e1">
+               ${item.comment} | Due: <span style="color:#fca5a5">${item.due}</span>
+            </div>
+        </div>`;
+      }).join("");
     }
-    // -----------------------
-
-    localStorage.removeItem(key("TEST_STATE"));
-    syncToFirebase().then(() => location.reload());
+    tbody.innerHTML += `
+      <tr>
+        <td style="vertical-align:top">${l.login}</td>
+        <td style="vertical-align:top">${l.logout}</td>
+        <td style="vertical-align:top">${l.reason}</td>
+        <td style="text-align:left;vertical-align:top">${workHtml}</td>
+      </tr>`;
+  });
 }
+
+// --- ATTACH TO WINDOW (Required for module scripts) ---
+window.login = login;
+window.resetWatchdog = resetWatchdog;
+window.bioBreak = bioBreak;
+window.openDayEnd = openDayEnd;
+window.finalDayEnd = finalDayEnd;
+window.startMockTestSetup = startMockTestSetup;
+window.triggerEndTest = triggerEndTest;
+window.addExtra = addExtra;
 </script>
 </body>
 </html>
