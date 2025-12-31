@@ -1903,12 +1903,30 @@ function finalDayEnd() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   const carry = tasks.filter(t => !t.done);
 
-  let totalMillis = 0;
-  logs.forEach(l => {
-    let end = l.logoutTS;
-    if(!end) end = Date.now();
-    if(l.loginTS) totalMillis += (end - l.loginTS);
-  });
+ let totalMillis = 0;
+
+// Get today's date string (same format as logs)
+const todayStr = new Date().toLocaleDateString();
+
+logs.forEach(l => {
+  // Must have valid timestamps
+  if (!l.loginTS || !l.logoutTS) return;
+
+  // Ignore invalid or reversed sessions
+  if (l.logoutTS <= l.loginTS) return;
+
+  // Only count TODAY's sessions
+  const loginDate = new Date(l.loginTS).toLocaleDateString();
+  if (loginDate !== todayStr) return;
+
+  const duration = l.logoutTS - l.loginTS;
+
+  // Ignore reload / glitch sessions (<30 sec)
+  if (duration < 30000) return;
+
+  totalMillis += duration;
+});
+
   const totalMin = Math.floor(totalMillis / 60000);
   const hrs = Math.floor(totalMin / 60);
   const mins = totalMin % 60;
