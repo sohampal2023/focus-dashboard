@@ -1901,7 +1901,7 @@ function finalDayEnd() {
   const p = calculate();
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  
   const carry = tasks.filter(t => !t.done);
   // 🔒 CLOSE CURRENT SESSION BEFORE CALCULATING TIME
 const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
