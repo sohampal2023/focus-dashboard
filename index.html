@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V18 (Clean UI + Leave Logic)</title>
+<title>Focus Watchdog V20 (Dismissable Leave)</title>
 
 <style>
 /* --- BASE STYLES --- */
@@ -525,9 +525,12 @@ function startAdminListener() {
                     `;
                 }
                 
-                // Leave Balance
+                // Leave Balance & Admin Reset Button
                 let leaveBalance = u.leaveBalance !== undefined ? u.leaveBalance : 6;
-                let balanceHtml = `<div style="text-align:center; font-weight:bold; color:#38bdf8">${leaveBalance} Days</div>`;
+                let balanceHtml = `
+                    <div style="text-align:center; font-weight:bold; color:#38bdf8">${leaveBalance} Days</div>
+                    <button onclick="resetLeaveBalance('${uid}')" style="background:#0f172a; border:1px solid #334155; padding:2px; font-size:9px; width:auto; margin:2px auto; display:block">Reset Bal (6)</button>
+                `;
 
                 // 4. Leave Status
                 let leaveBadge = `<span style="color:#64748b; font-size:11px;">Active Student</span>`;
@@ -606,6 +609,14 @@ window.sendWarning = async function(uid) {
         await update(ref(db, `users/${uid}`), { activeAlert: msg });
         alert("Warning sent. Student must dismiss it.");
     } catch(e) { alert("Error sending warning: " + e.message); }
+};
+
+// --- ADMIN RESET BALANCE ---
+window.resetLeaveBalance = async function(uid) {
+    if(!confirm(`CONFIRM RESET:\n\nSet Leave Balance to 6 days for this student?`)) return;
+    try {
+        await update(ref(db, `users/${uid}`), { leaveBalance: 6 });
+    } catch(e) { alert("Error: " + e.message); }
 };
 
 // --- ADMIN MODAL & HISTORY INSPECTOR ---
@@ -836,69 +847,72 @@ async function initStudentDashboard() {
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // --- SETUP LIVE LISTENER FOR WARNINGS ---
-    onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
-        const msg = snapshot.val();
-        const popup = document.getElementById("rejectedPopup");
-        const popupTxt = document.getElementById("rejectedMsg");
-        
-        if (msg) {
-            popupTxt.innerText = `Admin: "${msg}"`;
-            popup.classList.remove("hidden");
-        } else {
-            popup.classList.add("hidden");
+    // --- SETUP LIVE LISTENER (NEW IN V19) ---
+    // Instead of one-time fetch, we list to changes to support live Admin updates
+    const syncStatus = document.getElementById("syncStatus");
+    syncStatus.innerText = "Syncing...";
+
+    onValue(ref(db, `users/${currentUser.uid}`), (snapshot) => {
+        syncStatus.innerText = "Online";
+        if(snapshot.exists()) {
+            const data = snapshot.val();
+            
+            // 1. Handle Critical Lockout Immediately
+            if(data.lockout && parseInt(data.lockout) > Date.now()) {
+                const minLeft = Math.ceil((parseInt(data.lockout) - Date.now())/60000);
+                document.body.innerHTML = `
+                    <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;text-align:center;">
+                        <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">TERMINATED</h1>
+                        <h2 style="color:#f87171;margin-top:10px">${data.lockoutReason || "Admin Action"}</h2>
+                        <p>Time remaining: ${minLeft} minutes</p>
+                        <button onclick="location.reload()" style="width:200px;margin-top:20px;">Try Again</button>
+                    </div>`;
+                return; 
+            }
+
+            // 2. Handle Alerts (Red Warning)
+            const popup = document.getElementById("rejectedPopup");
+            const popupTxt = document.getElementById("rejectedMsg");
+            if (data.activeAlert) {
+                popupTxt.innerText = `Admin: "${data.activeAlert}"`;
+                popup.classList.remove("hidden");
+            } else {
+                popup.classList.add("hidden");
+            }
+
+            // 3. Handle Feedback (Admin Review)
+            if (data.newFeedback) {
+                document.getElementById("adminFeedbackBox").classList.remove("hidden");
+                document.getElementById("adminFeedbackText").innerText = `${data.newFeedback}`;
+            }
+
+            // 4. Handle Leave Status & Balance (Live Update)
+            let leaveBalance = data.leaveBalance !== undefined ? data.leaveBalance : 6;
+            const balDisplay = document.getElementById("leaveBalanceDisplay");
+            if(balDisplay) balDisplay.innerText = `Leave Bal: ${leaveBalance}`;
+            
+            checkLeaveStatus(data); // Update status box
+
+            // Note: We DO NOT overwrite TASKS/LOGS from here to prevent
+            // overwriting ongoing work if the loop is out of sync.
         }
     });
-
-    const serverData = await downloadData(currentUser.uid);
     
-    // Check Lockout
-    if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
-        const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
-        document.body.innerHTML = `
-            <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;text-align:center;">
-                <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">TERMINATED</h1>
-                <h2 style="color:#f87171;margin-top:10px">${serverData.lockoutReason || "Admin Action"}</h2>
-                <p>Time remaining: ${minLeft} minutes</p>
-                <button onclick="location.reload()" style="width:200px;margin-top:20px;">Try Again</button>
-            </div>`;
-        return; 
-    }
-
-    // --- CHECK LEAVE ACCRUAL (MONTHLY 6 DAYS + CARRYFORWARD) ---
-    const date = new Date();
-    const currentMonthKey = `${date.getFullYear()}-${date.getMonth()}`;
-    
-    let leaveBalance = serverData.leaveBalance !== undefined ? serverData.leaveBalance : 6;
-    let lastAccrual = serverData.lastAccrual || "";
-
-    if (lastAccrual !== currentMonthKey) {
-        // New Month detected! Add 6 days to existing balance
-        leaveBalance += 6;
-        // Update DB immediately
-        await update(ref(db, `users/${currentUser.uid}`), {
-            leaveBalance: leaveBalance,
-            lastAccrual: currentMonthKey
-        });
-        serverData.leaveBalance = leaveBalance; // update local ref
-    }
-    
-    // Update UI for Balance
-    const balDisplay = document.getElementById("leaveBalanceDisplay");
-    if(balDisplay) balDisplay.innerText = `Leave Bal: ${leaveBalance}`;
-
-
-    // Check New Admin Feedback
-    if (serverData.newFeedback) {
-        document.getElementById("adminFeedbackBox").classList.remove("hidden");
-        document.getElementById("adminFeedbackText").innerText = `${serverData.newFeedback}`;
-    }
-
-    checkLeaveStatus(serverData);
-
+    // Initial Load Logic (Check local storage mostly)
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+
+    // Recover Tasks/History from server ONCE on boot if local is empty
+    // But mostly rely on local for tasks to avoid overwrite
+    const serverSnapshot = await get(child(ref(db), `users/${currentUser.uid}`));
+    if(serverSnapshot.exists()){
+        const sData = serverSnapshot.val();
+        if(!localStorage.getItem(key("TASKS")) && sData.TASKS) localStorage.setItem(key("TASKS"), sData.TASKS);
+        if(!localStorage.getItem(key("EXTRA")) && sData.EXTRA) localStorage.setItem(key("EXTRA"), sData.EXTRA);
+        if(!localStorage.getItem(key("LOGS")) && sData.LOGS) localStorage.setItem(key("LOGS"), sData.LOGS);
+        if(!localStorage.getItem(key("HISTORY")) && sData.HISTORY) localStorage.setItem(key("HISTORY"), sData.HISTORY);
+    }
 
     if (logs.length) {
         const lastLog = logs[logs.length - 1];
@@ -984,32 +998,39 @@ async function requestLeave() {
     
     try {
         await update(ref(db, `users/${currentUser.uid}/leaveRequest`), payload);
-        // Refresh check
-        const data = await downloadData(currentUser.uid);
-        checkLeaveStatus(data);
+        // No need to manually refresh UI, onValue listener will handle it
     } catch(e) { alert("Failed to send request"); }
 }
 
 function checkLeaveStatus(data) {
-    // We check data directly from DB or passed object
     const req = data.leaveRequest;
     const dashboardBox = document.getElementById("leaveDashboardBox");
+    const dismissedTs = localStorage.getItem(key("DISMISSED_LEAVE_TS"));
     
     if(req) {
+        // If this specific leave (identified by decisionTime or timestamp) was dismissed locally, hide it
+        const uniqueId = req.decisionTime || req.timestamp;
+        if(String(uniqueId) === String(dismissedTs)) {
+             dashboardBox.classList.add("hidden");
+             return;
+        }
+
         dashboardBox.classList.remove("hidden");
-        dashboardBox.className = "leave-status-box"; // reset class
+        dashboardBox.className = "leave-status-box"; 
         
         let statusTitle = "LEAVE REQUEST STATUS";
         let statusColorClass = "";
+        let buttonColor = "background:#1e40af; border:1px solid #60a5fa"; // default blue
         
         if (req.status === "Pending") {
              statusTitle = "⚠ LEAVE PENDING";
-             statusColorClass = "leave-status-half"; // reusing half style for pending/warn
+             statusColorClass = "leave-status-half";
+             buttonColor = "background:#854d0e; border:1px solid #facc15";
         } else if (req.status === "Approved") {
              statusTitle = "✔ LEAVE APPROVED";
              statusColorClass = "leave-status-approved";
+             buttonColor = "background:#064e3b; border:1px solid #4ade80";
              
-             // Trigger popup only once per session if approved
              if (!lastApprovedState) {
                  showApprovedPopup(req.dates, req.adminComment);
                  lastApprovedState = true;
@@ -1017,9 +1038,11 @@ function checkLeaveStatus(data) {
         } else if (req.status === "Half Approved") {
              statusTitle = "⚠ HALF APPROVED";
              statusColorClass = "leave-status-half";
+             buttonColor = "background:#854d0e; border:1px solid #facc15";
         } else if (req.status === "Rejected") {
              statusTitle = "✖ LEAVE REJECTED";
              statusColorClass = "leave-status-rejected";
+             buttonColor = "background:#7f1d1d; border:1px solid #f87171";
         }
         
         dashboardBox.classList.add(statusColorClass);
@@ -1029,12 +1052,23 @@ function checkLeaveStatus(data) {
         if(req.adminComment) {
             html += `<div style="margin-top:5px; padding-top:5px; border-top:1px solid rgba(255,255,255,0.2); font-style:italic">Admin: "${req.adminComment}"</div>`;
         }
+        // Add Dismiss Button
+        html += `<button onclick="dismissLeaveStatus('${uniqueId}')" style="width:auto; margin-top:10px; font-size:11px; ${buttonColor}">Dismiss</button>`;
+
         dashboardBox.innerHTML = html;
 
     } else {
         dashboardBox.classList.add("hidden");
         lastApprovedState = false; 
     }
+}
+
+// --- NEW DISMISS FUNCTION (LOCAL HIDE) ---
+window.dismissLeaveStatus = function(uniqueId) {
+    const dashboardBox = document.getElementById("leaveDashboardBox");
+    dashboardBox.classList.add("hidden");
+    // Remember this ID so we don't show it again on this device/browser
+    localStorage.setItem(key("DISMISSED_LEAVE_TS"), uniqueId);
 }
 
 function showApprovedPopup(dates, comment) {
@@ -1052,38 +1086,6 @@ function showApprovedPopup(dates, comment) {
 }
 
 // --- DATA SYNC ---
-async function downloadData(uid) {
-    const syncStatus = document.getElementById("syncStatus");
-    syncStatus.innerText = "Syncing...";
-    
-    try {
-        const snapshot = await get(child(ref(db), `users/${uid}`));
-        if (snapshot.exists()) {
-            const data = snapshot.val();
-            
-            if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
-            if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
-            if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
-            
-            if(data.TEST_STATE) localStorage.setItem(key("TEST_STATE"), data.TEST_STATE);
-            if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
-            if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
-            
-            localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
-            localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
-            
-            syncStatus.innerText = "Online";
-            return data;
-        }
-        syncStatus.innerText = "Online (New)";
-        return {};
-    } catch (error) {
-        console.error("Access Denied:", error);
-        syncStatus.innerText = "Auth Error";
-        return null;
-    }
-}
-
 function uploadData() {
     if(!currentUser) return;
     const syncStatus = document.getElementById("syncStatus");
@@ -1105,8 +1107,7 @@ function uploadData() {
 
     update(ref(db, `users/${currentUser.uid}`), payload)
     .then(() => {
-        syncStatus.innerText = "Saved";
-        setTimeout(() => syncStatus.innerText = "Online", 2000);
+        // syncStatus.innerText = "Saved"; // Removed to avoid flickering with onValue
     })
     .catch((error) => {
         syncStatus.innerText = "Save Failed";
@@ -1759,6 +1760,7 @@ window.toggleHistory = toggleHistory;
 window.requestLeave = requestLeave;
 window.forceLogout = forceLogout;
 window.handleLeave = window.handleLeave;
+window.resetLeaveBalance = window.resetLeaveBalance;
 window.openAdminModal = window.openAdminModal;
 window.deleteLogEntry = window.deleteLogEntry;
 window.closeAdminModal = window.closeAdminModal;
@@ -1770,6 +1772,7 @@ window.dismissFeedback = window.dismissFeedback;
 window.sendWarning = window.sendWarning;
 window.dismissRejected = window.dismissRejected;
 window.clearLeave = window.clearLeave;
+window.dismissLeaveStatus = window.dismissLeaveStatus;
 </script>
 </body>
 </html>
