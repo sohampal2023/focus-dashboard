@@ -1520,11 +1520,22 @@ function finishTestSequence(testState, loadDashboard = false) {
     `Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`
   );
 
-  if (obtained === null && testState.status === "EXPIRED") obtained = "0";
-  if (obtained === null) return;
+  // Handle Cancellation (User pressed Cancel)
+  if (obtained === null) {
+      if (testState.status === "EXPIRED") {
+          alert("Time is UP! You MUST enter your score to save progress.");
+          // Recursively call to force prompt again if expired
+          finishTestSequence(testState, loadDashboard);
+          return;
+      }
+      return; // If running, allow cancel
+  }
+
+  // Handle Empty Input (User pressed OK with empty field)
+  if (obtained.trim() === "") obtained = "0";
 
   let accuracy = prompt("Enter Accuracy %:");
-  if (accuracy === null) accuracy = "0";
+  if (accuracy === null || accuracy.trim() === "") accuracy = "0";
 
   const msg =
     `Please Confirm Details:\n\n` +
@@ -1535,7 +1546,8 @@ function finishTestSequence(testState, loadDashboard = false) {
   if (!confirm(msg)) {
     if (testState.status === "EXPIRED") {
       alert("You must save marks to proceed.");
-      finishTestSequence(testState, true);
+      finishTestSequence(testState, loadDashboard);
+      return;
     }
     return;
   }
@@ -1583,7 +1595,7 @@ function finishTestSequence(testState, loadDashboard = false) {
     ? "EXPIRED"
     : "COMPLETED";
 
-  /* 5️⃣ CLOSE THE SESSION (THIS WAS THE MISSING PIECE) */
+  /* 5️⃣ CLOSE THE SESSION */
   if (logs.length) {
     const last = logs[logs.length - 1];
     last.logout = now();
@@ -1612,15 +1624,8 @@ function finishTestSequence(testState, loadDashboard = false) {
     updateProgress();
   } else {
     location.reload();
-    }
-  else {
-    if(testState.status === "EXPIRED") {
-        alert("You must save marks to proceed.");
-        finishTestSequence(testState, true);
-    }
   }
 }
-
 
 // --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
 function setupTasks() {
