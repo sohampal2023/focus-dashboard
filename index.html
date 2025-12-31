@@ -2,16 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V12 (Admin Integrated)</title>
+<title>Focus Watchdog V14 (Live Alert System)</title>
 
 <style>
+/* --- BASE STYLES --- */
 *{box-sizing:border-box}
 html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
 body{background:#020617;color:#e5e7eb}
 
 .app{display:grid;grid-template-columns:280px 1fr;height:100vh}
 
-/* SIDEBAR */
+/* --- SIDEBAR --- */
 .sidebar{padding:20px;border-right:1px solid #1e293b; display:flex; flex-direction:column;}
 .sidebar h2{text-align:center;color:#7dd3fc;margin-bottom:12px; font-size: 1.2rem; letter-spacing: 1px;}
 .status{padding:10px;border:1px solid #334155;border-radius:10px;text-align:center;margin-bottom:10px;font-size:0.9rem}
@@ -26,7 +27,7 @@ button:hover:not(:disabled){ background: #1e293b; border-color: #7dd3fc; }
 button:active:not(:disabled){ transform: scale(0.98); }
 button:disabled{opacity:.4; cursor: not-allowed;}
 
-/* WATCHDOG TIMER */
+/* --- WATCHDOG TIMER --- */
 .idleBox{
   padding:15px; border:1px solid #334155;
   border-radius:16px; text-align:center;
@@ -64,7 +65,7 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 }
 .watchdog-btn:hover { background: #0284c7; }
 
-/* MAIN */
+/* --- MAIN LAYOUT --- */
 .main{padding:24px;overflow:auto; position: relative;}
 .card{
   background:#020617;border:1px solid #334155;
@@ -72,7 +73,7 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 }
 .hidden{display:none !important}
 
-/* ADMIN PANEL STYLES */
+/* --- ADMIN PANEL --- */
 .admin-row {
     display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 1.5fr; gap:10px; align-items: start;
     padding: 15px; border-bottom: 1px solid #334155; background: #0f172a; margin-bottom:5px; border-radius:8px;
@@ -81,14 +82,13 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 .badge-red { background: #7f1d1d; color: #fca5a5; }
 .badge-green { background: #14532d; color: #86efac; }
 .badge-yellow { background: #713f12; color: #fde047; }
-.badge-blue { background: #1e3a8a; color: #93c5fd; }
 .admin-btn-group { display: flex; gap: 4px; flex-wrap: wrap; }
 .admin-btn-group button { width: auto; padding: 6px 8px; font-size: 10px; margin: 0; flex-grow: 1; }
 
 .prog-bar { height:6px; background:#334155; border-radius:3px; overflow:hidden; margin-top:5px; width:100%; }
 .prog-fill { height:100%; background:#3b82f6; transition:width 0.3s; }
 
-/* ADMIN MODAL */
+/* --- ADMIN MODAL --- */
 .modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0, 0, 0, 0.9); z-index: 1000;
@@ -111,13 +111,13 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 .log-row:hover { background: #1e293b; }
 .log-header { font-weight: bold; color: #94a3b8; text-transform: uppercase; background: #1e293b; border-bottom: none; }
 
-/* LEAVE STATUS */
+/* --- LEAVE STATUS --- */
 .leave-banner {
     background: #312e81; color: #c7d2fe; padding: 10px;
     border-radius: 8px; margin-bottom: 10px; text-align: center; font-size: 13px; border:1px solid #6366f1;
 }
 
-/* SPEEDOMETER */
+/* --- SPEEDOMETER --- */
 .speedo{
   width:300px;height:150px;border-radius:300px 300px 0 0;
   background:conic-gradient(from -90deg, #7f1d1d,#92400e,#a16207,#14532d,#312e81);
@@ -140,12 +140,51 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 .rating{text-align:center;font-size:18px;font-weight:700}
 .details{text-align:center;font-size:14px;color:#cbd5f5}
 
-/* TABLE */
+/* --- TABLE --- */
 table{width:100%;border-collapse:collapse;font-size:14px}
 th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 .sync-status { font-size: 10px; color: #64748b; text-align: center; margin-top:5px; }
 .nextInput{ width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #334155; background:#020617; color:#e5e7eb; }
+
+/* --- REJECTED POPUP (The "Picture Type" Alert) --- */
+.rejected-popup {
+    position: fixed; top: 15%; left: 50%; transform: translate(-50%, 0); z-index: 9999;
+    background: #7f1d1d; /* Dark Red Background */
+    border: 1px solid #ef4444; /* Bright Red Border */
+    color: #fee2e2; 
+    padding: 20px 30px; 
+    border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
+    text-align: center; 
+    display: flex; flex-direction: column; gap: 12px;
+    min-width: 320px;
+    animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.rejected-popup h2 { 
+    margin: 0; font-size: 20px; color: #fca5a5; 
+    text-transform: uppercase; letter-spacing: 1px; font-weight: 800;
+}
+
+.rejected-line {
+    height: 1px; background: rgba(255,255,255,0.2); width: 100%;
+}
+
+.rejected-popup p { 
+    margin: 0; font-style: italic; font-size: 16px; color: #fff; font-weight:500;
+}
+
+.dismiss-btn { 
+    background: #450a0a; border: 1px solid #ef4444; color: #fca5a5;
+    margin-top: 5px; font-size: 12px; text-transform: uppercase;
+}
+.dismiss-btn:hover { background: #991b1b; color: white; border-color:white; }
+
+@keyframes bounceIn { 
+    0% { transform: translate(-50%, -100%) scale(0.5); opacity:0; } 
+    100% { transform: translate(-50%, 0) scale(1); opacity:1; } 
+}
 
 .feedback-box {
     border: 1px solid #a855f7; background: #2e1065; color: #e9d5ff;
@@ -156,6 +195,13 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 <body>
 <div class="app">
+
+<div id="rejectedPopup" class="rejected-popup hidden">
+    <h2>× REJECTED</h2>
+    <div class="rejected-line"></div>
+    <p id="rejectedMsg">Admin: "not allowed"</p>
+    <button class="dismiss-btn" onclick="dismissRejected()">Dismiss</button>
+</div>
 
 <div class="sidebar">
   <h2>SECURE WATCHDOG</h2>
@@ -399,7 +445,9 @@ async function handleLoginFlow() {
 }
 
 function forceLogout() {
-    signOut(auth).then(() => location.reload());
+    if(confirm("Are you sure you want to Logout?")) {
+        signOut(auth).then(() => location.reload());
+    }
 }
 
 // ==========================================
@@ -439,7 +487,10 @@ function startAdminListener() {
                 let isLocked = false;
                 if(u.lockout && u.lockout > Date.now()) isLocked = true;
 
-                // 2. Progress Stats
+                // 2. Alert Status
+                let isAlerted = u.activeAlert ? true : false;
+
+                // 3. Progress Stats
                 let progHtml = `<div style="color:#64748b; font-size:11px;">No Data</div>`;
                 if(u.stats) {
                     let color = "#ef4444";
@@ -453,7 +504,7 @@ function startAdminListener() {
                     `;
                 }
 
-                // 3. Leave Status (Only show PENDING requests in the Dashboard)
+                // 4. Leave Status
                 let leaveBadge = `<span style="color:#64748b; font-size:11px;">Active Student</span>`;
                 let leaveActions = "";
                 
@@ -466,7 +517,6 @@ function startAdminListener() {
                         <button style="background:#991b1b" onclick="handleLeave('${uid}', 'Rejected')">Reject</button>
                     `;
                 } else if (u.leaveRequest) {
-                    // It is processed, don't clutter dashboard, just show small status
                     const s = u.leaveRequest.status;
                     const c = s === "Approved" ? "#86efac" : "#fca5a5";
                     leaveBadge = `<span style="color:${c}; font-size:11px;">On Leave (${s})</span>`;
@@ -476,8 +526,11 @@ function startAdminListener() {
                     const timeLeft = Math.ceil((u.lockout - Date.now())/1000/60);
                     leaveBadge += ` <span class="admin-badge badge-red">LOCKED (${timeLeft}m)</span>`;
                 }
+                if(isAlerted) {
+                    leaveBadge += ` <span class="admin-badge badge-red" style="background:#450a0a; border:1px solid #ef4444">⚠ REJECT SENT</span>`;
+                }
 
-                // 4. Render Row
+                // 5. Render Row
                 html += `
                 <div class="admin-row">
                     <div>
@@ -495,7 +548,8 @@ function startAdminListener() {
 
                     <div class="admin-btn-group">
                         ${leaveActions}
-                        <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs & History</button>
+                        <button style="background:#be123c; margin-top:4px;" onclick="sendWarning('${uid}')">⚠ Warn</button>
+                        <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
                         <button style="background:#ea580c; margin-top:4px;" onclick="terminateStudent('${uid}')">Lock / Terminate</button>
                         ${isLocked ? `<button style="background:#22c55e; margin-top:4px;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
                     </div>
@@ -508,6 +562,19 @@ function startAdminListener() {
         }
     });
 }
+
+// --- ADMIN WARNING SYSTEM (STRICT CONFIRM) ---
+window.sendWarning = async function(uid) {
+    const msg = prompt("Enter REJECT/WARNING Message for Student:", "not allowed");
+    if(!msg) return;
+
+    if(!confirm(`CONFIRM ACTION AT A GLANCE:\n\nSend Warning: "${msg}"\nTo Student ID: ${uid}?\n\nThis will trigger the Red Alert on their screen immediately.`)) return;
+
+    try {
+        await update(ref(db, `users/${uid}`), { activeAlert: msg });
+        alert("Warning sent. Student must dismiss it.");
+    } catch(e) { alert("Error sending warning: " + e.message); }
+};
 
 // --- ADMIN MODAL & HISTORY INSPECTOR ---
 window.currentAdminUid = null;
@@ -529,11 +596,9 @@ window.openAdminModal = async function(uid, email) {
         const snapshot = await get(child(ref(db), `users/${uid}`));
         const user = snapshot.val() || {};
         
-        // 1. Render Logs (Last 14 data entries allow delete)
         let logs = JSON.parse(user.LOGS || "[]");
         renderAdminLogs(uid, logs);
 
-        // 2. Render History (Last 10 Days)
         let history = JSON.parse(user.HISTORY || "[]");
         renderAdminHistory(uid, history);
 
@@ -567,7 +632,6 @@ window.renderAdminLogs = function(uid, logs) {
         return;
     }
     
-    // Only show last 20 for performance, but calculate delete index correctly
     let displayLogs = logs.slice(Math.max(0, logs.length - 20));
     let startIndex = Math.max(0, logs.length - 20);
 
@@ -580,9 +644,7 @@ window.renderAdminLogs = function(uid, logs) {
                 return `<div style="font-size:10px; color:#86efac">${item.name}</div>`;
              }).join("");
         }
-        
         let trueIndex = startIndex + i; 
-        
         html += `
         <div class="log-row">
             <div>${log.login}</div>
@@ -601,20 +663,14 @@ window.renderAdminHistory = function(uid, history) {
         body.innerHTML = "<tr><td colspan='5'>No Daily Reports yet.</td></tr>";
         return;
     }
-
-    // Enforce Last 10 Days View
     let displayHist = history.slice(Math.max(0, history.length - 10)).reverse();
     let html = "";
-
     displayHist.forEach((entry, idx) => {
-        // Correct index for updating the specific entry in the full array
         let trueIdx = history.length - 1 - idx; 
-        
         let reviewBtn = `<button onclick="addAdminReview('${uid}', ${trueIdx})" style="width:auto; padding:5px; font-size:10px; background:#a855f7;">Add Review</button>`;
         if (entry.adminReview) {
             reviewBtn = `<div style="font-size:11px; color:#e9d5ff; font-style:italic;">"${entry.adminReview}"</div>`;
         }
-
         html += `
             <tr>
                 <td>${entry.date}</td>
@@ -631,6 +687,8 @@ window.renderAdminHistory = function(uid, history) {
 window.addAdminReview = async function(uid, index) {
     const comment = prompt("Enter Daily Review/Feedback for this student:");
     if (!comment) return;
+    
+    if(!confirm(`CONFIRM REVIEW:\n\n"${comment}"\n\nPublish this to student history?`)) return;
 
     try {
         const snapshot = await get(child(ref(db), `users/${uid}/HISTORY`));
@@ -640,17 +698,16 @@ window.addAdminReview = async function(uid, index) {
             history[index].adminReview = comment;
             await update(ref(db, `users/${uid}`), { 
                 HISTORY: JSON.stringify(history),
-                newFeedback: comment // Flag for student popup
+                newFeedback: comment 
             });
-            alert("Review saved.");
-            // Refresh Modal
+            alert("Review published.");
             openAdminModal(uid, "");
         }
     } catch(e) { alert("Error: " + e.message); }
 };
 
 window.deleteLogEntry = async function(uid, index) {
-    if(!confirm("Delete this log entry?")) return;
+    if(!confirm("CONFIRM DELETION:\n\nAre you sure you want to permanently delete this log entry?\nThis cannot be undone.")) return;
     try {
         const snapshot = await get(child(ref(db), `users/${uid}/LOGS`));
         let logs = JSON.parse(snapshot.val() || "[]");
@@ -664,9 +721,9 @@ window.closeAdminModal = function() {
     document.getElementById("adminModal").classList.add("hidden");
 };
 
-// --- ADMIN ACTIONS ---
+// --- ADMIN ACTIONS (STRICT CONFIRM) ---
 window.handleLeave = async function(uid, decision) {
-    if (!confirm(`Confirm Action: ${decision}? This will update the student's panel.`)) return;
+    if (!confirm(`CONFIRM LEAVE DECISION:\n\nAction: ${decision}\nStudent ID: ${uid}\n\nProceed?`)) return;
     
     const comment = prompt(`Add Comment for ${decision}:`, "Admin reviewed.");
     if(!comment) return;
@@ -677,9 +734,7 @@ window.handleLeave = async function(uid, decision) {
             adminComment: comment,
             decisionTime: Date.now()
         });
-        // Note: We do NOT delete the request node, we just update status. 
-        // The listener filters non-pending requests from the main view.
-        alert(`Leave ${decision}. Removed from active list.`);
+        alert(`Leave ${decision}.`);
     } catch(e) { alert("Error: " + e.message); }
 };
 
@@ -690,6 +745,8 @@ window.terminateStudent = async function(uid) {
     const reason = prompt("Enter Reason for Termination:");
     if(!reason) return;
     
+    if(!confirm(`CRITICAL CONFIRMATION:\n\nLockout Student: ${uid}\nDuration: ${hours} hours\nReason: ${reason}\n\nThis will block their access immediately. Proceed?`)) return;
+
     const lockTime = Date.now() + (parseFloat(hours) * 60 * 60 * 1000);
     try {
         await update(ref(db, `users/${uid}`), { 
@@ -701,7 +758,7 @@ window.terminateStudent = async function(uid) {
 };
 
 window.unlockStudent = async function(uid) {
-    if(confirm("Unlock Student?")) {
+    if(confirm(`Unlock Student ${uid} and restore access?`)) {
         try {
             await remove(ref(db, `users/${uid}/lockout`));
             await remove(ref(db, `users/${uid}/lockoutReason`));
@@ -717,6 +774,20 @@ async function initStudentDashboard() {
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
+
+    // --- SETUP LIVE LISTENER FOR WARNINGS ---
+    onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
+        const msg = snapshot.val();
+        const popup = document.getElementById("rejectedPopup");
+        const popupTxt = document.getElementById("rejectedMsg");
+        
+        if (msg) {
+            popupTxt.innerText = `Admin: "${msg}"`;
+            popup.classList.remove("hidden");
+        } else {
+            popup.classList.add("hidden");
+        }
+    });
 
     const serverData = await downloadData(currentUser.uid);
     
@@ -737,8 +808,6 @@ async function initStudentDashboard() {
     if (serverData.newFeedback) {
         document.getElementById("adminFeedbackBox").classList.remove("hidden");
         document.getElementById("adminFeedbackText").innerText = `"${serverData.newFeedback}"`;
-        // Clear the flag locally so it doesn't pop up again immediately if we reload, 
-        // though strictly we should delete it from DB on dismiss.
     }
 
     checkLeaveStatus();
@@ -808,6 +877,14 @@ window.dismissFeedback = async function() {
     }
 }
 
+// --- ALERT DISMISS ---
+window.dismissRejected = async function() {
+    if(!currentUser) return;
+    // Remove warning from DB
+    await remove(ref(db, `users/${currentUser.uid}/activeAlert`));
+    // UI will auto-hide via listener
+}
+
 // --- STUDENT LEAVE FUNCTIONS ---
 async function requestLeave() {
     const dates = prompt("Enter Dates (e.g., Dec 31 - Jan 2):");
@@ -815,6 +892,8 @@ async function requestLeave() {
     const reason = prompt("Enter Reason:");
     if(!reason) return;
     
+    if(!confirm(`CONFIRM REQUEST:\n\nLeave for: ${dates}\nReason: ${reason}\n\nSend to Admin?`)) return;
+
     const payload = {
         dates: dates,
         reason: reason,
@@ -856,7 +935,7 @@ function checkLeaveStatus() {
         if (req.adminComment) {
              statusText += `<div style="margin-top:5px; border-top:1px solid rgba(255,255,255,0.2); padding-top:4px; color:#e2e8f0; font-size:12px; font-style:italic">Admin: "${req.adminComment}"</div>`;
         }
-             
+              
         box.innerHTML = statusText;
 
     } else {
@@ -941,7 +1020,6 @@ function toggleHistory() {
         logBox.classList.add("hidden");
 
         let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
-        // Limit to last 10
         history = history.slice(Math.max(0, history.length - 10)).reverse();
 
         const tbody = document.getElementById("historyTable");
@@ -1131,6 +1209,8 @@ function startMockTestSetup() {
     return;
   }
 
+  if(!confirm(`CONFIRM MOCK TEST:\n\nName: ${name}\nMarks: ${fullMarks}\nDuration: ${durationMins} mins\n\nStart now?`)) return;
+
   const testState = {
     name: name,
     fullMarks: fullMarks,
@@ -1229,7 +1309,7 @@ function finishTestSequence(testState, loadDashboard = false) {
   }
 }
 
-// --- STANDARD TASK SYSTEM ---
+// --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
 function setupTasks() {
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const next = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
@@ -1318,7 +1398,12 @@ function loadTasks() {
     };
     updateLabel();
     cb.onchange = () => {
-      if (!confirm("Confirm task completion?")) { cb.checked = !cb.checked; return; }
+      // STRICT CONFIRMATION
+      if (!confirm(`CONFIRM TASK:\n\nMark '${t.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) { 
+          cb.checked = !cb.checked; 
+          return; 
+      }
+      
       if(cb.checked){
         const remark = prompt(`Comment for ${t.name}?`, "Done");
         const dueVal = prompt(`Any pending work/marks left for ${t.name}?`, "None");
@@ -1350,7 +1435,10 @@ function loadTasks() {
     };
     updateLabel();
     cb.onchange = () => {
-      if (!confirm("Confirm extra work completion?")) { cb.checked = !cb.checked; return; }
+      if (!confirm(`CONFIRM EXTRA WORK:\n\nMark '${e.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) { 
+          cb.checked = !cb.checked; 
+          return; 
+      }
       if(cb.checked){
         const remark = prompt(`Comment for ${e.name}?`, "Done");
         const dueVal = prompt(`Any pending work/marks left for ${e.name}?`, "None");
@@ -1427,6 +1515,8 @@ function openDayEnd() {
 }
 
 function finalDayEnd() {
+  if(!confirm("CONFIRM DAY END:\n\nAre you sure you want to close today's session and save the report?")) return;
+
   const next = [];
   for (let i = 0; i < 7; i++) {
     const el = document.getElementById("nd" + i);
@@ -1461,12 +1551,12 @@ function finalDayEnd() {
       rating: getLabel(p.percent),
       time: timeStr,
       subjects: subjectsCovered || "No Tasks Completed",
-      adminReview: null // Placeholder for admin feedback
+      adminReview: null 
   };
   
   let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
   history.push(historyEntry);
-  if (history.length > 20) history.shift(); // Keep reasonable local storage, UI slices last 10
+  if (history.length > 20) history.shift(); 
   localStorage.setItem(key("HISTORY"), JSON.stringify(history));
 
   const doneReportItems = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
@@ -1589,6 +1679,8 @@ window.switchAdminTab = window.switchAdminTab;
 window.addAdminReview = window.addAdminReview;
 window.terminateStudent = window.terminateStudent;
 window.dismissFeedback = window.dismissFeedback;
+window.sendWarning = window.sendWarning;
+window.dismissRejected = window.dismissRejected;
 </script>
 </body>
 </html>
