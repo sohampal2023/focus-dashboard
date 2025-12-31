@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V19 (Soft Delete + Sync)</title>
+<title>Focus Watchdog V20 (Timeout Counter)</title>
 
 <style>
 /* --- BASE STYLES --- */
@@ -50,6 +50,14 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 }
 .timer-time { font-size: 22px; font-weight: 800; color: #f8fafc; line-height: 1; }
 .timer-sub { font-size: 10px; color: #94a3b8; margin-top: 2px; text-transform: uppercase; }
+
+/* TIMEOUT COUNTER STYLE */
+.timeout-display {
+    font-size: 11px; font-weight: bold; color: #ef4444; 
+    margin-top: 8px; background: #450a0a; 
+    padding: 2px 8px; border-radius: 4px; display: inline-block;
+    border: 1px solid #7f1d1d;
+}
 
 @keyframes pulse-red {
     0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
@@ -236,8 +244,9 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
             </div>
         </div>
         <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
+        <div id="timeoutCounter" class="timeout-display">Timeouts: 0</div>
       </div>
-       
+        
       <button id="leaveBtn" onclick="requestLeave()">Request Leave</button>
       <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
       <button id="histBtn" onclick="toggleHistory()" disabled>History</button>
@@ -261,7 +270,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         <div>Student ID</div>
         <div style="text-align:center">Balance</div>
         <div style="text-align:center">Progress</div>
-        <div style="text-align:center">Leave Status</div>
+        <div style="text-align:center">Status / Watchdog</div>
         <div style="text-align:center">Actions</div>
     </div>
     <div id="studentList">Loading...</div>
@@ -410,8 +419,9 @@ let idleTimer = null;
 let targetTime = null;
 let totalDuration = 0;
 let penalty = 0;
-let idleStrikes = 0;
-let lastApprovedState = false; // State tracker for popup
+let idleStrikes = 0; // Current active strikes (resets on Bio Break)
+let dailyTimeouts = 0; // Cumulative total for the day (Only resets on Day End)
+let lastApprovedState = false; 
 const ADMIN_EMAIL = "admin@study.com";
 
 // --- WHITELIST ---
@@ -501,20 +511,15 @@ async function cleanupDeletedData() {
         
         Object.keys(users).forEach(async (uid) => {
             const u = users[uid];
-            let changed = false;
-            
             // Clean Logs
             if (u.LOGS) {
                 let logs = JSON.parse(u.LOGS);
                 const originalLen = logs.length;
-                // Keep if NOT deleted OR deleted recently
                 logs = logs.filter(l => !l.deleted || (Date.now() - l.deletedTs < RETENTION_MS));
                 if (logs.length !== originalLen) {
                     await update(ref(db, `users/${uid}`), { LOGS: JSON.stringify(logs) });
                 }
             }
-            
-            // Clean History (Similar logic if history had delete flags)
         });
     } catch(e) { console.error("Cleanup error", e); }
 }
@@ -576,8 +581,6 @@ function startAdminListener() {
                     const s = u.leaveRequest.status;
                     const c = s === "Approved" ? "#86efac" : "#fca5a5";
                     leaveBadge = `<span style="color:${c}; font-size:11px;">On Leave (${s})</span>`;
-                    
-                    // Add Clear Button for processed requests
                     clearBtn = `<button onclick="clearLeave('${uid}')" style="background:#334155; padding:2px 6px; font-size:10px; margin-left:5px; width:auto; display:inline-block">Clear</button>`;
                 }
 
@@ -587,6 +590,15 @@ function startAdminListener() {
                 }
                 if(isAlerted) {
                     leaveBadge += ` <span class="admin-badge badge-red" style="background:#450a0a; border:1px solid #ef4444">⚠ REJECT SENT</span>`;
+                }
+
+                // --- NEW WATCHDOG TIMEOUT DISPLAY ---
+                let watchdogHtml = "";
+                const timeouts = u.DAILY_TIMEOUTS || 0;
+                if(timeouts > 0) {
+                     watchdogHtml = `<div style="margin-top:4px;"><span class="admin-badge badge-red">TIMEOUTS: ${timeouts}</span></div>`;
+                } else {
+                     watchdogHtml = `<div style="margin-top:4px;"><span class="admin-badge badge-green">WATCHDOG: OK</span></div>`;
                 }
 
                 // 6. Render Row
@@ -606,6 +618,7 @@ function startAdminListener() {
                     <div style="text-align:center">
                         ${leaveBadge}
                         ${clearBtn}
+                        ${watchdogHtml}
                     </div>
 
                     <div class="admin-btn-group">
@@ -949,7 +962,11 @@ async function initStudentDashboard() {
 
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+    dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); // LOAD TIMEOUTS
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+
+    // Init Timeout UI
+    document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
 
     if (logs.length) {
         const lastLog = logs[logs.length - 1];
@@ -1140,6 +1157,7 @@ async function downloadData(uid) {
             if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
             
             localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
+            localStorage.setItem(key("DAILY_TIMEOUTS"), data.DAILY_TIMEOUTS || "0"); // DOWNLOAD TIMEOUTS
             localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
             
             syncStatus.innerText = "Online";
@@ -1170,6 +1188,7 @@ function uploadData() {
         NEXT_TASKS: localStorage.getItem(key("NEXT_TASKS")),
         HISTORY: localStorage.getItem(key("HISTORY")), 
         IDLE_STRIKES: localStorage.getItem(key("IDLE_STRIKES")),
+        DAILY_TIMEOUTS: localStorage.getItem(key("DAILY_TIMEOUTS")), // UPLOAD TIMEOUTS
         PENALTY: localStorage.getItem(key("PENALTY"))
     };
 
@@ -1324,6 +1343,12 @@ function autoLogout() {
 
   let currentStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
   currentStrikes++;
+  
+  // --- NEW: INCREMENT DAILY TIMEOUT COUNTER ---
+  let dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0");
+  dailyTimeouts++;
+  localStorage.setItem(key("DAILY_TIMEOUTS"), dailyTimeouts);
+  document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
   
   if(currentStrikes >= 2) {
     let currentPenalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
@@ -1754,6 +1779,7 @@ function finalDayEnd() {
   localStorage.removeItem(key("TEST_STATE"));
   
   localStorage.setItem(key("IDLE_STRIKES"), "0");
+  localStorage.setItem(key("DAILY_TIMEOUTS"), "0"); // RESET TIMEOUTS
   localStorage.setItem(key("PENALTY"), "0");
   
   uploadData(); 
@@ -1821,31 +1847,31 @@ function renderLogs() {
 }
 
 // --- ATTACH TO WINDOW ---
-window.handleLoginFlow = handleLoginFlow;
-window.resetWatchdog = resetWatchdog;
-window.bioBreak = bioBreak;
-window.openDayEnd = openDayEnd;
-window.finalDayEnd = finalDayEnd;
-window.startMockTestSetup = startMockTestSetup;
-window.triggerEndTest = triggerEndTest;
-window.addExtra = addExtra;
-window.toggleHistory = toggleHistory;
-window.requestLeave = requestLeave;
-window.forceLogout = forceLogout;
-window.handleLeave = window.handleLeave;
-window.openAdminModal = window.openAdminModal;
-window.deleteLogEntry = window.deleteLogEntry;
-window.closeAdminModal = window.closeAdminModal;
-window.unlockStudent = window.unlockStudent;
-window.switchAdminTab = window.switchAdminTab;
-window.addAdminReview = window.addAdminReview;
-window.terminateStudent = window.terminateStudent;
-window.dismissFeedback = window.dismissFeedback;
-window.sendWarning = window.sendWarning;
-window.dismissRejected = window.dismissRejected;
-window.clearLeave = window.clearLeave;
-window.dismissLeaveStatus = window.dismissLeaveStatus;
-window.resetLeaveBalance = window.resetLeaveBalance;
-</script>
+    window.handleLoginFlow = handleLoginFlow;
+    window.resetWatchdog = resetWatchdog;
+    window.bioBreak = bioBreak;
+    window.openDayEnd = openDayEnd;
+    window.finalDayEnd = finalDayEnd;
+    window.startMockTestSetup = startMockTestSetup;
+    window.triggerEndTest = triggerEndTest;
+    window.addExtra = addExtra;
+    window.toggleHistory = toggleHistory;
+    window.requestLeave = requestLeave;
+    window.forceLogout = forceLogout;
+    window.handleLeave = window.handleLeave;
+    window.openAdminModal = window.openAdminModal;
+    window.deleteLogEntry = window.deleteLogEntry;
+    window.closeAdminModal = window.closeAdminModal;
+    window.unlockStudent = window.unlockStudent;
+    window.switchAdminTab = window.switchAdminTab;
+    window.addAdminReview = window.addAdminReview;
+    window.terminateStudent = window.terminateStudent;
+    window.dismissFeedback = window.dismissFeedback;
+    window.sendWarning = window.sendWarning;
+    window.dismissRejected = window.dismissRejected;
+    window.clearLeave = window.clearLeave;
+    window.dismissLeaveStatus = window.dismissLeaveStatus;
+    window.resetLeaveBalance = window.resetLeaveBalance;
+  </script>
 </body>
 </html>
