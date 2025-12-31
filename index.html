@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V18 (Clean UI + Leave Logic)</title>
+<title>Focus Watchdog V19 (Soft Delete + Sync)</title>
 
 <style>
 /* --- BASE STYLES --- */
@@ -192,6 +192,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 .leave-status-box {
     border: 1px solid #3b82f6; background: #172554; color: #dbeafe;
     padding: 15px; border-radius: 8px; margin-bottom: 20px;
+    position: relative;
 }
 .leave-status-approved { border-color: #22c55e; background: #064e3b; color: #dcfce7; }
 .leave-status-half { border-color: #eab308; background: #422006; color: #fef08a; }
@@ -236,7 +237,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         </div>
         <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
       </div>
-      
+       
       <button id="leaveBtn" onclick="requestLeave()">Request Leave</button>
       <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
       <button id="histBtn" onclick="toggleHistory()" disabled>History</button>
@@ -309,7 +310,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     </div>
 
     <div id="leaveDashboardBox" class="hidden">
-        </div>
+    </div>
 
     <div id="historyBox" class="card hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
@@ -486,7 +487,36 @@ async function initAdminDashboard() {
     document.getElementById("adminBox").classList.remove("hidden");
     
     document.getElementById("syncStatus").innerText = "Admin Access Granted";
+    cleanupDeletedData(); // Run soft-delete cleanup
     startAdminListener();
+}
+
+async function cleanupDeletedData() {
+    // 5 Day Retention Policy
+    const RETENTION_MS = 5 * 24 * 60 * 60 * 1000;
+    try {
+        const snapshot = await get(ref(db, 'users'));
+        if (!snapshot.exists()) return;
+        const users = snapshot.val();
+        
+        Object.keys(users).forEach(async (uid) => {
+            const u = users[uid];
+            let changed = false;
+            
+            // Clean Logs
+            if (u.LOGS) {
+                let logs = JSON.parse(u.LOGS);
+                const originalLen = logs.length;
+                // Keep if NOT deleted OR deleted recently
+                logs = logs.filter(l => !l.deleted || (Date.now() - l.deletedTs < RETENTION_MS));
+                if (logs.length !== originalLen) {
+                    await update(ref(db, `users/${uid}`), { LOGS: JSON.stringify(logs) });
+                }
+            }
+            
+            // Clean History (Similar logic if history had delete flags)
+        });
+    } catch(e) { console.error("Cleanup error", e); }
 }
 
 function startAdminListener() {
@@ -583,6 +613,7 @@ function startAdminListener() {
                         <button style="background:#be123c; margin-top:4px;" onclick="sendWarning('${uid}')">⚠ Warn</button>
                         <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
                         <button style="background:#ea580c; margin-top:4px;" onclick="terminateStudent('${uid}')">Lock / Terminate</button>
+                        <button style="background:#0891b2; margin-top:4px;" onclick="resetLeaveBalance('${uid}')">Reset Balance (6)</button>
                         ${isLocked ? `<button style="background:#22c55e; margin-top:4px;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
                     </div>
                 </div>`;
@@ -659,16 +690,18 @@ window.switchAdminTab = function(tabName) {
 
 window.renderAdminLogs = function(uid, logs) {
     const body = document.getElementById("modalBodyLogs");
-    if(!logs || logs.length === 0) {
+    // FILTER DELETED LOGS FROM VIEW
+    const visibleLogs = logs.filter(l => !l.deleted);
+    
+    if(!visibleLogs || visibleLogs.length === 0) {
         body.innerHTML = "Log history is empty.";
         return;
     }
     
-    let displayLogs = logs.slice(Math.max(0, logs.length - 20));
-    let startIndex = Math.max(0, logs.length - 20);
+    let displayLogs = visibleLogs.slice(Math.max(0, visibleLogs.length - 20));
 
     let html = ``;
-    displayLogs.forEach((log, i) => {
+    displayLogs.forEach((log) => {
         let workHtml = "-";
         if(log.completed && log.completed.length > 0) {
              workHtml = log.completed.map(item => {
@@ -676,7 +709,10 @@ window.renderAdminLogs = function(uid, logs) {
                 return `<div style="font-size:10px; color:#86efac">${item.name}</div>`;
              }).join("");
         }
-        let trueIndex = startIndex + i; 
+        
+        // Find true index in original array for deletion
+        const trueIndex = logs.indexOf(log);
+
         html += `
         <div class="log-row">
             <div>${log.login}</div>
@@ -691,11 +727,12 @@ window.renderAdminLogs = function(uid, logs) {
 
 window.renderAdminHistory = function(uid, history) {
     const body = document.getElementById("modalBodyHistory");
+    // Filter logic if history had deletion capability
     if (!history || history.length === 0) {
         body.innerHTML = "<tr><td colspan='5'>No Daily Reports yet.</td></tr>";
         return;
     }
-    // Only show last 4 days as per db limit, but safeguard rendering
+    
     let displayHist = history.slice(Math.max(0, history.length - 10)).reverse();
     let html = "";
     displayHist.forEach((entry, idx) => {
@@ -744,11 +781,17 @@ window.addAdminReview = async function(uid, index) {
 };
 
 window.deleteLogEntry = async function(uid, index) {
-    if(!confirm("CONFIRM DELETION:\n\nAre you sure you want to permanently delete this log entry?")) return;
+    if(!confirm("CONFIRM DELETION:\n\nAre you sure you want to delete this log entry? It will vanish from the student view immediately.")) return;
     try {
         const snapshot = await get(child(ref(db), `users/${uid}/LOGS`));
         let logs = JSON.parse(snapshot.val() || "[]");
-        logs.splice(index, 1);
+        
+        // SOFT DELETE LOGIC
+        if(logs[index]) {
+            logs[index].deleted = true;
+            logs[index].deletedTs = Date.now();
+        }
+        
         await update(ref(db, `users/${uid}`), { LOGS: JSON.stringify(logs) });
         openAdminModal(uid, "");
     } catch(e) { alert("Error deleting log: " + e.message); }
@@ -759,6 +802,14 @@ window.closeAdminModal = function() {
 };
 
 // --- ADMIN ACTIONS (STRICT CONFIRM) ---
+window.resetLeaveBalance = async function(uid) {
+    if(!confirm(`RESET BALANCE:\n\nSet leave balance back to 6 days for student ${uid}?`)) return;
+    try {
+        await update(ref(db, `users/${uid}`), { leaveBalance: 6 });
+        alert("Balance reset to 6.");
+    } catch(e) { alert("Error: " + e.message); }
+}
+
 window.handleLeave = async function(uid, decision, currentBalance) {
     if (!confirm(`CONFIRM LEAVE DECISION:\n\nAction: ${decision}\nStudent ID: ${uid}\nCurrent Balance: ${currentBalance} days\n\nProceed?`)) return;
     
@@ -1001,6 +1052,7 @@ function checkLeaveStatus(data) {
         
         let statusTitle = "LEAVE REQUEST STATUS";
         let statusColorClass = "";
+        let showDismiss = false;
         
         if (req.status === "Pending") {
              statusTitle = "⚠ LEAVE PENDING";
@@ -1008,6 +1060,7 @@ function checkLeaveStatus(data) {
         } else if (req.status === "Approved") {
              statusTitle = "✔ LEAVE APPROVED";
              statusColorClass = "leave-status-approved";
+             showDismiss = true;
              
              // Trigger popup only once per session if approved
              if (!lastApprovedState) {
@@ -1017,9 +1070,11 @@ function checkLeaveStatus(data) {
         } else if (req.status === "Half Approved") {
              statusTitle = "⚠ HALF APPROVED";
              statusColorClass = "leave-status-half";
+             showDismiss = true;
         } else if (req.status === "Rejected") {
              statusTitle = "✖ LEAVE REJECTED";
              statusColorClass = "leave-status-rejected";
+             showDismiss = true;
         }
         
         dashboardBox.classList.add(statusColorClass);
@@ -1029,12 +1084,27 @@ function checkLeaveStatus(data) {
         if(req.adminComment) {
             html += `<div style="margin-top:5px; padding-top:5px; border-top:1px solid rgba(255,255,255,0.2); font-style:italic">Admin: "${req.adminComment}"</div>`;
         }
+        
+        // Add Dismiss Button for Student
+        if(showDismiss) {
+            html += `<button onclick="dismissLeaveStatus()" style="width:auto; margin-top:10px; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); font-size:11px;">Dismiss Status</button>`;
+        }
+
         dashboardBox.innerHTML = html;
 
     } else {
         dashboardBox.classList.add("hidden");
         lastApprovedState = false; 
     }
+}
+
+window.dismissLeaveStatus = async function() {
+    // Effectively clears the request so the student is 'Clean' again
+    if(!currentUser) return;
+    try {
+        await remove(ref(db, `users/${currentUser.uid}/leaveRequest`));
+        document.getElementById("leaveDashboardBox").classList.add("hidden");
+    } catch(e) { alert("Connection Error"); }
 }
 
 function showApprovedPopup(dates, comment) {
@@ -1722,7 +1792,11 @@ function renderLogs() {
   const tbody = document.getElementById("logTable");
   if(!tbody) return;
   tbody.innerHTML = "";
+  
   logs.forEach(l => {
+    // HIDE DELETED LOGS FROM STUDENT VIEW
+    if(l.deleted) return;
+
     let workHtml = "-";
     if (l.completed && l.completed.length) {
       workHtml = l.completed.map(item => {
@@ -1770,6 +1844,8 @@ window.dismissFeedback = window.dismissFeedback;
 window.sendWarning = window.sendWarning;
 window.dismissRejected = window.dismissRejected;
 window.clearLeave = window.clearLeave;
+window.dismissLeaveStatus = window.dismissLeaveStatus;
+window.resetLeaveBalance = window.resetLeaveBalance;
 </script>
 </body>
 </html>
