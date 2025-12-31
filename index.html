@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V11 (Real-Time Live)</title>
+<title>Focus Watchdog V12 (Admin Integrated)</title>
 
 <style>
 *{box-sizing:border-box}
@@ -74,7 +74,7 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 
 /* ADMIN PANEL STYLES */
 .admin-row {
-    display: grid; grid-template-columns: 2fr 1.5fr 2fr 1.5fr; gap:10px; align-items: start;
+    display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 1.5fr; gap:10px; align-items: start;
     padding: 15px; border-bottom: 1px solid #334155; background: #0f172a; margin-bottom:5px; border-radius:8px;
 }
 .admin-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; display:inline-block; margin-bottom:4px; }
@@ -91,16 +91,20 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 /* ADMIN MODAL */
 .modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0, 0, 0, 0.8); z-index: 1000;
+    background: rgba(0, 0, 0, 0.9); z-index: 1000;
     display: flex; justify-content: center; align-items: center;
 }
 .modal-content {
     background: #0f172a; border: 1px solid #334155; border-radius: 12px;
-    width: 700px; max-height: 80vh; overflow-y: auto; padding: 20px;
+    width: 800px; max-height: 90vh; overflow-y: auto; padding: 20px;
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
 }
+.tab-header { display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+.tab-btn { background: transparent; border: none; color: #94a3b8; padding: 8px 16px; border-radius: 6px; cursor: pointer; width: auto; margin:0;}
+.tab-btn.active { background: #1e293b; color: #38bdf8; font-weight: bold; }
+
 .log-row {
-    display: grid; grid-template-columns: 1fr 1fr 1fr 2fr 80px; gap: 10px;
+    display: grid; grid-template-columns: 1fr 1fr 1fr 2fr 50px; gap: 10px;
     padding: 10px; border-bottom: 1px dashed #334155; font-size: 12px;
     align-items: start;
 }
@@ -111,7 +115,6 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 .leave-banner {
     background: #312e81; color: #c7d2fe; padding: 10px;
     border-radius: 8px; margin-bottom: 10px; text-align: center; font-size: 13px; border:1px solid #6366f1;
-    transition: opacity 1s ease-out;
 }
 
 /* SPEEDOMETER */
@@ -143,6 +146,11 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 .sync-status { font-size: 10px; color: #64748b; text-align: center; margin-top:5px; }
 .nextInput{ width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #334155; background:#020617; color:#e5e7eb; }
+
+.feedback-box {
+    border: 1px solid #a855f7; background: #2e1065; color: #e9d5ff;
+    padding: 15px; border-radius: 8px; margin-bottom: 20px;
+}
 </style>
 </head>
 
@@ -191,7 +199,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     <div style="text-align:right; margin-bottom:10px; font-size:12px; color:#4ade80">
         ● Live System Active
     </div>
-    <div style="display:grid; grid-template-columns: 2fr 1.5fr 2fr 1.5fr; gap:10px; padding:10px; color:#94a3b8; font-size:12px; font-weight:bold; text-transform:uppercase;">
+    <div style="display:grid; grid-template-columns: 2fr 1.5fr 1.5fr 1.5fr; gap:10px; padding:10px; color:#94a3b8; font-size:12px; font-weight:bold; text-transform:uppercase;">
         <div>Student ID</div>
         <div style="text-align:center">Live Progress</div>
         <div style="text-align:center">Leave Status</div>
@@ -202,25 +210,50 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 <div id="adminModal" class="modal-overlay hidden">
     <div class="modal-content">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; border-bottom:1px solid #334155; padding-bottom:10px;">
-            <h3 style="margin:0; color:#38bdf8">Student Logs (Last 10 Entries)</h3>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+            <h3 style="margin:0; color:#38bdf8">Student Detailed Records</h3>
             <button onclick="closeAdminModal()" style="width:auto; padding:5px 10px; background:#334155">Close</button>
         </div>
-        <div class="log-row log-header">
-            <div>Login</div>
-            <div>Logout</div>
-            <div>Reason</div>
-            <div>Work Completed</div>
-            <div>Action</div>
+        
+        <div class="tab-header">
+            <button class="tab-btn active" onclick="switchAdminTab('logs')">Live Logs</button>
+            <button class="tab-btn" onclick="switchAdminTab('history')">Performance History</button>
         </div>
-        <div id="modalBody">Loading...</div>
+
+        <div id="tabLogs">
+             <div class="log-row log-header">
+                <div>Login</div>
+                <div>Logout</div>
+                <div>Reason</div>
+                <div>Work Completed</div>
+                <div>Action</div>
+            </div>
+            <div id="modalBodyLogs">Loading...</div>
+        </div>
+
+        <div id="tabHistory" class="hidden">
+            <p style="font-size:12px; color:#94a3b8">Displaying Last 10 Days.</p>
+            <table style="width:100%">
+                <thead>
+                    <tr><th>Date</th><th>Score</th><th>Time</th><th>Rating</th><th>Admin Review</th></tr>
+                </thead>
+                <tbody id="modalBodyHistory"></tbody>
+            </table>
+        </div>
     </div>
 </div>
 
 <div id="studentView">
+    
+    <div id="adminFeedbackBox" class="feedback-box hidden">
+        <h3 style="margin:0 0 5px 0; color:#fff">Admin Daily Review</h3>
+        <div id="adminFeedbackText" style="font-style:italic"></div>
+        <button onclick="dismissFeedback()" style="width:auto; margin-top:10px; background:#6b21a8; font-size:11px;">Dismiss</button>
+    </div>
+
     <div id="historyBox" class="card hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
-            <h3 style="color:#7dd3fc">History (Protected)</h3>
+            <h3 style="color:#7dd3fc">History (Last 10 Days)</h3>
             <button onclick="toggleHistory()" style="width:auto; padding:5px 15px;">Close</button>
         </div>
         <table>
@@ -264,7 +297,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     </div>
 
     <div id="logBox" class="card hidden">
-      <h3>Login / Logout Log</h3>
+      <h3>Login / Logout Log (Today)</h3>
       <table style="width:100%">
         <thead>
           <tr><th>Login</th><th>Logout</th><th>Reason</th><th>Work Ticked</th></tr>
@@ -276,7 +309,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     <div id="nextDayBox" class="card hidden">
       <h3>Enter Next Day Tasks</h3>
       <div id="nextInputs"></div>
-      <button onclick="finalDayEnd()">Submit</button>
+      <button onclick="finalDayEnd()">Submit Day End</button>
     </div>
 
     <div id="reportBox" class="card hidden"></div>
@@ -384,8 +417,6 @@ async function initAdminDashboard() {
     document.getElementById("adminBox").classList.remove("hidden");
     
     document.getElementById("syncStatus").innerText = "Admin Access Granted";
-    
-    // START REAL-TIME LISTENER
     startAdminListener();
 }
 
@@ -393,7 +424,6 @@ function startAdminListener() {
     const listDiv = document.getElementById("studentList");
     listDiv.innerHTML = "Listening for live data...";
     
-    // This listens for ANY change in the users node
     onValue(ref(db, 'users'), (snapshot) => {
         if (snapshot.exists()) {
             const users = snapshot.val();
@@ -423,27 +453,23 @@ function startAdminListener() {
                     `;
                 }
 
-                // 3. Leave Status
-                let leaveBadge = `<span class="admin-badge badge-green">Active</span>`;
+                // 3. Leave Status (Only show PENDING requests in the Dashboard)
+                let leaveBadge = `<span style="color:#64748b; font-size:11px;">Active Student</span>`;
                 let leaveActions = "";
-                let leaveDetails = "";
                 
-                if (u.leaveRequest) {
-                    if (u.leaveRequest.status === "Pending") {
-                        leaveBadge = `<span class="admin-badge badge-yellow">REQ: ${u.leaveRequest.dates}</span>`;
-                        leaveActions = `
-                            <button style="background:#166534" onclick="handleLeave('${uid}', 'Approved')">Approve</button>
-                            <button style="background:#d97706" onclick="handleLeave('${uid}', 'Half Approved')">Half</button>
-                            <button style="background:#991b1b" onclick="handleLeave('${uid}', 'Rejected')">Reject</button>
-                        `;
-                        leaveDetails = `<div style="font-size:10px; color:#fde047; margin-top:2px;">Reason: ${u.leaveRequest.reason}</div>`;
-                    } else {
-                        const s = u.leaveRequest.status;
-                        const badgeClass = s === "Approved" ? "badge-green" : (s === "Half Approved" ? "badge-blue" : "badge-red");
-                        leaveBadge = `<span class="admin-badge ${badgeClass}">${s}: ${u.leaveRequest.dates}</span>`;
-                        leaveDetails = `<div style="font-size:10px; color:#cbd5e1; font-style:italic">Admin: "${u.leaveRequest.adminComment || '-'}"</div>`;
-                        leaveActions = `<button style="background:#334155; opacity:0.6; font-size:9px" onclick="clearLeave('${uid}')">Clear Status</button>`;
-                    }
+                if (u.leaveRequest && u.leaveRequest.status === "Pending") {
+                    leaveBadge = `<span class="admin-badge badge-yellow">REQ: ${u.leaveRequest.dates}</span>
+                                  <div style="font-size:10px; color:#fde047;">${u.leaveRequest.reason}</div>`;
+                    leaveActions = `
+                        <button style="background:#166534" onclick="handleLeave('${uid}', 'Approved')">Approve</button>
+                        <button style="background:#d97706" onclick="handleLeave('${uid}', 'Half Approved')">Half</button>
+                        <button style="background:#991b1b" onclick="handleLeave('${uid}', 'Rejected')">Reject</button>
+                    `;
+                } else if (u.leaveRequest) {
+                    // It is processed, don't clutter dashboard, just show small status
+                    const s = u.leaveRequest.status;
+                    const c = s === "Approved" ? "#86efac" : "#fca5a5";
+                    leaveBadge = `<span style="color:${c}; font-size:11px;">On Leave (${s})</span>`;
                 }
 
                 if(isLocked) {
@@ -465,15 +491,13 @@ function startAdminListener() {
 
                     <div style="text-align:center">
                         ${leaveBadge}
-                        ${leaveDetails}
                     </div>
 
                     <div class="admin-btn-group">
                         ${leaveActions}
-                        <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
-                        <button style="background:#ea580c; margin-top:4px;" onclick="terminateStudent('${uid}')">Lock</button>
+                        <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs & History</button>
+                        <button style="background:#ea580c; margin-top:4px;" onclick="terminateStudent('${uid}')">Lock / Terminate</button>
                         ${isLocked ? `<button style="background:#22c55e; margin-top:4px;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
-                        <button style="background:#ef4444; margin-top:4px;" onclick="deleteStudent('${uid}')">Delete User</button>
                     </div>
                 </div>`;
             });
@@ -485,40 +509,69 @@ function startAdminListener() {
     });
 }
 
-// --- ADMIN LOG INSPECTOR (LAST 10 ONLY) ---
+// --- ADMIN MODAL & HISTORY INSPECTOR ---
+window.currentAdminUid = null;
+
 window.openAdminModal = async function(uid, email) {
+    window.currentAdminUid = uid;
     const modal = document.getElementById("adminModal");
-    const body = document.getElementById("modalBody");
-    modal.classList.remove("hidden");
-    body.innerHTML = "Loading live logs...";
+    const bodyLogs = document.getElementById("modalBodyLogs");
+    const bodyHist = document.getElementById("modalBodyHistory");
     
+    modal.classList.remove("hidden");
+    bodyLogs.innerHTML = "Loading...";
+    bodyHist.innerHTML = "Loading...";
+    
+    // Default to logs tab
+    window.switchAdminTab('logs');
+
     try {
-        const snapshot = await get(child(ref(db), `users/${uid}/LOGS`));
-        if(!snapshot.exists()) {
-            body.innerHTML = "No logs found for this user.";
-            return;
-        }
+        const snapshot = await get(child(ref(db), `users/${uid}`));
+        const user = snapshot.val() || {};
         
-        let logs = JSON.parse(snapshot.val() || "[]");
-        let startIndex = Math.max(0, logs.length - 10);
-        let displayLogs = logs.slice(startIndex);
-        
-        renderAdminLogs(uid, displayLogs, startIndex);
-        
+        // 1. Render Logs (Last 14 data entries allow delete)
+        let logs = JSON.parse(user.LOGS || "[]");
+        renderAdminLogs(uid, logs);
+
+        // 2. Render History (Last 10 Days)
+        let history = JSON.parse(user.HISTORY || "[]");
+        renderAdminHistory(uid, history);
+
     } catch(e) {
-        body.innerHTML = "Error loading logs: " + e.message;
+        bodyLogs.innerHTML = "Error loading data: " + e.message;
     }
 };
 
-window.renderAdminLogs = function(uid, displayLogs, startIndex) {
-    const body = document.getElementById("modalBody");
-    if(!displayLogs || displayLogs.length === 0) {
+window.switchAdminTab = function(tabName) {
+    const tabLogs = document.getElementById("tabLogs");
+    const tabHist = document.getElementById("tabHistory");
+    const btns = document.querySelectorAll(".tab-btn");
+    
+    btns.forEach(b => b.classList.remove("active"));
+    
+    if (tabName === 'logs') {
+        tabLogs.classList.remove("hidden");
+        tabHist.classList.add("hidden");
+        btns[0].classList.add("active");
+    } else {
+        tabLogs.classList.add("hidden");
+        tabHist.classList.remove("hidden");
+        btns[1].classList.add("active");
+    }
+}
+
+window.renderAdminLogs = function(uid, logs) {
+    const body = document.getElementById("modalBodyLogs");
+    if(!logs || logs.length === 0) {
         body.innerHTML = "Log history is empty.";
         return;
     }
     
+    // Only show last 20 for performance, but calculate delete index correctly
+    let displayLogs = logs.slice(Math.max(0, logs.length - 20));
+    let startIndex = Math.max(0, logs.length - 20);
+
     let html = ``;
-    
     displayLogs.forEach((log, i) => {
         let workHtml = "-";
         if(log.completed && log.completed.length > 0) {
@@ -539,23 +592,71 @@ window.renderAdminLogs = function(uid, displayLogs, startIndex) {
             <button onclick="deleteLogEntry('${uid}', ${trueIndex})" style="width:auto; background:#7f1d1d; font-size:10px; padding:4px;">Delete</button>
         </div>`;
     });
-    
     body.innerHTML = html;
 };
 
+window.renderAdminHistory = function(uid, history) {
+    const body = document.getElementById("modalBodyHistory");
+    if (!history || history.length === 0) {
+        body.innerHTML = "<tr><td colspan='5'>No Daily Reports yet.</td></tr>";
+        return;
+    }
+
+    // Enforce Last 10 Days View
+    let displayHist = history.slice(Math.max(0, history.length - 10)).reverse();
+    let html = "";
+
+    displayHist.forEach((entry, idx) => {
+        // Correct index for updating the specific entry in the full array
+        let trueIdx = history.length - 1 - idx; 
+        
+        let reviewBtn = `<button onclick="addAdminReview('${uid}', ${trueIdx})" style="width:auto; padding:5px; font-size:10px; background:#a855f7;">Add Review</button>`;
+        if (entry.adminReview) {
+            reviewBtn = `<div style="font-size:11px; color:#e9d5ff; font-style:italic;">"${entry.adminReview}"</div>`;
+        }
+
+        html += `
+            <tr>
+                <td>${entry.date}</td>
+                <td style="color:#facc15; font-weight:bold">${entry.score}%</td>
+                <td>${entry.time}</td>
+                <td>${entry.rating}</td>
+                <td>${reviewBtn}</td>
+            </tr>
+        `;
+    });
+    body.innerHTML = html;
+};
+
+window.addAdminReview = async function(uid, index) {
+    const comment = prompt("Enter Daily Review/Feedback for this student:");
+    if (!comment) return;
+
+    try {
+        const snapshot = await get(child(ref(db), `users/${uid}/HISTORY`));
+        let history = JSON.parse(snapshot.val() || "[]");
+        
+        if (history[index]) {
+            history[index].adminReview = comment;
+            await update(ref(db, `users/${uid}`), { 
+                HISTORY: JSON.stringify(history),
+                newFeedback: comment // Flag for student popup
+            });
+            alert("Review saved.");
+            // Refresh Modal
+            openAdminModal(uid, "");
+        }
+    } catch(e) { alert("Error: " + e.message); }
+};
+
 window.deleteLogEntry = async function(uid, index) {
-    if(!confirm("Delete this specific log entry? User will lose this data on next sync.")) return;
-    
+    if(!confirm("Delete this log entry?")) return;
     try {
         const snapshot = await get(child(ref(db), `users/${uid}/LOGS`));
         let logs = JSON.parse(snapshot.val() || "[]");
-        
         logs.splice(index, 1);
-        
         await update(ref(db, `users/${uid}`), { LOGS: JSON.stringify(logs) });
-        
-        openAdminModal(uid, "User");
-        
+        openAdminModal(uid, "");
     } catch(e) { alert("Error deleting log: " + e.message); }
 };
 
@@ -565,11 +666,10 @@ window.closeAdminModal = function() {
 
 // --- ADMIN ACTIONS ---
 window.handleLeave = async function(uid, decision) {
-    const comment = prompt(`Decision: ${decision}\n\nEnter MANDATORY comment for the student:`);
-    if(!comment || comment.trim() === "") {
-        alert("Action Cancelled: Comment is required.");
-        return;
-    }
+    if (!confirm(`Confirm Action: ${decision}? This will update the student's panel.`)) return;
+    
+    const comment = prompt(`Add Comment for ${decision}:`, "Admin reviewed.");
+    if(!comment) return;
 
     try {
         await update(ref(db, `users/${uid}/leaveRequest`), { 
@@ -577,25 +677,18 @@ window.handleLeave = async function(uid, decision) {
             adminComment: comment,
             decisionTime: Date.now()
         });
-        alert(`Leave marked as ${decision}`);
+        // Note: We do NOT delete the request node, we just update status. 
+        // The listener filters non-pending requests from the main view.
+        alert(`Leave ${decision}. Removed from active list.`);
     } catch(e) { alert("Error: " + e.message); }
 };
 
-window.clearLeave = async function(uid) {
-    if(confirm("Clear this leave status? Student will be marked Active.")) {
-        await remove(ref(db, `users/${uid}/leaveRequest`));
-    }
-}
-
 window.terminateStudent = async function(uid) {
-    const hours = prompt("Enter Lockout Duration in Hours (e.g., 1, 24):");
+    const hours = prompt("TERMINATE SESSION:\nEnter Lockout Duration in Hours (e.g., 0.5, 24):");
     if(!hours || isNaN(hours)) return;
 
-    const reason = prompt("Enter Reason for Lockout (Visible to Student):");
-    if(!reason) {
-        alert("Lockout Reason is required.");
-        return;
-    }
+    const reason = prompt("Enter Reason for Termination:");
+    if(!reason) return;
     
     const lockTime = Date.now() + (parseFloat(hours) * 60 * 60 * 1000);
     try {
@@ -603,12 +696,12 @@ window.terminateStudent = async function(uid) {
             lockout: lockTime,
             lockoutReason: reason 
         });
-        alert("Student Locked.");
+        alert("Student Terminated/Locked.");
     } catch(e) { alert("Error: " + e.message); }
 };
 
 window.unlockStudent = async function(uid) {
-    if(confirm("Revoke Lockout? Student will be able to login immediately.")) {
+    if(confirm("Unlock Student?")) {
         try {
             await remove(ref(db, `users/${uid}/lockout`));
             await remove(ref(db, `users/${uid}/lockoutReason`));
@@ -616,20 +709,6 @@ window.unlockStudent = async function(uid) {
         } catch(e) { alert("Error: " + e.message); }
     }
 };
-
-window.deleteStudent = async function(uid) {
-    if(confirm("PERMANENTLY DELETE student data? (History, Logs, Tasks)")) {
-        try {
-            await remove(ref(db, `users/${uid}`));
-            alert("Deleted.");
-        } catch(e) { alert("Error: " + e.message); }
-    }
-};
-window.refreshAdminView = startAdminListener; 
-window.openAdminModal = window.openAdminModal;
-window.deleteLogEntry = window.deleteLogEntry;
-window.closeAdminModal = window.closeAdminModal;
-window.unlockStudent = window.unlockStudent;
 
 // ==========================================
 // STUDENT LOGIC
@@ -641,20 +720,25 @@ async function initStudentDashboard() {
 
     const serverData = await downloadData(currentUser.uid);
     
+    // Check Lockout
     if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
         const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
-        const reason = serverData.lockoutReason || "Admin Disciplinary Action";
-        
         document.body.innerHTML = `
             <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;text-align:center;">
                 <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">TERMINATED</h1>
-                <h2 style="color:#f87171;margin-top:10px">${reason}</h2>
-                <p>Admin has locked your access.</p>
+                <h2 style="color:#f87171;margin-top:10px">${serverData.lockoutReason || "Admin Action"}</h2>
                 <p>Time remaining: ${minLeft} minutes</p>
                 <button onclick="location.reload()" style="width:200px;margin-top:20px;">Try Again</button>
-            </div>
-        `;
+            </div>`;
         return; 
+    }
+
+    // Check New Admin Feedback
+    if (serverData.newFeedback) {
+        document.getElementById("adminFeedbackBox").classList.remove("hidden");
+        document.getElementById("adminFeedbackText").innerText = `"${serverData.newFeedback}"`;
+        // Clear the flag locally so it doesn't pop up again immediately if we reload, 
+        // though strictly we should delete it from DB on dismiss.
     }
 
     checkLeaveStatus();
@@ -671,8 +755,6 @@ async function initStudentDashboard() {
         }
     }
 
-    localStorage.removeItem(key("DAY_ENDED"));
-    
     logs.push({
         login: now(),
         loginTS: Date.now(),
@@ -716,6 +798,14 @@ async function initStudentDashboard() {
     loadTasks();
     renderLogs();
     updateProgress();
+}
+
+window.dismissFeedback = async function() {
+    document.getElementById("adminFeedbackBox").classList.add("hidden");
+    if(currentUser) {
+        // Remove the flag from DB
+        await remove(ref(db, `users/${currentUser.uid}/newFeedback`));
+    }
 }
 
 // --- STUDENT LEAVE FUNCTIONS ---
@@ -762,26 +852,12 @@ function checkLeaveStatus() {
             statusText = `<span style="color:#fca5a5">✖ REJECTED</span>`;
         }
         
-        // --- TRANSIENT COMMENT (Visible only for 1 min) ---
-        let commentHtml = "";
+        // Show Admin Comment inside this box persistently
         if (req.adminComment) {
-             commentHtml = 
-            `<div id="adminMsgFade" style="margin-top:8px; background:rgba(0,0,0,0.3); padding:5px; border-radius:4px; border:1px solid rgba(255,255,255,0.2);">
-                <span style="color:#cbd5e1; font-weight:bold; font-size:11px;">ADMIN MSG:</span>
-                <div style="color:#fff; font-style:italic;">"${req.adminComment}"</div>
-             </div>`;
-             
-             // FADE OUT TIMER (60 seconds)
-             setTimeout(() => {
-                 const el = document.getElementById("adminMsgFade");
-                 if(el) {
-                     el.style.opacity = '0';
-                     setTimeout(() => el.remove(), 1000);
-                 }
-             }, 60000); 
+             statusText += `<div style="margin-top:5px; border-top:1px solid rgba(255,255,255,0.2); padding-top:4px; color:#e2e8f0; font-size:12px; font-style:italic">Admin: "${req.adminComment}"</div>`;
         }
              
-        box.innerHTML = statusText + commentHtml;
+        box.innerHTML = statusText;
 
     } else {
         box.classList.add("hidden");
@@ -864,11 +940,14 @@ function toggleHistory() {
         taskBox.classList.add("hidden");
         logBox.classList.add("hidden");
 
-        const history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
+        let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
+        // Limit to last 10
+        history = history.slice(Math.max(0, history.length - 10)).reverse();
+
         const tbody = document.getElementById("historyTable");
         tbody.innerHTML = "";
         
-        [...history].reverse().forEach(entry => {
+        history.forEach(entry => {
             let color = "#e5e7eb";
             if(entry.rating === "Poor") color = "#f87171";
             if(entry.rating === "Good") color = "#facc15";
@@ -1381,12 +1460,13 @@ function finalDayEnd() {
       score: p.percent,
       rating: getLabel(p.percent),
       time: timeStr,
-      subjects: subjectsCovered || "No Tasks Completed"
+      subjects: subjectsCovered || "No Tasks Completed",
+      adminReview: null // Placeholder for admin feedback
   };
   
   let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
   history.push(historyEntry);
-  if (history.length > 9) history.shift(); 
+  if (history.length > 20) history.shift(); // Keep reasonable local storage, UI slices last 10
   localStorage.setItem(key("HISTORY"), JSON.stringify(history));
 
   const doneReportItems = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
@@ -1443,7 +1523,7 @@ function finalDayEnd() {
     <div class="details">
       Assigned: ${tasks.length} | Carry Forward: ${carry.length} | Penalty: -${penalty}%
     </div>
-    <div style="margin-top:10px; color:#94a3b8; font-size:12px;">(Data added to History)</div>
+    <div style="margin-top:10px; color:#94a3b8; font-size:12px;">(Waiting for Admin Review...)</div>
     ${doneTable}`;
     
   reportBox.classList.remove("hidden");
@@ -1505,6 +1585,10 @@ window.openAdminModal = window.openAdminModal;
 window.deleteLogEntry = window.deleteLogEntry;
 window.closeAdminModal = window.closeAdminModal;
 window.unlockStudent = window.unlockStudent;
+window.switchAdminTab = window.switchAdminTab;
+window.addAdminReview = window.addAdminReview;
+window.terminateStudent = window.terminateStudent;
+window.dismissFeedback = window.dismissFeedback;
 </script>
 </body>
 </html>
