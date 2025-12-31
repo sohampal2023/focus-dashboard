@@ -880,65 +880,69 @@ window.resetLeaveBalance = async function(uid) {
 }
 
 window.handleLeave = async function(uid, decision, currentBalance) {
-    if (!confirm(`CONFIRM LEAVE DECISION:\n\nAction: ${decision}\nStudent ID: ${uid}\nCurrent Balance: ${currentBalance} days\n\nProceed?`)) return;
-    
-    let comment = "";
-    let daysToDeduct = 0;
 
     const snapshot = await get(ref(db, `users/${uid}/leaveRequest`));
-const req = snapshot.val() || {};
-const isMedical = req.medical === true;
+    if (!snapshot.exists()) return;
 
-if (decision === "Approved") {
+    const req = snapshot.val();
+    const isMedical = req.medical === true;
 
-    if (isMedical) {
-        comment = prompt("Medical Emergency Approval Comment:", "Approved. Will deduct from next month.");
-        daysToDeduct = 0; // 🚫 no immediate deduction
-    } 
-    else {
-        const type = prompt("Type of Leave?\nEnter:\n1 = Full Day\n0.5 = Half Day", "1");
-        if(type === null) return;
+    let days = 0;
 
-        daysToDeduct = parseFloat(type);
-        if (![1, 0.5].includes(daysToDeduct)) {
-            alert("Only 1 or 0.5 allowed.");
-            return;
+    if (decision !== "Rejected") {
+
+        if (isMedical) {
+            const d = prompt(
+                "MEDICAL EMERGENCY\nEnter number of days approved:",
+                decision === "Half Approved" ? "0.5" : "1"
+            );
+            if (!d) return;
+            days = parseFloat(d);
+            if (isNaN(days) || days <= 0) {
+                alert("Invalid day count.");
+                return;
+            }
+        } 
+        else {
+            const d = prompt(
+                `NORMAL LEAVE\nEnter days (Max ${currentBalance}):`,
+                decision === "Half Approved" ? "0.5" : "1"
+            );
+            if (!d) return;
+            days = parseFloat(d);
+
+            if (isNaN(days) || days <= 0) {
+                alert("Invalid day count.");
+                return;
+            }
+            if (days > currentBalance) {
+                alert("Cannot approve more than leave balance.");
+                return;
+            }
         }
+    }
 
-        if (currentBalance < daysToDeduct) {
-            alert("Insufficient Leave Balance.");
-            return;
+    const comment = prompt("Admin comment:");
+    if (!comment) return;
+
+    const updates = {
+        "leaveRequest/status": decision,
+        "leaveRequest/adminComment": comment,
+        "leaveRequest/decisionTime": Date.now()
+    };
+
+    if (decision !== "Rejected") {
+        if (isMedical) {
+            updates["medicalCarry"] = (req.medicalCarry || 0) + days;
+        } else {
+            updates["leaveBalance"] = currentBalance - days;
         }
-
-        comment = prompt("Approval Comment:", "Approved");
     }
-}
-else {
-        comment = prompt(`Add Comment for ${decision}:`, "Admin reviewed.");
-    }
-    if(!comment) return;
 
-    try {
-        const updates = { 
-            "leaveRequest/status": decision,
-            "leaveRequest/adminComment": comment,
-            "leaveRequest/decisionTime": Date.now()
-        };
-
-        // Update Balance if approved
-        if (decision === "Approved" && daysToDeduct > 0) {
-    updates["leaveBalance"] = currentBalance - daysToDeduct;
-}
-
-if (decision === "Approved" && isMedical) {
-    updates["medicalCarry"] = (req.medicalCarry || 0) + 1;
-}
-
-
-        await update(ref(db, `users/${uid}`), updates);
-        alert(`Leave ${decision}. Balance adjusted.`);
-    } catch(e) { alert("Error: " + e.message); }
+    await update(ref(db, `users/${uid}`), updates);
+    alert("Leave decision saved.");
 };
+
 
 window.clearLeave = async function(uid) {
     if(!confirm("CONFIRM RESET:\n\nClear this leave status and reset to 'Active Student'?")) return;
@@ -1121,38 +1125,57 @@ window.dismissRejected = async function() {
 
 // --- STUDENT LEAVE FUNCTIONS ---
 async function requestLeave() {
+
+    const data = await downloadData(currentUser.uid);
+    const balance = data.leaveBalance ?? 0;
+
+    // Explicit leave type
+    const leaveType = prompt(
+        "Select Leave Type:\n\n1 = Normal Leave\n2 = Medical Emergency",
+        balance > 0 ? "1" : "2"
+    );
+    if (!leaveType) return;
+
+    const isMedical = leaveType === "2";
+
+    if (!isMedical && balance <= 0) {
+        alert("Leave balance is ZERO.\nOnly MEDICAL EMERGENCY is allowed.");
+        return;
+    }
+
     const dates = prompt("Enter Dates (e.g., Dec 31 - Jan 2):");
-if(!dates) return;
+    if (!dates) return;
 
-const reason = prompt("Enter Reason:");
-if(!reason) return;
+    const reason = prompt(
+        isMedical
+            ? "Enter MEDICAL reason (mandatory):"
+            : "Enter reason:"
+    );
+    if (!reason) return;
 
-const isMedical = confirm("Is this a MEDICAL EMERGENCY?\n\nOK = Yes\nCancel = No");
-
-    
-    if(!confirm(`CONFIRM REQUEST:\n\nLeave for: ${dates}\nReason: ${reason}\n\nSend to Admin?`)) return;
+    if (!confirm(
+        `CONFIRM REQUEST:\n\n` +
+        `Type: ${isMedical ? "MEDICAL EMERGENCY" : "NORMAL"}\n` +
+        `Dates: ${dates}\n` +
+        `Reason: ${reason}`
+    )) return;
 
     const payload = {
-        dates: dates,
-        reason: reason,
+        dates,
+        reason,
+        medical: isMedical,
         status: "Pending",
-        medical: isMedical,   // ⭐ NEW
         timestamp: Date.now()
     };
-    
+
     try {
         await update(ref(db, `users/${currentUser.uid}/leaveRequest`), payload);
-        const bal = data.leaveBalance ?? 0;
+        checkLeaveStatus(await downloadData(currentUser.uid));
+    } catch (e) {
+        alert("Failed to send leave request.");
+    }
+}
 
-if (bal <= 0 && !isMedical) {
-    alert("Leave balance is ZERO.\nOnly MEDICAL EMERGENCY can be requested.");
-    return;
-}
-        // Refresh check
-        const data = await downloadData(currentUser.uid);
-        checkLeaveStatus(data);
-    } catch(e) { alert("Failed to send request"); }
-}
 
 function checkLeaveStatus(data) {
     // We check data directly from DB or passed object
