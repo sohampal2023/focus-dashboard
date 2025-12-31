@@ -581,7 +581,12 @@ function startAdminListener() {
                 let clearBtn = "";
                 
                 if (u.leaveRequest && u.leaveRequest.status === "Pending") {
-                    leaveBadge = `<span class="admin-badge badge-yellow">REQ: ${u.leaveRequest.dates}</span>
+                    leaveBadge = `
+<span class="admin-badge badge-yellow">
+REQ: ${u.leaveRequest.dates}
+${u.leaveRequest.medical ? " (MEDICAL)" : ""}
+</span>`;
+
                                   <div style="font-size:10px; color:#fde047;">${u.leaveRequest.reason}</div>`;
                     leaveActions = `
                         <button style="background:#166534" onclick="handleLeave('${uid}', 'Approved', ${leaveBalance})">Approve</button>
@@ -881,44 +886,38 @@ window.resetLeaveBalance = async function(uid) {
 
 window.handleLeave = async function(uid, decision, currentBalance) {
 
-    const snapshot = await get(ref(db, `users/${uid}/leaveRequest`));
-    if (!snapshot.exists()) return;
+    const snap = await get(ref(db, `users/${uid}/leaveRequest`));
+    if (!snap.exists()) return;
 
-    const req = snapshot.val();
+    const req = snap.val();
     const isMedical = req.medical === true;
 
+    let fromDate = null;
+    let toDate = null;
     let days = 0;
 
     if (decision !== "Rejected") {
 
-        if (isMedical) {
-            const d = prompt(
-                "MEDICAL EMERGENCY\nEnter number of days approved:",
-                decision === "Half Approved" ? "0.5" : "1"
-            );
-            if (!d) return;
-            days = parseFloat(d);
-            if (isNaN(days) || days <= 0) {
-                alert("Invalid day count.");
-                return;
-            }
-        } 
-        else {
-            const d = prompt(
-                `NORMAL LEAVE\nEnter days (Max ${currentBalance}):`,
-                decision === "Half Approved" ? "0.5" : "1"
-            );
-            if (!d) return;
-            days = parseFloat(d);
+        fromDate = prompt("Approve FROM date (YYYY-MM-DD):");
+        if (!fromDate) return;
 
-            if (isNaN(days) || days <= 0) {
-                alert("Invalid day count.");
-                return;
-            }
-            if (days > currentBalance) {
-                alert("Cannot approve more than leave balance.");
-                return;
-            }
+        toDate = prompt("Approve TO date (YYYY-MM-DD):");
+        if (!toDate) return;
+
+        const f = new Date(fromDate);
+        const t = new Date(toDate);
+
+        if (isNaN(f) || isNaN(t) || t < f) {
+            alert("Invalid date range.");
+            return;
+        }
+
+        // inclusive day count
+        days = Math.floor((t - f) / (1000 * 60 * 60 * 24)) + 1;
+
+        if (!isMedical && days > currentBalance) {
+            alert(`Cannot approve ${days} days. Balance = ${currentBalance}`);
+            return;
         }
     }
 
@@ -928,6 +927,9 @@ window.handleLeave = async function(uid, decision, currentBalance) {
     const updates = {
         "leaveRequest/status": decision,
         "leaveRequest/adminComment": comment,
+        "leaveRequest/approvedFrom": fromDate,
+        "leaveRequest/approvedTo": toDate,
+        "leaveRequest/approvedDays": days,
         "leaveRequest/decisionTime": Date.now()
     };
 
@@ -940,10 +942,9 @@ window.handleLeave = async function(uid, decision, currentBalance) {
     }
 
     await update(ref(db, `users/${uid}`), updates);
-    alert("Leave decision saved.");
+    alert(`Leave ${decision}: ${days} day(s) approved.`);
 };
-
-
+  
 window.clearLeave = async function(uid) {
     if(!confirm("CONFIRM RESET:\n\nClear this leave status and reset to 'Active Student'?")) return;
     try {
@@ -1216,7 +1217,16 @@ function checkLeaveStatus(data) {
         dashboardBox.classList.add(statusColorClass);
         
         let html = `<h3 style="margin:0 0 5px 0;">${statusTitle}</h3>`;
-        html += `<div style="font-size:14px; font-weight:bold;">Dates: ${req.dates}</div>`;
+        html += `<div style="font-size:14px; font-weight:bold;">Requested: ${req.dates}</div>`;
+
+if (req.approvedFrom && req.approvedTo) {
+    html += `
+      <div style="margin-top:6px; font-size:13px; color:#93c5fd;">
+        Approved: ${req.approvedFrom} → ${req.approvedTo}
+        (${req.approvedDays} day${req.approvedDays > 1 ? "s" : ""})
+      </div>`;
+}
+
         if(req.adminComment) {
             html += `<div style="margin-top:5px; padding-top:5px; border-top:1px solid rgba(255,255,255,0.2); font-style:italic">Admin: "${req.adminComment}"</div>`;
         }
