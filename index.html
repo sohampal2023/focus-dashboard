@@ -906,21 +906,26 @@ window.handleLeave = async function(uid, decision, currentBalance) {
         toDate = prompt("Approve TO date (YYYY-MM-DD):");
         if (!toDate) return;
 
-        const f = new Date(fromDate);
-        const t = new Date(toDate);
+        // ADMIN decides approved days (supports 0.5)
+const daysInput = prompt(
+  "Enter approved leave days (e.g. 1, 2, 0.5 for half-day):",
+  "1"
+);
 
-        if (isNaN(f) || isNaN(t) || t < f) {
-            alert("Invalid date range.");
-            return;
-        }
+if (!daysInput) return;
 
-        // inclusive day count
-        days = Math.floor((t - f) / (1000 * 60 * 60 * 24)) + 1;
+days = parseFloat(daysInput);
 
-        if (!isMedical && days > currentBalance) {
-            alert(`Cannot approve ${days} days. Balance = ${currentBalance}`);
-            return;
-        }
+if (isNaN(days) || days <= 0) {
+    alert("Invalid leave days value.");
+    return;
+}
+
+if (!isMedical && days > currentBalance) {
+    alert(`Cannot approve ${days} days. Balance = ${currentBalance}`);
+    return;
+}
+
     }
 
     const comment = prompt("Admin comment:");
