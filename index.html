@@ -1568,6 +1568,17 @@ function finishTestSequence(testState, loadDashboard = false) {
     localStorage.setItem(key("MOCK_LOGS"), JSON.stringify(mockLogs));
 
     localStorage.removeItem(key("TEST_STATE"));
+    // ✅ FIX: update logout time & reason for mock test
+const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+if (logs.length) {
+    const last = logs[logs.length - 1];
+    last.logout = now();
+    last.logoutTS = Date.now();
+    last.reason = testState.status === "EXPIRED"
+        ? "Mock Test Expired"
+        : "Mock Test Completed";
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+}
     uploadData();
     const btn = document.querySelector(".watchdog-btn");
     if(btn) btn.innerText = "I AM STUDYING";
