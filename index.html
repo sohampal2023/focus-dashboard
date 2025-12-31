@@ -1888,6 +1888,7 @@ function openDayEnd() {
 }
 
 function finalDayEnd() {
+  
   if(!confirm("CONFIRM DAY END:\n\nAre you sure you want to close today's session and save the report?")) return;
 
   const next = [];
@@ -1902,6 +1903,18 @@ function finalDayEnd() {
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   const carry = tasks.filter(t => !t.done);
+  // 🔒 CLOSE CURRENT SESSION BEFORE CALCULATING TIME
+const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+if (logs.length) {
+  const last = logs[logs.length - 1];
+  if (!last.logoutTS) {
+    last.logoutTS = Date.now();
+    last.logout = now();
+    last.reason = "Day End";
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+  }
+}
+
 
  let totalMillis = 0;
 
