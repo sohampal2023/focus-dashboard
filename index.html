@@ -1516,80 +1516,102 @@ function triggerEndTest() {
 }
 
 function finishTestSequence(testState, loadDashboard = false) {
-  let obtained = prompt(`Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`);
-  
-  if(obtained === null && testState.status === "EXPIRED") obtained = "0";
-  if(obtained === null) return;
+  let obtained = prompt(
+    `Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`
+  );
+
+  if (obtained === null && testState.status === "EXPIRED") obtained = "0";
+  if (obtained === null) return;
 
   let accuracy = prompt("Enter Accuracy %:");
-  if(accuracy === null) accuracy = "0";
+  if (accuracy === null) accuracy = "0";
 
-  const msg = `Please Confirm Details:\n\nTest: ${testState.name}\nScore: ${obtained} / ${testState.fullMarks}\nAccuracy: ${accuracy}%`;
-  
-  if(confirm(msg)) {
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    const resultComment = `Score: ${obtained}/${testState.fullMarks} | Acc: ${accuracy}%`;
-    
-    // 1. ADD TO EXTRA WORK
-    extras.push({
+  const msg =
+    `Please Confirm Details:\n\n` +
+    `Test: ${testState.name}\n` +
+    `Score: ${obtained} / ${testState.fullMarks}\n` +
+    `Accuracy: ${accuracy}%`;
+
+  if (!confirm(msg)) {
+    if (testState.status === "EXPIRED") {
+      alert("You must save marks to proceed.");
+      finishTestSequence(testState, true);
+    }
+    return;
+  }
+
+  const resultComment = `Score: ${obtained}/${testState.fullMarks} | Acc: ${accuracy}%`;
+
+  /* 1️⃣ SAVE AS EXTRA WORK */
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  extras.push({
+    name: `MOCK TEST: ${testState.name}`,
+    done: true,
+    comment: resultComment,
+    due: "None"
+  });
+  localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+
+  /* 2️⃣ ADD TO CURRENT SESSION LOG */
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  if (logs.length) {
+    const active = logs[logs.length - 1];
+    if (!active.completed) active.completed = [];
+    active.completed.push({
       name: `MOCK TEST: ${testState.name}`,
-      done: true,
       comment: resultComment,
       due: "None"
     });
-    localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-    
-    // 2. ADD TO LOGS
-    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    if(logs.length){
-      const active = logs[logs.length-1];
-      if(!active.completed) active.completed = [];
-      active.completed.push({
-        name: `MOCK TEST: ${testState.name}`,
-        comment: resultComment,
-        due: "None"
-      });
-      localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-    }
+  }
 
-    // 3. (NEW) SAVE TO DEDICATED MOCK TEST HISTORY (Max 4)
-    let mockLogs = JSON.parse(localStorage.getItem(key("MOCK_LOGS")) || "[]");
-    mockLogs.push({
-        date: new Date().toLocaleDateString(),
-        name: testState.name,
-        score: obtained,
-        total: testState.fullMarks,
-        acc: accuracy
-    });
-    // Keep only last 4
-    if(mockLogs.length > 4) {
-        mockLogs = mockLogs.slice(mockLogs.length - 4);
-    }
-    localStorage.setItem(key("MOCK_LOGS"), JSON.stringify(mockLogs));
+  /* 3️⃣ SAVE TO MOCK TEST HISTORY (MAX 4) */
+  let mockLogs = JSON.parse(localStorage.getItem(key("MOCK_LOGS")) || "[]");
+  mockLogs.push({
+    date: new Date().toLocaleDateString(),
+    name: testState.name,
+    score: obtained,
+    total: testState.fullMarks,
+    acc: accuracy
+  });
+  if (mockLogs.length > 4) {
+    mockLogs = mockLogs.slice(mockLogs.length - 4);
+  }
+  localStorage.setItem(key("MOCK_LOGS"), JSON.stringify(mockLogs));
 
-    localStorage.removeItem(key("TEST_STATE"));
-    // ✅ FIX: update logout time & reason for mock test
+  /* 4️⃣ MARK TEST FINISHED */
+  testState.status = testState.status === "EXPIRED"
+    ? "EXPIRED"
+    : "COMPLETED";
 
-    if (logs.length) {
-      const last = logs[logs.length - 1];
-      last.logout = now();
-      last.logoutTS = Date.now();
-      last.reason = testState.status === "EXPIRED"
-          ? "Mock Test Expired"
-          : "Mock Test Completed";
-      localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-    }
-    uploadData();
-    const btn = document.querySelector(".watchdog-btn");
-    if(btn) btn.innerText = "I AM STUDYING";
-    if(loadDashboard) {
-        startIdle(1800);
-        setupTasks();
-        loadTasks();
-        renderLogs();
-        updateProgress();
-    } else {
-        location.reload();
+  /* 5️⃣ CLOSE THE SESSION (THIS WAS THE MISSING PIECE) */
+  if (logs.length) {
+    const last = logs[logs.length - 1];
+    last.logout = now();
+    last.logoutTS = Date.now();
+    last.reason =
+      testState.status === "EXPIRED"
+        ? "Mock Test Expired"
+        : "Mock Test Completed";
+  }
+
+  localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+
+  /* 6️⃣ CLEAN UP + SYNC */
+  localStorage.removeItem(key("TEST_STATE"));
+  uploadData();
+
+  const btn = document.querySelector(".watchdog-btn");
+  if (btn) btn.innerText = "I AM STUDYING";
+
+  /* 7️⃣ RETURN TO DASHBOARD */
+  if (loadDashboard) {
+    startIdle(1800);
+    setupTasks();
+    loadTasks();
+    renderLogs();
+    updateProgress();
+  } else {
+    location.reload();
     }
   } else {
     if(testState.status === "EXPIRED") {
