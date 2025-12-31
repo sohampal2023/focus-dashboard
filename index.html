@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V16 (Real-Time Work View)</title>
+<title>Focus Watchdog V17 (Date-Targeted Reviews)</title>
 
 <style>
 /* --- BASE STYLES --- */
@@ -721,24 +721,36 @@ window.renderAdminHistory = function(uid, history) {
 };
 
 window.addAdminReview = async function(uid, index) {
-    const comment = prompt("Enter Daily Review/Feedback for this student:");
-    if (!comment) return;
-    
-    if(!confirm(`CONFIRM REVIEW:\n\n"${comment}"\n\nPublish this to student history?`)) return;
-
+    // 1. Fetch data first to identify the date
+    let history = [];
     try {
         const snapshot = await get(child(ref(db), `users/${uid}/HISTORY`));
-        let history = JSON.parse(snapshot.val() || "[]");
-        
-        if (history[index]) {
-            history[index].adminReview = comment;
-            await update(ref(db, `users/${uid}`), { 
-                HISTORY: JSON.stringify(history),
-                newFeedback: comment 
-            });
-            alert("Review published.");
-            openAdminModal(uid, "");
-        }
+        history = JSON.parse(snapshot.val() || "[]");
+    } catch(e) { alert("Error loading history"); return; }
+
+    if (!history[index]) { alert("History entry not found."); return; }
+
+    const targetDate = history[index].date;
+
+    // 2. Prompt with date context
+    const comment = prompt(`Enter Review for ${targetDate}:`, "Good progress.");
+    if (!comment) return;
+
+    if(!confirm(`CONFIRM REVIEW:\n\nDate: ${targetDate}\nComment: "${comment}"\n\nPublish?`)) return;
+
+    try {
+        // 3. Update History
+        history[index].adminReview = comment;
+
+        // 4. Send Feedback with Date Context for popup
+        const feedbackMsg = `[${targetDate}]: ${comment}`;
+
+        await update(ref(db, `users/${uid}`), { 
+            HISTORY: JSON.stringify(history),
+            newFeedback: feedbackMsg 
+        });
+        alert("Review published.");
+        openAdminModal(uid, "");
     } catch(e) { alert("Error: " + e.message); }
 };
 
@@ -857,7 +869,7 @@ async function initStudentDashboard() {
     // Check New Admin Feedback
     if (serverData.newFeedback) {
         document.getElementById("adminFeedbackBox").classList.remove("hidden");
-        document.getElementById("adminFeedbackText").innerText = `"${serverData.newFeedback}"`;
+        document.getElementById("adminFeedbackText").innerText = `${serverData.newFeedback}`;
     }
 
     checkLeaveStatus();
