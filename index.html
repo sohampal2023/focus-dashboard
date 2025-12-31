@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V17 (Date-Targeted Reviews)</title>
+<title>Focus Watchdog V18 (Clean UI + Leave Logic)</title>
 
 <style>
 /* --- BASE STYLES --- */
@@ -75,7 +75,7 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 
 /* --- ADMIN PANEL --- */
 .admin-row {
-    display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 2fr 1.5fr; gap:10px; align-items: start;
+    display: grid; grid-template-columns: 2fr 1fr 1fr 2fr 1.5fr; gap:10px; align-items: start;
     padding: 15px; border-bottom: 1px solid #334155; background: #0f172a; margin-bottom:5px; border-radius:8px;
 }
 .admin-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; display:inline-block; margin-bottom:4px; }
@@ -110,12 +110,6 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 }
 .log-row:hover { background: #1e293b; }
 .log-header { font-weight: bold; color: #94a3b8; text-transform: uppercase; background: #1e293b; border-bottom: none; }
-
-/* --- LEAVE STATUS --- */
-.leave-banner {
-    background: #312e81; color: #c7d2fe; padding: 10px;
-    border-radius: 8px; margin-bottom: 10px; text-align: center; font-size: 13px; border:1px solid #6366f1;
-}
 
 /* --- SPEEDOMETER --- */
 .speedo{
@@ -189,10 +183,20 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     100% { transform: translate(-50%, 0) scale(1); opacity:1; } 
 }
 
+/* --- FEEDBACK & LEAVE DASHBOARD BOXES --- */
 .feedback-box {
     border: 1px solid #a855f7; background: #2e1065; color: #e9d5ff;
     padding: 15px; border-radius: 8px; margin-bottom: 20px;
 }
+
+.leave-status-box {
+    border: 1px solid #3b82f6; background: #172554; color: #dbeafe;
+    padding: 15px; border-radius: 8px; margin-bottom: 20px;
+}
+.leave-status-approved { border-color: #22c55e; background: #064e3b; color: #dcfce7; }
+.leave-status-half { border-color: #eab308; background: #422006; color: #fef08a; }
+.leave-status-rejected { border-color: #ef4444; background: #450a0a; color: #fee2e2; }
+
 </style>
 </head>
 
@@ -207,7 +211,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 </div>
 
 <div id="approvedPopup" class="approved-popup hidden">
-    <h2 id="approvedTitle">✔ APPROVED: 31</h2>
+    <h2 id="approvedTitle">✔ APPROVED</h2>
     <div class="popup-line"></div>
     <p id="approvedMsg">Admin: "ok you can take"</p>
 </div>
@@ -233,8 +237,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
       </div>
       
-      <div id="leaveStatusBox" class="hidden leave-banner"></div>
-      
       <button id="leaveBtn" onclick="requestLeave()">Request Leave</button>
       <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
       <button id="histBtn" onclick="toggleHistory()" disabled>History</button>
@@ -254,11 +256,11 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     <div style="text-align:right; margin-bottom:10px; font-size:12px; color:#4ade80">
         ● Live System Active
     </div>
-    <div style="display:grid; grid-template-columns: 2fr 1.5fr 1.5fr 2fr 1.5fr; gap:10px; padding:10px; color:#94a3b8; font-size:12px; font-weight:bold; text-transform:uppercase;">
+    <div style="display:grid; grid-template-columns: 2fr 1fr 1fr 2fr 1.5fr; gap:10px; padding:10px; color:#94a3b8; font-size:12px; font-weight:bold; text-transform:uppercase;">
         <div>Student ID</div>
+        <div style="text-align:center">Balance</div>
         <div style="text-align:center">Progress</div>
         <div style="text-align:center">Leave Status</div>
-        <div style="text-align:center">Live Work Done</div>
         <div style="text-align:center">Actions</div>
     </div>
     <div id="studentList">Loading...</div>
@@ -273,7 +275,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         
         <div class="tab-header">
             <button class="tab-btn active" onclick="switchAdminTab('logs')">Live Logs</button>
-            <button class="tab-btn" onclick="switchAdminTab('history')">Performance History</button>
+            <button class="tab-btn" onclick="switchAdminTab('history')">Performance History (Last 4 Days)</button>
         </div>
 
         <div id="tabLogs">
@@ -288,7 +290,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         </div>
 
         <div id="tabHistory" class="hidden">
-            <p style="font-size:12px; color:#94a3b8">Displaying Last 10 Days.</p>
             <table style="width:100%">
                 <thead>
                     <tr><th>Date</th><th>Score</th><th>Time</th><th>Rating</th><th>Admin Review</th></tr>
@@ -307,9 +308,12 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         <button onclick="dismissFeedback()" style="width:auto; margin-top:10px; background:#6b21a8; font-size:11px;">Dismiss</button>
     </div>
 
+    <div id="leaveDashboardBox" class="hidden">
+        </div>
+
     <div id="historyBox" class="card hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
-            <h3 style="color:#7dd3fc">History (Last 10 Days)</h3>
+            <h3 style="color:#7dd3fc">History (Last 4 Days)</h3>
             <button onclick="toggleHistory()" style="width:auto; padding:5px 15px;">Close</button>
         </div>
         <table>
@@ -329,8 +333,14 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     <div id="taskBox" class="card hidden">
       <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
         <div>
-          <h3>Assigned Tasks</h3>
-          <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+             <h3>Assigned Tasks</h3>
+             <div id="leaveBalanceDisplay" style="font-size:12px; color:#38bdf8; font-weight:bold; border:1px solid #1e40af; padding:4px 8px; border-radius:4px;">
+                 Leave Bal: --
+             </div>
+          </div>
+          
+          <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center; margin-top:10px;">
                <button onclick="startMockTestSetup()" style="background:#a16207; width:auto; padding:8px 20px;">Start Mock Test</button>
           </div>
           <div id="taskList"></div>
@@ -514,6 +524,10 @@ function startAdminListener() {
                         <div class="prog-bar"><div class="prog-fill" style="width:${u.stats.percent}%; background:${color}"></div></div>
                     `;
                 }
+                
+                // Leave Balance
+                let leaveBalance = u.leaveBalance !== undefined ? u.leaveBalance : 6;
+                let balanceHtml = `<div style="text-align:center; font-weight:bold; color:#38bdf8">${leaveBalance} Days</div>`;
 
                 // 4. Leave Status
                 let leaveBadge = `<span style="color:#64748b; font-size:11px;">Active Student</span>`;
@@ -524,9 +538,9 @@ function startAdminListener() {
                     leaveBadge = `<span class="admin-badge badge-yellow">REQ: ${u.leaveRequest.dates}</span>
                                   <div style="font-size:10px; color:#fde047;">${u.leaveRequest.reason}</div>`;
                     leaveActions = `
-                        <button style="background:#166534" onclick="handleLeave('${uid}', 'Approved')">Approve</button>
-                        <button style="background:#d97706" onclick="handleLeave('${uid}', 'Half Approved')">Half</button>
-                        <button style="background:#991b1b" onclick="handleLeave('${uid}', 'Rejected')">Reject</button>
+                        <button style="background:#166534" onclick="handleLeave('${uid}', 'Approved', ${leaveBalance})">Approve</button>
+                        <button style="background:#d97706" onclick="handleLeave('${uid}', 'Half Approved', ${leaveBalance})">Half</button>
+                        <button style="background:#991b1b" onclick="handleLeave('${uid}', 'Rejected', ${leaveBalance})">Reject</button>
                     `;
                 } else if (u.leaveRequest) {
                     const s = u.leaveRequest.status;
@@ -545,22 +559,6 @@ function startAdminListener() {
                     leaveBadge += ` <span class="admin-badge badge-red" style="background:#450a0a; border:1px solid #ef4444">⚠ REJECT SENT</span>`;
                 }
 
-                // 5. LIVE WORK COMPLETED
-                let liveWorkHtml = `<div style="color:#475569; font-size:11px">Nothing yet</div>`;
-                if(u.LOGS) {
-                    try {
-                        const allLogs = JSON.parse(u.LOGS);
-                        if(allLogs.length > 0) {
-                            const last = allLogs[allLogs.length - 1];
-                            if(last.completed && last.completed.length > 0) {
-                                liveWorkHtml = last.completed.map(c => 
-                                    `<div style="font-size:11px; color:#86efac; border-bottom:1px solid rgba(255,255,255,0.1)">✔ ${c.name}</div>`
-                                ).join("");
-                            }
-                        }
-                    } catch(e){}
-                }
-
                 // 6. Render Row
                 html += `
                 <div class="admin-row">
@@ -569,6 +567,8 @@ function startAdminListener() {
                         <div style="font-size:10px; color:#64748b">ID: ${uid.substring(0,6)}...</div>
                     </div>
                     
+                    ${balanceHtml}
+
                     <div style="text-align:center">
                         ${progHtml}
                     </div>
@@ -576,10 +576,6 @@ function startAdminListener() {
                     <div style="text-align:center">
                         ${leaveBadge}
                         ${clearBtn}
-                    </div>
-
-                    <div style="text-align:left; max-height:80px; overflow-y:auto; padding:0 5px;">
-                        ${liveWorkHtml}
                     </div>
 
                     <div class="admin-btn-group">
@@ -699,6 +695,7 @@ window.renderAdminHistory = function(uid, history) {
         body.innerHTML = "<tr><td colspan='5'>No Daily Reports yet.</td></tr>";
         return;
     }
+    // Only show last 4 days as per db limit, but safeguard rendering
     let displayHist = history.slice(Math.max(0, history.length - 10)).reverse();
     let html = "";
     displayHist.forEach((entry, idx) => {
@@ -721,7 +718,6 @@ window.renderAdminHistory = function(uid, history) {
 };
 
 window.addAdminReview = async function(uid, index) {
-    // 1. Fetch data first to identify the date
     let history = [];
     try {
         const snapshot = await get(child(ref(db), `users/${uid}/HISTORY`));
@@ -729,22 +725,15 @@ window.addAdminReview = async function(uid, index) {
     } catch(e) { alert("Error loading history"); return; }
 
     if (!history[index]) { alert("History entry not found."); return; }
-
     const targetDate = history[index].date;
-
-    // 2. Prompt with date context
     const comment = prompt(`Enter Review for ${targetDate}:`, "Good progress.");
     if (!comment) return;
 
     if(!confirm(`CONFIRM REVIEW:\n\nDate: ${targetDate}\nComment: "${comment}"\n\nPublish?`)) return;
 
     try {
-        // 3. Update History
         history[index].adminReview = comment;
-
-        // 4. Send Feedback with Date Context for popup
         const feedbackMsg = `[${targetDate}]: ${comment}`;
-
         await update(ref(db, `users/${uid}`), { 
             HISTORY: JSON.stringify(history),
             newFeedback: feedbackMsg 
@@ -755,7 +744,7 @@ window.addAdminReview = async function(uid, index) {
 };
 
 window.deleteLogEntry = async function(uid, index) {
-    if(!confirm("CONFIRM DELETION:\n\nAre you sure you want to permanently delete this log entry?\nThis cannot be undone.")) return;
+    if(!confirm("CONFIRM DELETION:\n\nAre you sure you want to permanently delete this log entry?")) return;
     try {
         const snapshot = await get(child(ref(db), `users/${uid}/LOGS`));
         let logs = JSON.parse(snapshot.val() || "[]");
@@ -770,45 +759,55 @@ window.closeAdminModal = function() {
 };
 
 // --- ADMIN ACTIONS (STRICT CONFIRM) ---
-window.handleLeave = async function(uid, decision) {
-    if (!confirm(`CONFIRM LEAVE DECISION:\n\nAction: ${decision}\nStudent ID: ${uid}\n\nProceed?`)) return;
+window.handleLeave = async function(uid, decision, currentBalance) {
+    if (!confirm(`CONFIRM LEAVE DECISION:\n\nAction: ${decision}\nStudent ID: ${uid}\nCurrent Balance: ${currentBalance} days\n\nProceed?`)) return;
     
     let comment = "";
+    let daysToDeduct = 0;
+
     if (decision === 'Approved') {
-        comment = prompt("Approval Comment (e.g. 'ok you can take'):", "ok you can take");
+        const daysInput = prompt("How many days should be deducted from leave balance?", "1");
+        if(daysInput === null) return;
+        daysToDeduct = parseInt(daysInput);
+        if(isNaN(daysToDeduct)) { alert("Invalid number"); return; }
+        
+        comment = prompt("Approval Comment:", "ok you can take");
     } else {
         comment = prompt(`Add Comment for ${decision}:`, "Admin reviewed.");
     }
     if(!comment) return;
 
     try {
-        await update(ref(db, `users/${uid}/leaveRequest`), { 
-            status: decision,
-            adminComment: comment,
-            decisionTime: Date.now()
-        });
-        alert(`Leave ${decision}.`);
+        const updates = { 
+            "leaveRequest/status": decision,
+            "leaveRequest/adminComment": comment,
+            "leaveRequest/decisionTime": Date.now()
+        };
+
+        // Update Balance if approved
+        if (decision === 'Approved' && daysToDeduct > 0) {
+            updates["leaveBalance"] = Math.max(0, currentBalance - daysToDeduct);
+        }
+
+        await update(ref(db, `users/${uid}`), updates);
+        alert(`Leave ${decision}. Balance adjusted.`);
     } catch(e) { alert("Error: " + e.message); }
 };
 
 window.clearLeave = async function(uid) {
     if(!confirm("CONFIRM RESET:\n\nClear this leave status and reset to 'Active Student'?")) return;
     try {
-        // We delete the leaveRequest object to reset them
         await remove(ref(db, `users/${uid}/leaveRequest`));
         alert("Leave status cleared.");
     } catch(e) { alert("Error: " + e.message); }
 }
 
 window.terminateStudent = async function(uid) {
-    const hours = prompt("TERMINATE SESSION:\nEnter Lockout Duration in Hours (e.g., 0.5, 24):");
+    const hours = prompt("TERMINATE SESSION:\nEnter Lockout Duration in Hours:");
     if(!hours || isNaN(hours)) return;
-
     const reason = prompt("Enter Reason for Termination:");
     if(!reason) return;
     
-    if(!confirm(`CRITICAL CONFIRMATION:\n\nLockout Student: ${uid}\nDuration: ${hours} hours\nReason: ${reason}\n\nThis will block their access immediately. Proceed?`)) return;
-
     const lockTime = Date.now() + (parseFloat(hours) * 60 * 60 * 1000);
     try {
         await update(ref(db, `users/${uid}`), { 
@@ -866,13 +865,36 @@ async function initStudentDashboard() {
         return; 
     }
 
+    // --- CHECK LEAVE ACCRUAL (MONTHLY 6 DAYS + CARRYFORWARD) ---
+    const date = new Date();
+    const currentMonthKey = `${date.getFullYear()}-${date.getMonth()}`;
+    
+    let leaveBalance = serverData.leaveBalance !== undefined ? serverData.leaveBalance : 6;
+    let lastAccrual = serverData.lastAccrual || "";
+
+    if (lastAccrual !== currentMonthKey) {
+        // New Month detected! Add 6 days to existing balance
+        leaveBalance += 6;
+        // Update DB immediately
+        await update(ref(db, `users/${currentUser.uid}`), {
+            leaveBalance: leaveBalance,
+            lastAccrual: currentMonthKey
+        });
+        serverData.leaveBalance = leaveBalance; // update local ref
+    }
+    
+    // Update UI for Balance
+    const balDisplay = document.getElementById("leaveBalanceDisplay");
+    if(balDisplay) balDisplay.innerText = `Leave Bal: ${leaveBalance}`;
+
+
     // Check New Admin Feedback
     if (serverData.newFeedback) {
         document.getElementById("adminFeedbackBox").classList.remove("hidden");
         document.getElementById("adminFeedbackText").innerText = `${serverData.newFeedback}`;
     }
 
-    checkLeaveStatus();
+    checkLeaveStatus(serverData);
 
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
@@ -934,7 +956,6 @@ async function initStudentDashboard() {
 window.dismissFeedback = async function() {
     document.getElementById("adminFeedbackBox").classList.add("hidden");
     if(currentUser) {
-        // Remove the flag from DB
         await remove(ref(db, `users/${currentUser.uid}/newFeedback`));
     }
 }
@@ -942,9 +963,7 @@ window.dismissFeedback = async function() {
 // --- ALERT DISMISS ---
 window.dismissRejected = async function() {
     if(!currentUser) return;
-    // Remove warning from DB
     await remove(ref(db, `users/${currentUser.uid}/activeAlert`));
-    // UI will auto-hide via listener
 }
 
 // --- STUDENT LEAVE FUNCTIONS ---
@@ -963,51 +982,57 @@ async function requestLeave() {
         timestamp: Date.now()
     };
     
-    localStorage.setItem(key("LEAVE_REQ"), JSON.stringify(payload));
-    
     try {
         await update(ref(db, `users/${currentUser.uid}/leaveRequest`), payload);
-        checkLeaveStatus();
+        // Refresh check
+        const data = await downloadData(currentUser.uid);
+        checkLeaveStatus(data);
     } catch(e) { alert("Failed to send request"); }
 }
 
-function checkLeaveStatus() {
-    const req = JSON.parse(localStorage.getItem(key("LEAVE_REQ")));
-    const box = document.getElementById("leaveStatusBox");
+function checkLeaveStatus(data) {
+    // We check data directly from DB or passed object
+    const req = data.leaveRequest;
+    const dashboardBox = document.getElementById("leaveDashboardBox");
     
     if(req) {
-        box.classList.remove("hidden");
-        let statusText = "";
+        dashboardBox.classList.remove("hidden");
+        dashboardBox.className = "leave-status-box"; // reset class
         
-        // --- TRIGGER APPROVED POPUP ---
-        if (req.status === "Approved" && lastApprovedState === false) {
-             showApprovedPopup(req.dates, req.adminComment);
-             lastApprovedState = true;
-        }
-
-        if(req.status === "Pending") {
-            box.style.background = "#422006"; box.style.borderColor="#ca8a04";
-            statusText = `<span style="color:#fde047">⚠ PENDING: ${req.dates}</span>`;
+        let statusTitle = "LEAVE REQUEST STATUS";
+        let statusColorClass = "";
+        
+        if (req.status === "Pending") {
+             statusTitle = "⚠ LEAVE PENDING";
+             statusColorClass = "leave-status-half"; // reusing half style for pending/warn
         } else if (req.status === "Approved") {
-            box.style.background = "#14532d"; box.style.borderColor="#22c55e";
-            statusText = `<span style="color:#86efac">✔ APPROVED: ${req.dates}</span>`;
+             statusTitle = "✔ LEAVE APPROVED";
+             statusColorClass = "leave-status-approved";
+             
+             // Trigger popup only once per session if approved
+             if (!lastApprovedState) {
+                 showApprovedPopup(req.dates, req.adminComment);
+                 lastApprovedState = true;
+             }
         } else if (req.status === "Half Approved") {
-            box.style.background = "#1e3a8a"; box.style.borderColor="#3b82f6";
-            statusText = `<span style="color:#93c5fd">⚠ HALF APPROVED: ${req.dates}</span>`;
+             statusTitle = "⚠ HALF APPROVED";
+             statusColorClass = "leave-status-half";
         } else if (req.status === "Rejected") {
-            box.style.background = "#7f1d1d"; box.style.borderColor="#ef4444";
-            statusText = `<span style="color:#fca5a5">✖ REJECTED</span>`;
+             statusTitle = "✖ LEAVE REJECTED";
+             statusColorClass = "leave-status-rejected";
         }
         
-        // Show Admin Comment inside this box persistently
-        if (req.adminComment) {
-             statusText += `<div style="margin-top:5px; border-top:1px solid rgba(255,255,255,0.2); padding-top:4px; color:#e2e8f0; font-size:12px; font-style:italic">Admin: "${req.adminComment}"</div>`;
+        dashboardBox.classList.add(statusColorClass);
+        
+        let html = `<h3 style="margin:0 0 5px 0;">${statusTitle}</h3>`;
+        html += `<div style="font-size:14px; font-weight:bold;">Dates: ${req.dates}</div>`;
+        if(req.adminComment) {
+            html += `<div style="margin-top:5px; padding-top:5px; border-top:1px solid rgba(255,255,255,0.2); font-style:italic">Admin: "${req.adminComment}"</div>`;
         }
-              
-        box.innerHTML = statusText;
+        dashboardBox.innerHTML = html;
 
     } else {
-        box.classList.add("hidden");
+        dashboardBox.classList.add("hidden");
         lastApprovedState = false; 
     }
 }
@@ -1021,8 +1046,6 @@ function showApprovedPopup(dates, comment) {
     m.innerText = `Admin: "${comment}"`;
     
     p.classList.remove("hidden");
-    
-    // AUTO HIDE after 5 seconds since no dismiss button is allowed
     setTimeout(() => {
         p.classList.add("hidden");
     }, 5000);
@@ -1045,9 +1068,6 @@ async function downloadData(uid) {
             if(data.TEST_STATE) localStorage.setItem(key("TEST_STATE"), data.TEST_STATE);
             if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
             if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
-            
-            if(data.lockout) localStorage.setItem(key("LOCKOUT"), data.lockout);
-            if(data.leaveRequest) localStorage.setItem(key("LEAVE_REQ"), JSON.stringify(data.leaveRequest));
             
             localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
             localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
@@ -1105,7 +1125,8 @@ function toggleHistory() {
         logBox.classList.add("hidden");
 
         let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
-        history = history.slice(Math.max(0, history.length - 10)).reverse();
+        // Limit display to 4
+        history = history.slice(Math.max(0, history.length - 4)).reverse();
 
         const tbody = document.getElementById("historyTable");
         tbody.innerHTML = "";
@@ -1413,31 +1434,11 @@ function setupTasks() {
   uploadData();
   
   const taskBox = document.getElementById("taskBox");
-  taskBox.innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
-      <div>
-        <h3>Assigned Tasks</h3>
-        <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center">
-             <button onclick="startMockTestSetup()" style="background:#a16207; width:auto; padding:8px 20px;">Start Mock Test</button>
-        </div>
-        <div id="taskList"></div>
-        <hr>
-        <h4>Extra Work</h4>
-        <div id="extraList"></div>
-        <button onclick="addExtra()">+ Add Extra Work</button>
-      </div>
-      <div>
-        <h3 style="text-align:center">Live Progress</h3>
-        <div class="speedo">
-          <div id="needle" class="needle"></div>
-          <div class="cap"></div>
-        </div>
-        <div id="livePercent" class="percent">0%</div>
-        <div id="liveRating" class="rating">Poor</div>
-        <div id="liveDetails" class="details"></div>
-      </div>
-    </div>
-  `;
+  // Reload structure if mock test wiped it
+  if (!document.getElementById("taskList")) {
+      location.reload(); // Simple reload to restore grid structure
+      return;
+  }
 
   taskBox.classList.remove("hidden");
   document.getElementById("logBox").classList.remove("hidden");
@@ -1641,7 +1642,10 @@ function finalDayEnd() {
   
   let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
   history.push(historyEntry);
-  if (history.length > 20) history.shift(); 
+  
+  // *** DB LIMIT: KEEP ONLY 4 DAYS ***
+  if (history.length > 4) history.shift(); 
+  
   localStorage.setItem(key("HISTORY"), JSON.stringify(history));
 
   const doneReportItems = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
@@ -1755,7 +1759,6 @@ window.toggleHistory = toggleHistory;
 window.requestLeave = requestLeave;
 window.forceLogout = forceLogout;
 window.handleLeave = window.handleLeave;
-window.deleteStudent = window.deleteStudent;
 window.openAdminModal = window.openAdminModal;
 window.deleteLogEntry = window.deleteLogEntry;
 window.closeAdminModal = window.closeAdminModal;
