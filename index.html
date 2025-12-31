@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V14 (Live Alert System)</title>
+<title>Focus Watchdog V15 (Auto-Approval Popup)</title>
 
 <style>
 /* --- BASE STYLES --- */
@@ -147,39 +147,42 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 .sync-status { font-size: 10px; color: #64748b; text-align: center; margin-top:5px; }
 .nextInput{ width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #334155; background:#020617; color:#e5e7eb; }
 
-/* --- REJECTED POPUP (The "Picture Type" Alert) --- */
+/* --- REJECTED POPUP (Red) --- */
 .rejected-popup {
     position: fixed; top: 15%; left: 50%; transform: translate(-50%, 0); z-index: 9999;
-    background: #7f1d1d; /* Dark Red Background */
-    border: 1px solid #ef4444; /* Bright Red Border */
-    color: #fee2e2; 
-    padding: 20px 30px; 
-    border-radius: 12px;
+    background: #7f1d1d; border: 1px solid #ef4444; color: #fee2e2; 
+    padding: 20px 30px; border-radius: 12px;
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
-    text-align: center; 
-    display: flex; flex-direction: column; gap: 12px;
-    min-width: 320px;
-    animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    text-align: center; display: flex; flex-direction: column; gap: 12px;
+    min-width: 320px; animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
-
 .rejected-popup h2 { 
     margin: 0; font-size: 20px; color: #fca5a5; 
     text-transform: uppercase; letter-spacing: 1px; font-weight: 800;
 }
-
-.rejected-line {
-    height: 1px; background: rgba(255,255,255,0.2); width: 100%;
-}
-
-.rejected-popup p { 
-    margin: 0; font-style: italic; font-size: 16px; color: #fff; font-weight:500;
-}
+.popup-line { height: 1px; background: rgba(255,255,255,0.2); width: 100%; }
+.rejected-popup p { margin: 0; font-style: italic; font-size: 16px; color: #fff; font-weight:500; }
 
 .dismiss-btn { 
     background: #450a0a; border: 1px solid #ef4444; color: #fca5a5;
     margin-top: 5px; font-size: 12px; text-transform: uppercase;
 }
 .dismiss-btn:hover { background: #991b1b; color: white; border-color:white; }
+
+/* --- APPROVED POPUP (Green) - NO DISMISS BUTTON --- */
+.approved-popup {
+    position: fixed; top: 15%; left: 50%; transform: translate(-50%, 0); z-index: 9999;
+    background: #064e3b; border: 1px solid #22c55e; color: #dcfce7; 
+    padding: 20px 30px; border-radius: 12px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
+    text-align: center; display: flex; flex-direction: column; gap: 12px;
+    min-width: 320px; animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.approved-popup h2 { 
+    margin: 0; font-size: 20px; color: #4ade80; 
+    text-transform: uppercase; letter-spacing: 1px; font-weight: 800;
+}
+.approved-popup p { margin: 0; font-style: italic; font-size: 16px; color: #fff; font-weight:500; }
 
 @keyframes bounceIn { 
     0% { transform: translate(-50%, -100%) scale(0.5); opacity:0; } 
@@ -198,9 +201,15 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 <div id="rejectedPopup" class="rejected-popup hidden">
     <h2>× REJECTED</h2>
-    <div class="rejected-line"></div>
+    <div class="popup-line"></div>
     <p id="rejectedMsg">Admin: "not allowed"</p>
     <button class="dismiss-btn" onclick="dismissRejected()">Dismiss</button>
+</div>
+
+<div id="approvedPopup" class="approved-popup hidden">
+    <h2 id="approvedTitle">✔ APPROVED: 31</h2>
+    <div class="popup-line"></div>
+    <p id="approvedMsg">Admin: "ok you can take"</p>
 </div>
 
 <div class="sidebar">
@@ -390,6 +399,7 @@ let targetTime = null;
 let totalDuration = 0;
 let penalty = 0;
 let idleStrikes = 0;
+let lastApprovedState = false; // State tracker for popup
 const ADMIN_EMAIL = "admin@study.com";
 
 // --- WHITELIST ---
@@ -725,7 +735,12 @@ window.closeAdminModal = function() {
 window.handleLeave = async function(uid, decision) {
     if (!confirm(`CONFIRM LEAVE DECISION:\n\nAction: ${decision}\nStudent ID: ${uid}\n\nProceed?`)) return;
     
-    const comment = prompt(`Add Comment for ${decision}:`, "Admin reviewed.");
+    let comment = "";
+    if (decision === 'Approved') {
+        comment = prompt("Approval Comment (e.g. 'ok you can take'):", "ok you can take");
+    } else {
+        comment = prompt(`Add Comment for ${decision}:`, "Admin reviewed.");
+    }
     if(!comment) return;
 
     try {
@@ -917,6 +932,12 @@ function checkLeaveStatus() {
         box.classList.remove("hidden");
         let statusText = "";
         
+        // --- TRIGGER APPROVED POPUP ---
+        if (req.status === "Approved" && lastApprovedState === false) {
+             showApprovedPopup(req.dates, req.adminComment);
+             lastApprovedState = true;
+        }
+
         if(req.status === "Pending") {
             box.style.background = "#422006"; box.style.borderColor="#ca8a04";
             statusText = `<span style="color:#fde047">⚠ PENDING: ${req.dates}</span>`;
@@ -940,7 +961,24 @@ function checkLeaveStatus() {
 
     } else {
         box.classList.add("hidden");
+        lastApprovedState = false; 
     }
+}
+
+function showApprovedPopup(dates, comment) {
+    const p = document.getElementById("approvedPopup");
+    const t = document.getElementById("approvedTitle");
+    const m = document.getElementById("approvedMsg");
+    
+    t.innerText = `✔ APPROVED: ${dates}`;
+    m.innerText = `Admin: "${comment}"`;
+    
+    p.classList.remove("hidden");
+    
+    // AUTO HIDE after 5 seconds since no dismiss button is allowed
+    setTimeout(() => {
+        p.classList.add("hidden");
+    }, 5000);
 }
 
 // --- DATA SYNC ---
