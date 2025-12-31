@@ -1905,6 +1905,7 @@ function finalDayEnd() {
   const carry = tasks.filter(t => !t.done);
   // 🔒 CLOSE CURRENT SESSION BEFORE CALCULATING TIME
 const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  const carry = tasks.filter(t => !t.done);
 if (logs.length) {
   const last = logs[logs.length - 1];
   if (!last.logoutTS) {
