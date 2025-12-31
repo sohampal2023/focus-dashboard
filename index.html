@@ -585,9 +585,11 @@ function startAdminListener() {
 <span class="admin-badge badge-yellow">
 REQ: ${u.leaveRequest.dates}
 ${u.leaveRequest.medical ? " (MEDICAL)" : ""}
-</span>`;
+</span>
+<div style="font-size:10px; color:#fde047; margin-top:3px;">
+${u.leaveRequest.reason}
+</div>`;
 
-                                  <div style="font-size:10px; color:#fde047;">${u.leaveRequest.reason}</div>`;
                     leaveActions = `
                         <button style="background:#166534" onclick="handleLeave('${uid}', 'Approved', ${leaveBalance})">Approve</button>
                         <button style="background:#d97706" onclick="handleLeave('${uid}', 'Half Approved', ${leaveBalance})">Half</button>
