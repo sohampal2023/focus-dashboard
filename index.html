@@ -1613,13 +1613,14 @@ function finishTestSequence(testState, loadDashboard = false) {
   } else {
     location.reload();
     }
-  } else {
+  else {
     if(testState.status === "EXPIRED") {
         alert("You must save marks to proceed.");
         finishTestSequence(testState, true);
     }
   }
 }
+
 
 // --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
 function setupTasks() {
