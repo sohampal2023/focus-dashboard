@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V15 (Auto-Approval Popup)</title>
+<title>Focus Watchdog V16 (Real-Time Work View)</title>
 
 <style>
 /* --- BASE STYLES --- */
@@ -75,7 +75,7 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 
 /* --- ADMIN PANEL --- */
 .admin-row {
-    display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 1.5fr; gap:10px; align-items: start;
+    display: grid; grid-template-columns: 2fr 1.5fr 1.5fr 2fr 1.5fr; gap:10px; align-items: start;
     padding: 15px; border-bottom: 1px solid #334155; background: #0f172a; margin-bottom:5px; border-radius:8px;
 }
 .admin-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; display:inline-block; margin-bottom:4px; }
@@ -254,10 +254,11 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     <div style="text-align:right; margin-bottom:10px; font-size:12px; color:#4ade80">
         ● Live System Active
     </div>
-    <div style="display:grid; grid-template-columns: 2fr 1.5fr 1.5fr 1.5fr; gap:10px; padding:10px; color:#94a3b8; font-size:12px; font-weight:bold; text-transform:uppercase;">
+    <div style="display:grid; grid-template-columns: 2fr 1.5fr 1.5fr 2fr 1.5fr; gap:10px; padding:10px; color:#94a3b8; font-size:12px; font-weight:bold; text-transform:uppercase;">
         <div>Student ID</div>
-        <div style="text-align:center">Live Progress</div>
+        <div style="text-align:center">Progress</div>
         <div style="text-align:center">Leave Status</div>
+        <div style="text-align:center">Live Work Done</div>
         <div style="text-align:center">Actions</div>
     </div>
     <div id="studentList">Loading...</div>
@@ -517,6 +518,7 @@ function startAdminListener() {
                 // 4. Leave Status
                 let leaveBadge = `<span style="color:#64748b; font-size:11px;">Active Student</span>`;
                 let leaveActions = "";
+                let clearBtn = "";
                 
                 if (u.leaveRequest && u.leaveRequest.status === "Pending") {
                     leaveBadge = `<span class="admin-badge badge-yellow">REQ: ${u.leaveRequest.dates}</span>
@@ -530,6 +532,9 @@ function startAdminListener() {
                     const s = u.leaveRequest.status;
                     const c = s === "Approved" ? "#86efac" : "#fca5a5";
                     leaveBadge = `<span style="color:${c}; font-size:11px;">On Leave (${s})</span>`;
+                    
+                    // Add Clear Button for processed requests
+                    clearBtn = `<button onclick="clearLeave('${uid}')" style="background:#334155; padding:2px 6px; font-size:10px; margin-left:5px; width:auto; display:inline-block">Clear</button>`;
                 }
 
                 if(isLocked) {
@@ -540,7 +545,23 @@ function startAdminListener() {
                     leaveBadge += ` <span class="admin-badge badge-red" style="background:#450a0a; border:1px solid #ef4444">⚠ REJECT SENT</span>`;
                 }
 
-                // 5. Render Row
+                // 5. LIVE WORK COMPLETED
+                let liveWorkHtml = `<div style="color:#475569; font-size:11px">Nothing yet</div>`;
+                if(u.LOGS) {
+                    try {
+                        const allLogs = JSON.parse(u.LOGS);
+                        if(allLogs.length > 0) {
+                            const last = allLogs[allLogs.length - 1];
+                            if(last.completed && last.completed.length > 0) {
+                                liveWorkHtml = last.completed.map(c => 
+                                    `<div style="font-size:11px; color:#86efac; border-bottom:1px solid rgba(255,255,255,0.1)">✔ ${c.name}</div>`
+                                ).join("");
+                            }
+                        }
+                    } catch(e){}
+                }
+
+                // 6. Render Row
                 html += `
                 <div class="admin-row">
                     <div>
@@ -554,6 +575,11 @@ function startAdminListener() {
 
                     <div style="text-align:center">
                         ${leaveBadge}
+                        ${clearBtn}
+                    </div>
+
+                    <div style="text-align:left; max-height:80px; overflow-y:auto; padding:0 5px;">
+                        ${liveWorkHtml}
                     </div>
 
                     <div class="admin-btn-group">
@@ -752,6 +778,15 @@ window.handleLeave = async function(uid, decision) {
         alert(`Leave ${decision}.`);
     } catch(e) { alert("Error: " + e.message); }
 };
+
+window.clearLeave = async function(uid) {
+    if(!confirm("CONFIRM RESET:\n\nClear this leave status and reset to 'Active Student'?")) return;
+    try {
+        // We delete the leaveRequest object to reset them
+        await remove(ref(db, `users/${uid}/leaveRequest`));
+        alert("Leave status cleared.");
+    } catch(e) { alert("Error: " + e.message); }
+}
 
 window.terminateStudent = async function(uid) {
     const hours = prompt("TERMINATE SESSION:\nEnter Lockout Duration in Hours (e.g., 0.5, 24):");
@@ -1719,6 +1754,7 @@ window.terminateStudent = window.terminateStudent;
 window.dismissFeedback = window.dismissFeedback;
 window.sendWarning = window.sendWarning;
 window.dismissRejected = window.dismissRejected;
+window.clearLeave = window.clearLeave;
 </script>
 </body>
 </html>
