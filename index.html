@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Focus Watchdog V20 (Timeout Counter)</title>
+<title>Focus Watchdog V21 (Mock Test Edition)</title>
 
 <style>
 /* --- BASE STYLES --- */
@@ -285,7 +285,8 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         
         <div class="tab-header">
             <button class="tab-btn active" onclick="switchAdminTab('logs')">Live Logs</button>
-            <button class="tab-btn" onclick="switchAdminTab('history')">Performance History (Last 4 Days)</button>
+            <button class="tab-btn" onclick="switchAdminTab('history')">Performance</button>
+            <button class="tab-btn" onclick="switchAdminTab('mocks')" style="color:#facc15">Mock Tests</button>
         </div>
 
         <div id="tabLogs">
@@ -305,6 +306,16 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
                     <tr><th>Date</th><th>Score</th><th>Time</th><th>Rating</th><th>Admin Review</th></tr>
                 </thead>
                 <tbody id="modalBodyHistory"></tbody>
+            </table>
+        </div>
+
+        <div id="tabMocks" class="hidden">
+            <h4 style="color:#facc15; margin-bottom:10px;">Last 4 Mock Tests</h4>
+            <table style="width:100%">
+                <thead>
+                    <tr><th>Date</th><th>Test Name</th><th>Score</th><th>Marks</th><th>Accuracy</th></tr>
+                </thead>
+                <tbody id="modalBodyMocks"></tbody>
             </table>
         </div>
     </div>
@@ -419,8 +430,8 @@ let idleTimer = null;
 let targetTime = null;
 let totalDuration = 0;
 let penalty = 0;
-let idleStrikes = 0; // Current active strikes (resets on Bio Break)
-let dailyTimeouts = 0; // Cumulative total for the day (Only resets on Day End)
+let idleStrikes = 0; 
+let dailyTimeouts = 0;
 let lastApprovedState = false; 
 const ADMIN_EMAIL = "admin@study.com";
 
@@ -592,13 +603,13 @@ function startAdminListener() {
                     leaveBadge += ` <span class="admin-badge badge-red" style="background:#450a0a; border:1px solid #ef4444">⚠ REJECT SENT</span>`;
                 }
 
-                // --- NEW WATCHDOG TIMEOUT DISPLAY ---
+                // 5. Watchdog Timeout Display
                 let watchdogHtml = "";
                 const timeouts = u.DAILY_TIMEOUTS || 0;
                 if(timeouts > 0) {
-                     watchdogHtml = `<div style="margin-top:4px;"><span class="admin-badge badge-red">TIMEOUTS: ${timeouts}</span></div>`;
+                      watchdogHtml = `<div style="margin-top:4px;"><span class="admin-badge badge-red">TIMEOUTS: ${timeouts}</span></div>`;
                 } else {
-                     watchdogHtml = `<div style="margin-top:4px;"><span class="admin-badge badge-green">WATCHDOG: OK</span></div>`;
+                      watchdogHtml = `<div style="margin-top:4px;"><span class="admin-badge badge-green">WATCHDOG: OK</span></div>`;
                 }
 
                 // 6. Render Row
@@ -660,10 +671,12 @@ window.openAdminModal = async function(uid, email) {
     const modal = document.getElementById("adminModal");
     const bodyLogs = document.getElementById("modalBodyLogs");
     const bodyHist = document.getElementById("modalBodyHistory");
+    const bodyMocks = document.getElementById("modalBodyMocks");
     
     modal.classList.remove("hidden");
     bodyLogs.innerHTML = "Loading...";
     bodyHist.innerHTML = "Loading...";
+    bodyMocks.innerHTML = "Loading...";
     
     // Default to logs tab
     window.switchAdminTab('logs');
@@ -678,6 +691,10 @@ window.openAdminModal = async function(uid, email) {
         let history = JSON.parse(user.HISTORY || "[]");
         renderAdminHistory(uid, history);
 
+        // NEW: Load Mock Logs
+        let mocks = JSON.parse(user.MOCK_LOGS || "[]");
+        renderMockLogs(uid, mocks);
+
     } catch(e) {
         bodyLogs.innerHTML = "Error loading data: " + e.message;
     }
@@ -686,20 +703,60 @@ window.openAdminModal = async function(uid, email) {
 window.switchAdminTab = function(tabName) {
     const tabLogs = document.getElementById("tabLogs");
     const tabHist = document.getElementById("tabHistory");
+    const tabMocks = document.getElementById("tabMocks");
     const btns = document.querySelectorAll(".tab-btn");
     
     btns.forEach(b => b.classList.remove("active"));
+    tabLogs.classList.add("hidden");
+    tabHist.classList.add("hidden");
+    tabMocks.classList.add("hidden");
     
     if (tabName === 'logs') {
         tabLogs.classList.remove("hidden");
-        tabHist.classList.add("hidden");
         btns[0].classList.add("active");
-    } else {
-        tabLogs.classList.add("hidden");
+    } else if (tabName === 'history') {
         tabHist.classList.remove("hidden");
         btns[1].classList.add("active");
+    } else if (tabName === 'mocks') {
+        tabMocks.classList.remove("hidden");
+        btns[2].classList.add("active");
     }
 }
+
+window.renderMockLogs = function(uid, mocks) {
+    const body = document.getElementById("modalBodyMocks");
+    if (!mocks || mocks.length === 0) {
+        body.innerHTML = "<tr><td colspan='5'>No Mock Tests recorded yet.</td></tr>";
+        return;
+    }
+    
+    // Display last 4 (reverse order)
+    let displayMocks = mocks.slice().reverse();
+    let html = "";
+    
+    displayMocks.forEach(m => {
+        let color = "#e5e7eb";
+        const score = parseFloat(m.score);
+        const total = parseFloat(m.total);
+        if(total > 0) {
+            const p = (score / total) * 100;
+            if(p < 40) color = "#f87171"; // Red
+            else if(p >= 80) color = "#4ade80"; // Green
+            else color = "#facc15"; // Yellow
+        }
+
+        html += `
+            <tr>
+                <td>${m.date}</td>
+                <td>${m.name}</td>
+                <td style="color:${color}; font-weight:bold">${m.score} / ${m.total}</td>
+                <td>${Math.round((m.score/m.total)*100)}%</td>
+                <td>${m.acc}%</td>
+            </tr>
+        `;
+    });
+    body.innerHTML = html;
+};
 
 window.renderAdminLogs = function(uid, logs) {
     const body = document.getElementById("modalBodyLogs");
@@ -740,7 +797,6 @@ window.renderAdminLogs = function(uid, logs) {
 
 window.renderAdminHistory = function(uid, history) {
     const body = document.getElementById("modalBodyHistory");
-    // Filter logic if history had deletion capability
     if (!history || history.length === 0) {
         body.innerHTML = "<tr><td colspan='5'>No Daily Reports yet.</td></tr>";
         return;
@@ -962,7 +1018,7 @@ async function initStudentDashboard() {
 
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
-    dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); // LOAD TIMEOUTS
+    dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
 
     // Init Timeout UI
@@ -1156,8 +1212,11 @@ async function downloadData(uid) {
             if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
             if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
             
+            // DOWNLOAD MOCK LOGS
+            if(data.MOCK_LOGS) localStorage.setItem(key("MOCK_LOGS"), data.MOCK_LOGS);
+
             localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
-            localStorage.setItem(key("DAILY_TIMEOUTS"), data.DAILY_TIMEOUTS || "0"); // DOWNLOAD TIMEOUTS
+            localStorage.setItem(key("DAILY_TIMEOUTS"), data.DAILY_TIMEOUTS || "0"); 
             localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
             
             syncStatus.innerText = "Online";
@@ -1187,8 +1246,9 @@ function uploadData() {
         TEST_STATE: localStorage.getItem(key("TEST_STATE")),
         NEXT_TASKS: localStorage.getItem(key("NEXT_TASKS")),
         HISTORY: localStorage.getItem(key("HISTORY")), 
+        MOCK_LOGS: localStorage.getItem(key("MOCK_LOGS")), // UPLOAD MOCK LOGS
         IDLE_STRIKES: localStorage.getItem(key("IDLE_STRIKES")),
-        DAILY_TIMEOUTS: localStorage.getItem(key("DAILY_TIMEOUTS")), // UPLOAD TIMEOUTS
+        DAILY_TIMEOUTS: localStorage.getItem(key("DAILY_TIMEOUTS")),
         PENALTY: localStorage.getItem(key("PENALTY"))
     };
 
@@ -1470,6 +1530,7 @@ function finishTestSequence(testState, loadDashboard = false) {
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     const resultComment = `Score: ${obtained}/${testState.fullMarks} | Acc: ${accuracy}%`;
     
+    // 1. ADD TO EXTRA WORK
     extras.push({
       name: `MOCK TEST: ${testState.name}`,
       done: true,
@@ -1478,6 +1539,7 @@ function finishTestSequence(testState, loadDashboard = false) {
     });
     localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
     
+    // 2. ADD TO LOGS
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if(logs.length){
       const active = logs[logs.length-1];
@@ -1489,6 +1551,22 @@ function finishTestSequence(testState, loadDashboard = false) {
       });
       localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
+
+    // 3. (NEW) SAVE TO DEDICATED MOCK TEST HISTORY (Max 4)
+    let mockLogs = JSON.parse(localStorage.getItem(key("MOCK_LOGS")) || "[]");
+    mockLogs.push({
+        date: new Date().toLocaleDateString(),
+        name: testState.name,
+        score: obtained,
+        total: testState.fullMarks,
+        acc: accuracy
+    });
+    // Keep only last 4
+    if(mockLogs.length > 4) {
+        mockLogs = mockLogs.slice(mockLogs.length - 4);
+    }
+    localStorage.setItem(key("MOCK_LOGS"), JSON.stringify(mockLogs));
+
     localStorage.removeItem(key("TEST_STATE"));
     uploadData();
     const btn = document.querySelector(".watchdog-btn");
