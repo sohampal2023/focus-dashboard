@@ -557,27 +557,39 @@ async function initAdminDashboard() {
 }
 
 async function cleanupDeletedData() {
-    // 5 Day Retention Policy
+    // 🔒 HARD GUARD: do not run unless admin
+    if (!currentUser || currentUser.email !== ADMIN_EMAIL) return;
+
     const RETENTION_MS = 5 * 24 * 60 * 60 * 1000;
+
     try {
         const snapshot = await get(ref(db, 'users'));
         if (!snapshot.exists()) return;
+
         const users = snapshot.val();
-        
-        Object.keys(users).forEach(async (uid) => {
+
+        for (const uid of Object.keys(users)) {
             const u = users[uid];
-            // Clean Logs
-            if (u.LOGS) {
-                let logs = JSON.parse(u.LOGS);
-                const originalLen = logs.length;
-                logs = logs.filter(l => !l.deleted || (Date.now() - l.deletedTs < RETENTION_MS));
-                if (logs.length !== originalLen) {
-                    await update(ref(db, `users/${uid}`), { LOGS: JSON.stringify(logs) });
-                }
+            if (!u.LOGS) continue;
+
+            let logs = JSON.parse(u.LOGS);
+            const originalLen = logs.length;
+
+            logs = logs.filter(
+                l => !l.deleted || (Date.now() - l.deletedTs < RETENTION_MS)
+            );
+
+            if (logs.length !== originalLen) {
+                await update(ref(db, `users/${uid}`), {
+                    LOGS: JSON.stringify(logs)
+                });
             }
-        });
-    } catch(e) { console.error("Cleanup error", e); }
+        }
+    } catch (e) {
+        console.warn("Cleanup skipped (no permission)");
+    }
 }
+
 
 function startAdminListener() {
     const listDiv = document.getElementById("studentList");
