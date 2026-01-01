@@ -310,7 +310,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         <div id="tabHistory" class="hidden">
             <table style="width:100%">
                 <thead>
-                    <tr><th>Date</th><th>Score</th><th>Time</th><th>Rating</th><th>Admin Review</th></tr>
+                    <tr><th>Date</th><th>Score</th><th>Time</th><th>Rating</th><th>Admin Review</th><th>Action</th></tr>
                 </thead>
                 <tbody id="modalBodyHistory"></tbody>
             </table>
@@ -916,31 +916,41 @@ window.renderAdminLogs = function(uid, logs) {
 
 window.renderAdminHistory = function(uid, history) {
     const body = document.getElementById("modalBodyHistory");
+
     if (!history || history.length === 0) {
-        body.innerHTML = "<tr><td colspan='5'>No Daily Reports yet.</td></tr>";
+        body.innerHTML = "<tr><td colspan='6'>No Daily Reports yet.</td></tr>";
         return;
     }
-    
-    let displayHist = history.slice(Math.max(0, history.length - 10)).reverse();
+
     let html = "";
-    displayHist.forEach((entry, idx) => {
-        let trueIdx = history.length - 1 - idx; 
-        let reviewBtn = `<button onclick="addAdminReview('${uid}', ${trueIdx})" style="width:auto; padding:5px; font-size:10px; background:#a855f7;">Add Review</button>`;
-        if (entry.adminReview) {
-            reviewBtn = `<div style="font-size:11px; color:#e9d5ff; font-style:italic;">"${entry.adminReview}"</div>`;
-        }
+
+    history.forEach((entry, index) => {
         html += `
-            <tr>
-                <td>${entry.date}</td>
-                <td style="color:#facc15; font-weight:bold">${entry.score}%</td>
-                <td>${entry.time}</td>
-                <td>${entry.rating}</td>
-                <td>${reviewBtn}</td>
-            </tr>
-        `;
+        <tr>
+            <td>${entry.date}</td>
+            <td style="color:#facc15;font-weight:bold">${entry.score}%</td>
+            <td>${entry.time}</td>
+            <td>${entry.rating}</td>
+            <td style="font-size:12px">
+              ${entry.adminReview || 
+                `<button onclick="addAdminReview('${uid}', ${index})"
+                  style="background:#a855f7;font-size:10px;padding:4px 6px">
+                  Add Review
+                </button>`}
+            </td>
+            <td>
+              <button
+                onclick="deletePerformanceEntry('${uid}', ${index})"
+                style="background:#7f1d1d;color:white;font-size:10px;padding:4px 6px">
+                Delete
+              </button>
+            </td>
+        </tr>`;
     });
+
     body.innerHTML = html;
 };
+
 
 window.addAdminReview = async function(uid, index) {
     let history = [];
@@ -966,6 +976,37 @@ window.addAdminReview = async function(uid, index) {
         alert("Review published.");
         openAdminModal(uid, "");
     } catch(e) { alert("Error: " + e.message); }
+};
+window.deletePerformanceEntry = async function(uid, index) {
+    if (!confirm(
+        "CONFIRM DELETE\n\n" +
+        "This performance record will be permanently deleted.\n" +
+        "This action cannot be undone."
+    )) return;
+
+    try {
+        const snap = await get(ref(db, `users/${uid}/HISTORY`));
+        if (!snap.exists()) return;
+
+        let history = JSON.parse(snap.val() || "[]");
+
+        if (!history[index]) {
+            alert("Record not found.");
+            return;
+        }
+
+        history.splice(index, 1); // HARD DELETE
+
+        await update(ref(db, `users/${uid}`), {
+            HISTORY: JSON.stringify(history)
+        });
+
+        alert("Performance record deleted.");
+        openAdminModal(uid, ""); // refresh modal
+
+    } catch (e) {
+        alert("Delete failed: " + e.message);
+    }
 };
 
 window.deleteLogEntry = async function(uid, index) {
