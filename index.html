@@ -718,89 +718,123 @@ ${u.leaveRequest.reason}
 // --- ADMIN WARNING SYSTEM (STRICT CONFIRM) ---
 // --- ADMIN NOTICE SYSTEM ---
 window.sendNotice = async function (uid) {
-    if (!isAdmin()) {
+  if (!isAdmin()) {
     alert("ACCESS DENIED: Only Admin can upload notices.");
     return;
-}
+  }
 
+  const title = prompt("NOTICE TITLE:", "IMPORTANT");
+  if (!title) return;
 
-    const title = prompt("NOTICE TITLE:", "IMPORTANT");
-    if (!title) return;
+  const message = prompt("NOTICE MESSAGE:");
+  if (!message) return;
 
-    const message = prompt("NOTICE MESSAGE:");
-    if (!message) return;
+  const daysInput = prompt(
+    "How many days should this notice stay?\nLeave blank = auto delete next day",
+    "1"
+  );
 
-    const daysInput = prompt(
-        "How many days should this notice stay?\nLeave blank = auto delete next day",
-        "1"
-    );
+  let expiry = Date.now() + 24 * 60 * 60 * 1000;
+  if (daysInput && !isNaN(daysInput)) {
+    expiry = Date.now() + (parseInt(daysInput) * 24 * 60 * 60 * 1000);
+  }
 
-    let expiry = Date.now() + 24 * 60 * 60 * 1000;
-    if (daysInput && !isNaN(daysInput)) {
-        expiry = Date.now() + (parseInt(daysInput) * 24 * 60 * 60 * 1000);
-    }
+  // ---- ATTACHMENT TYPE ----
+  const attachType = prompt(
+    "Attachment Type:\n1 = PDF (max 1 MB)\n2 = Image (max 1 MB)\nLeave blank = No attachment",
+    ""
+  );
 
-    // Ask if attachment needed
-    const attach = confirm("Do you want to attach a PDF or Image?");
-    let file = null;
-let fileUrl = null;
-let fileType = null;
+  let fileUrl = null;
+  let fileType = null;
 
-if (attach) {
-    const fileInput = document.getElementById("noticeFileInput");
-    fileInput.value = "";
+  if (attachType === "1") {
+    // PDF upload
+    const pdfInput = document.getElementById("noticePdfInput");
+    pdfInput.value = "";
+    pdfInput.click();
 
-    file = await new Promise(resolve => {
-        fileInput.onchange = () => resolve(fileInput.files[0]);
-        fileInput.click();
+    const file = await new Promise(resolve => {
+      pdfInput.onchange = () => resolve(pdfInput.files[0] || null);
     });
 
     if (!file) return;
 
-    if (file.size > 2 * 1024 * 1024) {
-        alert("File too large. Max allowed size is 2 MB.");
-        return;
+    if (file.size > 1 * 1024 * 1024) {
+      alert("PDF too large. Max allowed size is 1 MB.");
+      return;
     }
 
-    fileType = file.type.includes("pdf") ? "pdf" : "image";
-
-    const storagePath = `notices/${uid}/${Date.now()}_${file.name}`;
-    const storageRef = sRef(storage, storagePath);
-
-    try {
-        await uploadBytes(storageRef, file);
-        fileUrl = await getDownloadURL(storageRef);
-    } catch (e) {
-        alert("File upload failed.");
-        return;
+    if (!file.name.toLowerCase().endsWith(".pdf")) {
+      alert("Only PDF files allowed.");
+      return;
     }
-}
 
+    const storageRef = sRef(
+      storage,
+      `notices/${uid}/pdf_${Date.now()}_${file.name}`
+    );
 
+    await uploadBytes(storageRef, file);
+    fileUrl = await getDownloadURL(storageRef);
+    fileType = "pdf";
+  }
 
+  if (attachType === "2") {
+    // Image upload
+    const imgInput = document.getElementById("noticeImageInput");
+    imgInput.value = "";
+    imgInput.click();
 
-    const noticeData = {
-        title,
-        message,
-        fileUrl,
-        fileType,
-        time: Date.now(),
-        expiry
-    };
+    const file = await new Promise(resolve => {
+      imgInput.onchange = () => resolve(imgInput.files[0] || null);
+    });
 
-    const noticeRef = ref(db, `users/${uid}/NOTICES`);
-    const snap = await get(noticeRef);
-    let existing = snap.exists() ? snap.val() : {};
+    if (!file) return;
 
-    // Keep max 5 notices
-    const keys = Object.keys(existing);
-    if (keys.length >= 5) delete existing[keys[0]];
+    if (file.size > 1 * 1024 * 1024) {
+      alert("Image too large. Max allowed size is 1 MB.");
+      return;
+    }
 
-    existing[Date.now()] = noticeData;
-    await set(noticeRef, existing);
+    if (!file.type.startsWith("image/")) {
+      alert("Only image files allowed.");
+      return;
+    }
 
-    alert("Notice published successfully.");
+    const storageRef = sRef(
+      storage,
+      `notices/${uid}/image_${Date.now()}_${file.name}`
+    );
+
+    await uploadBytes(storageRef, file);
+    fileUrl = await getDownloadURL(storageRef);
+    fileType = "image";
+  }
+
+  const noticeData = {
+    title,
+    message,
+    fileUrl,
+    fileType,
+    time: Date.now(),
+    expiry
+  };
+
+  const noticeRef = ref(db, `users/${uid}/NOTICES`);
+  const snap = await get(noticeRef);
+  let existing = snap.exists() ? snap.val() : {};
+
+  // keep max 5 notices
+  const keys = Object.keys(existing);
+  if (keys.length >= 5) delete existing[keys[0]];
+
+  existing[Date.now()] = noticeData;
+  await set(noticeRef, existing);
+
+  alert("Notice published successfully.");
 };
+
 window.sendWarning = async function(uid) {
     const msg = prompt("Enter REJECT/WARNING Message for Student:", "not allowed");
     if(!msg) return;
@@ -2404,7 +2438,6 @@ window.softRefresh = function () {
     window.softRefresh = window.softRefresh;
 
   </script>
-<input type="file" id="noticeFileInput" accept=".pdf,image/*" style="display:none"/>
 
 </body>
 </html>
