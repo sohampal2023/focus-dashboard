@@ -859,7 +859,12 @@ window.renderMockLogs = function(uid, mocks) {
                 <td>${m.date}</td>
                 <td>${m.name}</td>
                 <td style="color:${color}; font-weight:bold">${m.score} / ${m.total}</td>
-                <td>${m.total && Number(m.total) > 0? Math.round((Number(m.score) / Number(m.total)) * 100): 0}%</td>
+                <td>${
+  m.total && Number(m.total) > 0
+    ? Math.round((Number(m.score) / Number(m.total)) * 100)
+    : 0
+}%</td>
+
                 <td>${m.acc}%</td>
             </tr>
         `;
