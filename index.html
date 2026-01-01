@@ -224,6 +224,12 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     <div class="popup-line"></div>
     <p id="approvedMsg">Admin: "ok you can take"</p>
 </div>
+<div id="noticePopup" class="approved-popup hidden">
+    <h2>📢 NEW NOTICE</h2>
+    <div class="popup-line"></div>
+    <p id="noticePopupMsg">You have a new notice</p>
+    <button class="dismiss-btn" onclick="dismissNoticePopup()">View Later</button>
+</div>
 
 <div class="sidebar">
   <h2>SECURE WATCHDOG</h2>
@@ -1002,6 +1008,8 @@ window.unlockStudent = async function(uid) {
 // STUDENT LOGIC
 // ==========================================
 async function initStudentDashboard() {
+    document.getElementById("studentView").classList.remove("hidden");
+    document.getElementById("adminBox").classList.add("hidden");
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
@@ -1019,6 +1027,43 @@ async function initStudentDashboard() {
             popup.classList.add("hidden");
         }
     });
+    // --- REALTIME NOTICE POPUP (LIKE WARNING, BUT INFO) ---
+onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
+    if (!snapshot.exists()) return;
+
+    const notices = snapshot.val();
+
+    // Get last seen notice time
+    const seenSnap = await get(
+        ref(db, `users/${currentUser.uid}/lastSeenNoticeTime`)
+    );
+    const lastSeen = seenSnap.exists() ? seenSnap.val() : 0;
+
+    // Find newest notice
+    let latestNotice = null;
+    Object.values(notices).forEach(n => {
+        if (!latestNotice || n.time > latestNotice.time) {
+            latestNotice = n;
+        }
+    });
+
+    // Show popup only for NEW notice
+    if (latestNotice && latestNotice.time > lastSeen) {
+        document.getElementById("noticePopupMsg").innerText =
+            `${latestNotice.title}: ${
+                latestNotice.message.length > 80
+                ? latestNotice.message.slice(0, 80) + "..."
+                : latestNotice.message
+            }`;
+
+        document.getElementById("noticePopup").classList.remove("hidden");
+
+        // Mark as seen (prevents repeat popup)
+        await update(ref(db, `users/${currentUser.uid}`), {
+            lastSeenNoticeTime: latestNotice.time
+        });
+    }
+});
 
     const serverData = await downloadData(currentUser.uid);
     
@@ -1142,6 +1187,12 @@ window.dismissRejected = async function() {
     if(!currentUser) return;
     await remove(ref(db, `users/${currentUser.uid}/activeAlert`));
 }
+// --- NOTICE POPUP DISMISS ---
+window.dismissNoticePopup = function () {
+    const popup = document.getElementById("noticePopup");
+    if (popup) popup.classList.add("hidden");
+};
+
 
 // --- STUDENT LEAVE FUNCTIONS ---
 async function requestLeave() {
@@ -2142,6 +2193,8 @@ window.toggleNoticeBoard = function () {
     window.dismissLeaveStatus = window.dismissLeaveStatus;
     window.resetLeaveBalance = window.resetLeaveBalance;
     window.toggleNoticeBoard = window.toggleNoticeBoard;
+    window.dismissRejected = window.dismissRejected;
+    window.dismissNoticePopup = window.dismissNoticePopup;
   </script>
 </body>
 </html>
