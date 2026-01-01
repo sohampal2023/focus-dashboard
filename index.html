@@ -535,6 +535,11 @@ function forceLogout() {
         signOut(auth).then(() => location.reload());
     }
 }
+window.logoutFromTermination = function () {
+  signOut(auth).then(() => {
+    location.reload();
+  });
+};
 
 // ==========================================
 // ADMIN DASHBOARD LOGIC (REAL-TIME)
@@ -1227,12 +1232,44 @@ onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
     if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
         const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
         document.body.innerHTML = `
-            <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;text-align:center;">
-                <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">TERMINATED</h1>
-                <h2 style="color:#f87171;margin-top:10px">${serverData.lockoutReason || "Admin Action"}</h2>
-                <p>Time remaining: ${minLeft} minutes</p>
-                <button onclick="location.reload()" style="width:200px;margin-top:20px;">Try Again</button>
-            </div>`;
+  <div style="
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    flex-direction:column;
+    text-align:center;
+    background:#020617;
+    color:#e5e7eb;
+  ">
+    <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">
+      TERMINATED
+    </h1>
+
+    <h2 style="color:#f87171;margin-top:10px">
+      ${serverData.lockoutReason || "Admin Action"}
+    </h2>
+
+    <p style="margin-top:10px">
+      Time remaining: ${minLeft} minutes
+    </p>
+
+    <div style="display:flex; gap:12px; margin-top:20px">
+      <button
+        onclick="location.reload()"
+        style="padding:10px 24px;border-radius:8px;background:#1e293b;color:white;border:1px solid #334155">
+        Try Again
+      </button>
+
+      <button
+        onclick="logoutFromTermination()"
+        style="padding:10px 24px;border-radius:8px;background:#7f1d1d;color:white;border:1px solid #ef4444">
+        Logout
+      </button>
+    </div>
+  </div>
+`;
+
         return; 
     }
 
