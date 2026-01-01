@@ -1391,7 +1391,7 @@ if (!hasActiveSession) {
     if (activeTest) {
         if (activeTest.status === "EXPIRED") {
            alert("Mock Test Time Ended! Please enter marks.");
-           (activeTest, true);
+           finishTestSequence(activeTest, true);
            return;
         }
         if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
@@ -1404,7 +1404,7 @@ if (!hasActiveSession) {
             updateProgress();
             return;
         } else {
-            (activeTest, true);
+            finishTestSequence(activeTest, true);
             return;
         }
     }
@@ -1904,8 +1904,11 @@ function restoreTestUI(testState) {
 
 function triggerEndTest() {
   const testState = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-  if(testState) (testState, true);
+  if (!testState) return;
+
+  finishTestSequence(testState, false);
 }
+
 
 function finishTestSequence(testState, loadDashboard = false) {
   let obtained = prompt(
