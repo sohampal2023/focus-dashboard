@@ -427,6 +427,9 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, set, get, child, update, remove, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getStorage, ref as sRef, uploadBytes, getDownloadURL } 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
 
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
@@ -441,6 +444,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
+const storage = getStorage(app);
 
 // --- GLOBAL VARIABLES ---
 let currentUser = null; 
@@ -663,6 +667,8 @@ ${u.leaveRequest.reason}
                         <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
                         <button style="background:#ea580c; margin-top:4px;" onclick="terminateStudent('${uid}')">Lock / Terminate</button>
                         <button style="background:#0891b2; margin-top:4px;" onclick="resetLeaveBalance('${uid}')">Reset Balance (6)</button>
+                        <button style="background:#0ea5e9; margin-top:4px;" onclick="sendNotice('${uid}')">📢 Notice</button>
+
                         ${isLocked ? `<button style="background:#22c55e; margin-top:4px;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
                     </div>
                 </div>`;
@@ -676,6 +682,83 @@ ${u.leaveRequest.reason}
 }
 
 // --- ADMIN WARNING SYSTEM (STRICT CONFIRM) ---
+// --- ADMIN NOTICE SYSTEM ---
+window.sendNotice = async function (uid) {
+
+    const title = prompt("NOTICE TITLE:", "IMPORTANT");
+    if (!title) return;
+
+    const message = prompt("NOTICE MESSAGE:");
+    if (!message) return;
+
+    const daysInput = prompt(
+        "How many days should this notice stay?\nLeave blank = auto delete next day",
+        "1"
+    );
+
+    let expiry = Date.now() + 24 * 60 * 60 * 1000;
+    if (daysInput && !isNaN(daysInput)) {
+        expiry = Date.now() + (parseInt(daysInput) * 24 * 60 * 60 * 1000);
+    }
+
+    // Ask if attachment needed
+    const attach = confirm("Do you want to attach a PDF or Image?");
+    let fileUrl = null;
+    let fileType = null;
+
+    if (attach) {
+        const fileInput = document.getElementById("noticeFileInput");
+
+        fileInput.value = "";
+        fileInput.click();
+
+        await new Promise(resolve => fileInput.onchange = resolve);
+
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        // Size check (2 MB)
+        if (file.size > 2 * 1024 * 1024) {
+            alert("File too large. Max allowed size is 2 MB.");
+            return;
+        }
+
+        fileType = file.type.includes("pdf") ? "pdf" : "image";
+
+        const storagePath = `notices/${uid}/${Date.now()}_${file.name}`;
+        const storageRef = sRef(storage, storagePath);
+
+        try {
+            await uploadBytes(storageRef, file);
+            fileUrl = await getDownloadURL(storageRef);
+        } catch (e) {
+            alert("File upload failed.");
+            return;
+        }
+    }
+
+    const noticeData = {
+        title,
+        message,
+        fileUrl,
+        fileType,
+        time: Date.now(),
+        expiry
+    };
+
+    const noticeRef = ref(db, `users/${uid}/NOTICES`);
+    const snap = await get(noticeRef);
+    let existing = snap.exists() ? snap.val() : {};
+
+    // Keep max 5 notices
+    const keys = Object.keys(existing);
+    if (keys.length >= 5) delete existing[keys[0]];
+
+    existing[Date.now()] = noticeData;
+    await set(noticeRef, existing);
+
+    alert("Notice published successfully.");
+};
 window.sendWarning = async function(uid) {
     const msg = prompt("Enter REJECT/WARNING Message for Student:", "not allowed");
     if(!msg) return;
@@ -1007,6 +1090,73 @@ window.unlockStudent = async function(uid) {
 // ==========================================
 // STUDENT LOGIC
 // ==========================================
+async function loadNotices() {
+    if (!currentUser) return;
+
+    const list = document.getElementById("noticeList");
+    if (!list) return;
+
+    list.innerHTML = "Loading notices...";
+
+    try {
+        const snap = await get(ref(db, `users/${currentUser.uid}/NOTICES`));
+
+        if (!snap.exists()) {
+            list.innerHTML = "No notices available.";
+            return;
+        }
+
+        const now = Date.now();
+        const notices = snap.val();
+        let active = [];
+
+        // Filter expired + collect valid
+        Object.keys(notices).forEach(id => {
+            const n = notices[id];
+            if (!n.expiry || n.expiry > now) {
+                active.push(n);
+            } else {
+                // auto delete expired notice
+                remove(ref(db, `users/${currentUser.uid}/NOTICES/${id}`));
+            }
+        });
+
+        if (active.length === 0) {
+            list.innerHTML = "No active notices.";
+            return;
+        }
+
+        // Newest first
+        active.sort((a, b) => b.time - a.time);
+
+        list.innerHTML = active.map(n => `
+            <div style="border:1px solid #334155;padding:12px;border-radius:8px;margin-bottom:10px;background:#0f172a">
+                <div style="font-weight:bold;color:#facc15">${n.title}</div>
+                <div style="margin:6px 0;font-size:14px">${n.message}</div>
+
+                ${n.fileUrl ? `
+                    ${n.fileType === "pdf"
+                        ? `<a href="${n.fileUrl}" target="_blank"
+                             style="color:#38bdf8;font-size:12px">
+                             📄 View PDF
+                           </a>`
+                        : `<img src="${n.fileUrl}"
+                             style="max-width:100%;margin-top:8px;border-radius:6px" />`
+                    }
+                ` : ``}
+
+                <div style="font-size:11px;color:#94a3b8;margin-top:6px">
+                    Posted: ${new Date(n.time).toLocaleString()}
+                </div>
+            </div>
+        `).join("");
+
+    } catch (e) {
+        list.innerHTML = "Failed to load notices.";
+        console.error("Notice load error:", e);
+    }
+}
+
 async function initStudentDashboard() {
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("adminBox").classList.add("hidden");
@@ -2194,7 +2344,10 @@ window.toggleNoticeBoard = function () {
     window.resetLeaveBalance = window.resetLeaveBalance;
     window.toggleNoticeBoard = window.toggleNoticeBoard;
     window.dismissRejected = window.dismissRejected;
+    window.sendNotice = window.sendNotice;
     window.dismissNoticePopup = window.dismissNoticePopup;
   </script>
+<input type="file" id="noticeFileInput" accept=".pdf,image/*" style="display:none"/>
+
 </body>
 </html>
