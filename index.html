@@ -429,8 +429,7 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebas
 import { getDatabase, ref, set, get, child, update, remove, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged} 
 from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getStorage, ref as sRef, uploadBytes, getDownloadURL } 
-from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
+
 
 
 const firebaseConfig = {
@@ -446,7 +445,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
-const storage = getStorage(app);
+
 onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
@@ -719,7 +718,7 @@ ${u.leaveRequest.reason}
 // --- ADMIN NOTICE SYSTEM ---
 window.sendNotice = async function (uid) {
   if (!isAdmin()) {
-    alert("ACCESS DENIED: Only Admin can upload notices.");
+    alert("ACCESS DENIED: Only Admin can send notices.");
     return;
   }
 
@@ -739,84 +738,9 @@ window.sendNotice = async function (uid) {
     expiry = Date.now() + (parseInt(daysInput) * 24 * 60 * 60 * 1000);
   }
 
-  // ---- ATTACHMENT TYPE ----
-  const attachType = prompt(
-    "Attachment Type:\n1 = PDF (max 1 MB)\n2 = Image (max 1 MB)\nLeave blank = No attachment",
-    ""
-  );
-
-  let fileUrl = null;
-  let fileType = null;
-
-  if (attachType === "1") {
-    // PDF upload
-    const pdfInput = document.getElementById("noticePdfInput");
-    pdfInput.value = "";
-    pdfInput.click();
-
-    const file = await new Promise(resolve => {
-      pdfInput.onchange = () => resolve(pdfInput.files[0] || null);
-    });
-
-    if (!file) return;
-
-    if (file.size > 1 * 1024 * 1024) {
-      alert("PDF too large. Max allowed size is 1 MB.");
-      return;
-    }
-
-    if (!file.name.toLowerCase().endsWith(".pdf")) {
-      alert("Only PDF files allowed.");
-      return;
-    }
-
-    const storageRef = sRef(
-      storage,
-      `notices/${uid}/pdf_${Date.now()}_${file.name}`
-    );
-
-    await uploadBytes(storageRef, file);
-    fileUrl = await getDownloadURL(storageRef);
-    fileType = "pdf";
-  }
-
-  if (attachType === "2") {
-    // Image upload
-    const imgInput = document.getElementById("noticeImageInput");
-    imgInput.value = "";
-    imgInput.click();
-
-    const file = await new Promise(resolve => {
-      imgInput.onchange = () => resolve(imgInput.files[0] || null);
-    });
-
-    if (!file) return;
-
-    if (file.size > 1 * 1024 * 1024) {
-      alert("Image too large. Max allowed size is 1 MB.");
-      return;
-    }
-
-    if (!file.type.startsWith("image/")) {
-      alert("Only image files allowed.");
-      return;
-    }
-
-    const storageRef = sRef(
-      storage,
-      `notices/${uid}/image_${Date.now()}_${file.name}`
-    );
-
-    await uploadBytes(storageRef, file);
-    fileUrl = await getDownloadURL(storageRef);
-    fileType = "image";
-  }
-
   const noticeData = {
     title,
     message,
-    fileUrl,
-    fileType,
     time: Date.now(),
     expiry
   };
@@ -827,13 +751,14 @@ window.sendNotice = async function (uid) {
 
   // keep max 5 notices
   const keys = Object.keys(existing);
-  if (keys.length >= 5) delete existing[keys[0]];
+  if (keys.length >= 5) delete existing[keys[0]);
 
   existing[Date.now()] = noticeData;
   await set(noticeRef, existing);
 
   alert("Notice published successfully.");
 };
+
 
 window.sendWarning = async function(uid) {
     const msg = prompt("Enter REJECT/WARNING Message for Student:", "not allowed");
