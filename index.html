@@ -730,10 +730,9 @@ window.sendNotice = async function (uid) {
 
     // Ask if attachment needed
     const attach = confirm("Do you want to attach a PDF or Image?");
-    let fileUrl = null;
-    let fileType = null;
-
     let file = null;
+let fileUrl = null;
+let fileType = null;
 
 if (attach) {
     const fileInput = document.getElementById("noticeFileInput");
@@ -741,7 +740,7 @@ if (attach) {
 
     file = await new Promise(resolve => {
         fileInput.onchange = () => resolve(fileInput.files[0]);
-        fileInput.click(); // MUST happen immediately
+        fileInput.click();
     });
 
     if (!file) return;
@@ -750,22 +749,23 @@ if (attach) {
         alert("File too large. Max allowed size is 2 MB.");
         return;
     }
+
+    fileType = file.type.includes("pdf") ? "pdf" : "image";
+
+    const storagePath = `notices/${uid}/${Date.now()}_${file.name}`;
+    const storageRef = sRef(storage, storagePath);
+
+    try {
+        await uploadBytes(storageRef, file);
+        fileUrl = await getDownloadURL(storageRef);
+    } catch (e) {
+        alert("File upload failed.");
+        return;
+    }
 }
 
 
-        fileType = file.type.includes("pdf") ? "pdf" : "image";
 
-        const storagePath = `notices/${uid}/${Date.now()}_${file.name}`;
-        const storageRef = sRef(storage, storagePath);
-
-        try {
-            await uploadBytes(storageRef, file);
-            fileUrl = await getDownloadURL(storageRef);
-        } catch (e) {
-            alert("File upload failed.");
-            return;
-        }
-    }
 
     const noticeData = {
         title,
