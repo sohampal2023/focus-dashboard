@@ -870,7 +870,7 @@ window.renderMockLogs = function(uid, mocks) {
     : 0
 }%</td>
 
-                <td>${m.acc}%</td>
+                <td>${m.acc}%<br><span style="font-size:11px;color:#94a3b8">${m.remark || ""}</span></td>
             </tr>
         `;
     });
@@ -1391,7 +1391,7 @@ if (!hasActiveSession) {
     if (activeTest) {
         if (activeTest.status === "EXPIRED") {
            alert("Mock Test Time Ended! Please enter marks.");
-           finishTestSequence(activeTest, true);
+           (activeTest, true);
            return;
         }
         if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
@@ -1404,7 +1404,7 @@ if (!hasActiveSession) {
             updateProgress();
             return;
         } else {
-            finishTestSequence(activeTest, true);
+            (activeTest, true);
             return;
         }
     }
@@ -1904,7 +1904,7 @@ function restoreTestUI(testState) {
 
 function triggerEndTest() {
   const testState = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-  if(testState) finishTestSequence(testState, true);
+  if(testState) (testState, true);
 }
 
 function finishTestSequence(testState, loadDashboard = false) {
@@ -1928,6 +1928,7 @@ function finishTestSequence(testState, loadDashboard = false) {
 
   let accuracy = prompt("Enter Accuracy %:");
   if (accuracy === null || accuracy.trim() === "") accuracy = "0";
+  const accuracyRemark = getAccuracyRemark(accuracy);
 
   const msg =
     `Please Confirm Details:\n\n` +
@@ -1944,7 +1945,10 @@ function finishTestSequence(testState, loadDashboard = false) {
     return;
   }
 
-  const resultComment = `Score: ${obtained}/${testState.fullMarks} | Acc: ${accuracy}%`;
+  const resultComment =
+  `Score: ${obtained}/${testState.fullMarks} | ` +
+  `Acc: ${accuracy}% | ${accuracyRemark}`;
+
 
   /* 1️⃣ SAVE AS EXTRA WORK */
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
@@ -1976,6 +1980,8 @@ function finishTestSequence(testState, loadDashboard = false) {
     score: obtained,
     total: testState.fullMarks,
     acc: accuracy
+    remark: accuracyRemark
+
   });
   if (mockLogs.length > 4) {
     mockLogs = mockLogs.slice(mockLogs.length - 4);
@@ -2190,6 +2196,18 @@ function getLabel(p) {
   if (p <= 100) return "Excellent";
   return "Fabulous";
 }
+function getAccuracyRemark(acc) {
+  acc = Number(acc);
+
+  if (acc >= 97) return "Outstanding";
+  if (acc >= 95) return "Excellent";
+  if (acc >= 93) return "Very Good";
+  if (acc >= 90) return "Good";
+  if (acc >= 87) return "Fair";
+  if (acc >= 82) return "Need Improvement";
+  return "Take care of your study";
+}
+
 
 // --- DAY END ---
 function openDayEnd() {
