@@ -1310,6 +1310,13 @@ await update(ref(db, `users/${currentUser.uid}`), {
         }
     }
 
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+
+const hasActiveSession =
+    logs.length &&
+    logs[logs.length - 1].logoutTS === null;
+
+if (!hasActiveSession) {
     logs.push({
         login: now(),
         loginTS: Date.now(),
@@ -1318,7 +1325,10 @@ await update(ref(db, `users/${currentUser.uid}`), {
         reason: "-",
         completed: []
     });
+
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+}
+
 
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
