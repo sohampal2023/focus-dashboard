@@ -1745,21 +1745,29 @@ function autoLogout() {
 
 function bioBreak() {
   clearInterval(idleTimer);
+
   const idleBox = document.getElementById("idleBox");
-  if(idleBox) idleBox.classList.add("hidden");
-  
+  if (idleBox) idleBox.classList.add("hidden");
+
   localStorage.setItem(key("IDLE_STRIKES"), "0");
+
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
     const last = logs[logs.length - 1];
     last.logout = now();
     last.logoutTS = Date.now();
-    last.reason = "Pending";
+    last.reason = "Bio Break";
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
+
   uploadData();
-  setTimeout(() => location.reload(), 500);
+
+  // 🔴 THIS IS THE KEY LINE
+  signOut(auth).then(() => {
+    location.reload();
+  });
 }
+
 
 // --- MOCK TEST LOGIC ---
 function startMockTestSetup() {
