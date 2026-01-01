@@ -2013,7 +2013,7 @@ function finishTestSequence(testState, loadDashboard = false) {
     mockLogs = mockLogs.slice(mockLogs.length - 4);
   }
   localStorage.setItem(key("MOCK_LOGS"), JSON.stringify(mockLogs));
-  showMockResultPopup(resultComment);
+  
 
   /* 4️⃣ MARK TEST FINISHED */
   testState.status = testState.status === "EXPIRED"
@@ -2048,7 +2048,11 @@ function finishTestSequence(testState, loadDashboard = false) {
     renderLogs();
     updateProgress();
   } else {
+    showMockResultPopup(resultComment);
+
+  setTimeout(() => {
     location.reload();
+  }, 6000); 
   }
 }
 
