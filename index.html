@@ -2088,6 +2088,32 @@ function renderLogs() {
       </tr>`;
   });
 }
+window.toggleNoticeBoard = function () {
+    const noticeBox = document.getElementById("noticeBoardBox");
+    const taskBox = document.getElementById("taskBox");
+    const logBox = document.getElementById("logBox");
+    const historyBox = document.getElementById("historyBox");
+
+    if (!noticeBox) {
+        alert("Notice Board container not found");
+        return;
+    }
+
+    const isHidden = noticeBox.classList.contains("hidden");
+
+    // Hide other sections
+    if (taskBox) taskBox.classList.add("hidden");
+    if (logBox) logBox.classList.add("hidden");
+    if (historyBox) historyBox.classList.add("hidden");
+
+    if (isHidden) {
+        noticeBox.classList.remove("hidden");
+    } else {
+        noticeBox.classList.add("hidden");
+        if (taskBox) taskBox.classList.remove("hidden");
+        if (logBox) logBox.classList.remove("hidden");
+    }
+};
 
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
@@ -2115,6 +2141,7 @@ function renderLogs() {
     window.clearLeave = window.clearLeave;
     window.dismissLeaveStatus = window.dismissLeaveStatus;
     window.resetLeaveBalance = window.resetLeaveBalance;
+    window.toggleNoticeBoard = window.toggleNoticeBoard;
   </script>
 </body>
 </html>
