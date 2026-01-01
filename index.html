@@ -253,6 +253,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         <div id="timeoutCounter" class="timeout-display">Timeouts: 0</div>
       </div>
       <button id="noticeBtn" onclick="toggleNoticeBoard()">📢 Notice Board</button>
+      <button onclick="softRefresh()">🔄 Refresh</button>
       <button id="leaveBtn" onclick="requestLeave()">Request Leave</button>
       <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
       <button id="histBtn" onclick="toggleHistory()" disabled>History</button>
@@ -436,7 +437,7 @@ const firebaseConfig = {
   authDomain: "focus-dashboard-5965a.firebaseapp.com",
   databaseURL: "https://focus-dashboard-5965a-default-rtdb.firebaseio.com",
   projectId: "focus-dashboard-5965a",
-  storageBucket: "focus-dashboard-5965a.firebasestorage.app",
+  storageBucket: "focus-dashboard-5965a.appspot.com",
   messagingSenderId: "337204334808",
   appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
 };
@@ -2309,12 +2310,18 @@ window.toggleNoticeBoard = function () {
 
     if (isHidden) {
         noticeBox.classList.remove("hidden");
+        loadNotices();
     } else {
         noticeBox.classList.add("hidden");
         if (taskBox) taskBox.classList.remove("hidden");
         if (logBox) logBox.classList.remove("hidden");
     }
 };
+window.softRefresh = function () {
+    location.reload();
+};
+
+
 
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
@@ -2346,6 +2353,8 @@ window.toggleNoticeBoard = function () {
     window.dismissRejected = window.dismissRejected;
     window.sendNotice = window.sendNotice;
     window.dismissNoticePopup = window.dismissNoticePopup;
+    window.softRefresh = window.softRefresh;
+
   </script>
 <input type="file" id="noticeFileInput" accept=".pdf,image/*" style="display:none"/>
 
