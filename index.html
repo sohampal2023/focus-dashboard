@@ -751,7 +751,7 @@ window.sendNotice = async function (uid) {
 
   // keep max 5 notices
   const keys = Object.keys(existing);
-  if (keys.length >= 5) delete existing[keys[0]);
+  if (keys.length >= 5) delete existing[keys[0]];
 
   existing[Date.now()] = noticeData;
   await set(noticeRef, existing);
