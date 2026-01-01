@@ -427,7 +427,8 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getDatabase, ref, set, get, child, update, remove, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged} 
+from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 import { getStorage, ref as sRef, uploadBytes, getDownloadURL } 
 from "https://www.gstatic.com/firebasejs/10.7.1/firebase-storage.js";
 
@@ -446,6 +447,23 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
 const storage = getStorage(app);
+onAuthStateChanged(auth, async (user) => {
+    if (user) {
+        currentUser = user;
+        document.getElementById("syncStatus").innerText = "Session Restored";
+
+        if (user.email === ADMIN_EMAIL) {
+            initAdminDashboard();
+        } else {
+            initStudentDashboard();
+        }
+    } else {
+        currentUser = null;
+        document.getElementById("statusBox").innerText = "Logged out";
+        document.getElementById("loginBtn").classList.remove("hidden");
+        document.getElementById("logoutBtn").classList.add("hidden");
+    }
+});
 
 // --- GLOBAL VARIABLES ---
 let currentUser = null; 
@@ -457,6 +475,9 @@ let idleStrikes = 0;
 let dailyTimeouts = 0;
 let lastApprovedState = false; 
 const ADMIN_EMAIL = "admin@study.com";
+function isAdmin() {
+    return currentUser && currentUser.email === ADMIN_EMAIL;
+}
 
 // --- WHITELIST ---
 const ALLOWED_EMAILS = [
@@ -685,6 +706,11 @@ ${u.leaveRequest.reason}
 // --- ADMIN WARNING SYSTEM (STRICT CONFIRM) ---
 // --- ADMIN NOTICE SYSTEM ---
 window.sendNotice = async function (uid) {
+    if (!isAdmin()) {
+    alert("ACCESS DENIED: Only Admin can upload notices.");
+    return;
+}
+
 
     const title = prompt("NOTICE TITLE:", "IMPORTANT");
     if (!title) return;
@@ -707,22 +733,25 @@ window.sendNotice = async function (uid) {
     let fileUrl = null;
     let fileType = null;
 
-    if (attach) {
-        const fileInput = document.getElementById("noticeFileInput");
+    let file = null;
 
-        fileInput.value = "";
-        fileInput.click();
+if (attach) {
+    const fileInput = document.getElementById("noticeFileInput");
+    fileInput.value = "";
 
-        await new Promise(resolve => fileInput.onchange = resolve);
+    file = await new Promise(resolve => {
+        fileInput.onchange = () => resolve(fileInput.files[0]);
+        fileInput.click(); // MUST happen immediately
+    });
 
-        const file = fileInput.files[0];
-        if (!file) return;
+    if (!file) return;
 
-        // Size check (2 MB)
-        if (file.size > 2 * 1024 * 1024) {
-            alert("File too large. Max allowed size is 2 MB.");
-            return;
-        }
+    if (file.size > 2 * 1024 * 1024) {
+        alert("File too large. Max allowed size is 2 MB.");
+        return;
+    }
+}
+
 
         fileType = file.type.includes("pdf") ? "pdf" : "image";
 
