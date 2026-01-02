@@ -475,12 +475,37 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
-
 onAuthStateChanged(auth, async (user) => {
+    // CHECK FOR LOCKED REPORT FIRST
+    const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
+    
+    if (lockedReport) {
+        // HIDE EVERYTHING
+        document.querySelector(".sidebar").classList.add("hidden");
+        document.querySelector(".main").style.display = "block";
+        document.getElementById("studentView").classList.remove("hidden");
+        
+        // Hide standard boxes
+        document.getElementById("taskBox").classList.add("hidden");
+        document.getElementById("logBox").classList.add("hidden");
+        document.getElementById("noticeBoardBox").classList.add("hidden");
+        document.getElementById("adminBox").classList.add("hidden");
+
+        // SHOW REPORT
+        const reportBox = document.getElementById("reportBox");
+        reportBox.classList.remove("hidden");
+        reportBox.innerHTML = lockedReport;
+        
+        document.body.style.background = "#020617"; // Ensure dark background
+        return; // STOP HERE. DO NOT PROCESS LOGIN.
+    }
+
+    // Normal Login Logic (If no report is locked)
+    document.querySelector(".sidebar").classList.remove("hidden"); // Show Sidebar again
+    
     if (user) {
         currentUser = user;
         document.getElementById("syncStatus").innerText = "Session Restored";
-
         if (user.email === ADMIN_EMAIL) {
             initAdminDashboard();
         } else {
@@ -491,6 +516,10 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById("statusBox").innerText = "Logged out";
         document.getElementById("loginBtn").classList.remove("hidden");
         document.getElementById("logoutBtn").classList.add("hidden");
+        
+        // Hide student view if logged out
+        document.getElementById("studentView").classList.add("hidden");
+        document.getElementById("reportBox").classList.add("hidden");
     }
 });
 
