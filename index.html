@@ -477,14 +477,23 @@ const auth = getAuth(app);
 
 onAuthStateChanged(auth, async (user) => {
     // -------------------------------------------------------------------
-    // 🔒 CHECK FOR LOCKED REPORT FIRST (Logic Change for Persistent Report)
+    // 🔒 CHECK FOR LOCKED REPORT FIRST (FIXED LAYOUT)
     // -------------------------------------------------------------------
     const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
     
     if (lockedReport) {
-        // HIDE EVERYTHING ELSE
-        document.querySelector(".sidebar").classList.add("hidden");
-        document.querySelector(".main").style.display = "block";
+        // 1. FIX THE LAYOUT (Disable Grid so Main takes full width)
+        document.querySelector(".app").style.display = "block"; 
+        document.querySelector(".main").style.width = "100%";
+        document.querySelector(".main").style.height = "100vh";
+        document.querySelector(".main").style.display = "flex";
+        document.querySelector(".main").style.justifyContent = "center";
+        document.querySelector(".main").style.alignItems = "center";
+
+        // 2. HIDE SIDEBAR & OTHERS
+        const sidebar = document.querySelector(".sidebar");
+        if(sidebar) sidebar.classList.add("hidden");
+        
         document.getElementById("studentView").classList.remove("hidden");
         
         // Hide standard boxes
@@ -495,19 +504,25 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById("historyBox").classList.add("hidden");
         document.getElementById("nextDayBox").classList.add("hidden");
 
-        // SHOW LOCKED REPORT
+        // 3. SHOW LOCKED REPORT
         const reportBox = document.getElementById("reportBox");
         reportBox.classList.remove("hidden");
         reportBox.innerHTML = lockedReport;
         
         document.body.style.background = "#020617";
-        return; // ⛔ STOP HERE. DO NOT PROCESS NORMAL LOGIN.
+        return; // ⛔ STOP HERE. DO NOT PROCESS LOGIN.
     }
 
     // -------------------------------------------------------------------
-    // NORMAL FLOW (If no lock)
+    // NORMAL FLOW (Reset Layout if not locked)
     // -------------------------------------------------------------------
-    document.querySelector(".sidebar").classList.remove("hidden");
+    // Reset Grid Layout
+    document.querySelector(".app").style.display = "grid"; 
+    document.querySelector(".main").style.width = "auto";
+    document.querySelector(".main").style.display = "block"; // Reset from flex
+
+    const sidebar = document.querySelector(".sidebar");
+    if(sidebar) sidebar.classList.remove("hidden");
 
     if (user) {
         currentUser = user;
@@ -524,7 +539,6 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById("loginBtn").classList.remove("hidden");
         document.getElementById("logoutBtn").classList.add("hidden");
         
-        // Ensure student stuff is hidden on normal logout
         document.getElementById("studentView").classList.add("hidden");
         document.getElementById("reportBox").classList.add("hidden");
     }
