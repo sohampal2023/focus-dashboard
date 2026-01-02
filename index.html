@@ -2441,7 +2441,7 @@ function openDayEnd() {
 }
 
 function finalDayEnd() {
-  
+
   if(!confirm("CONFIRM DAY END:\n\nAre you sure you want to close today's session and save the report?")) return;
 
   const next = [];
@@ -2452,181 +2452,128 @@ function finalDayEnd() {
   localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
 
   const p = calculate();
-const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  const carry = tasks.filter(t => !t.done);
 
-const carry = tasks.filter(t => !t.done);
-
-// 🔒 CLOSE CURRENT SESSION BEFORE CALCULATING TIME
-const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-
-if (logs.length) {
-  const last = logs[logs.length - 1];
-  if (!last.logoutTS) {
-    last.logoutTS = Date.now();
-    last.logout = now();
-    last.reason = "Day End";
-    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+  // 🔒 CLOSE SESSION
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+  if (logs.length) {
+    const last = logs[logs.length - 1];
+    if (!last.logoutTS) {
+      last.logoutTS = Date.now();
+      last.logout = now();
+      last.reason = "Day End";
+      localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
   }
-}
 
+  // ⏱️ CALCULATE TODAY TIME
+  let totalMillis = 0;
+  const todayStr = new Date().toLocaleDateString();
 
-
- let totalMillis = 0;
-
-// Get today's date string (same format as logs)
-const todayStr = new Date().toLocaleDateString();
-
-logs.forEach(l => {
-  // Must have valid timestamps
-  if (!l.loginTS || !l.logoutTS) return;
-
-  // Ignore invalid or reversed sessions
-  if (l.logoutTS <= l.loginTS) return;
-
-  // Only count TODAY's sessions
-  const loginDate = new Date(l.loginTS).toLocaleDateString();
-  if (loginDate !== todayStr) return;
-
-  const duration = l.logoutTS - l.loginTS;
-
-  // Ignore reload / glitch sessions (<30 sec)
-  if (duration < 30000) return;
-
-  totalMillis += duration;
-});
+  logs.forEach(l => {
+    if (!l.loginTS || !l.logoutTS) return;
+    if (l.logoutTS <= l.loginTS) return;
+    if (new Date(l.loginTS).toLocaleDateString() !== todayStr) return;
+    const d = l.logoutTS - l.loginTS;
+    if (d < 30000) return;
+    totalMillis += d;
+  });
 
   const totalMin = Math.floor(totalMillis / 60000);
   const hrs = Math.floor(totalMin / 60);
   const mins = totalMin % 60;
   const timeStr = `${hrs} hr ${mins} min`;
 
-  const doneTasks = tasks.filter(t => t.done).map(t => t.name);
-  const doneExtras = extras.filter(e => e.done).map(e => e.name + " (Extra)");
-  const subjectsCovered = [...doneTasks, ...doneExtras].join(", ");
-
+  // 📜 HISTORY
   const historyEntry = {
-      date: new Date().toLocaleDateString(),
-      score: p.percent,
-      rating: getLabel(p.percent),
-      time: timeStr,
-      subjects: subjectsCovered || "No Tasks Completed",
-      adminReview: null 
+    date: new Date().toLocaleDateString(),
+    score: p.percent,
+    rating: getLabel(p.percent),
+    time: timeStr,
+    subjects:
+      [...tasks.filter(t=>t.done).map(t=>t.name),
+       ...extras.filter(e=>e.done).map(e=>e.name+" (Extra)")].join(", ")
+      || "No Tasks Completed",
+    adminReview: null
   };
-  
+
   let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
   history.push(historyEntry);
-  
-  // *** DB LIMIT: KEEP ONLY 4 DAYS ***
-  if (history.length > 4) history.shift(); 
-  
+  if (history.length > 4) history.shift();
   localStorage.setItem(key("HISTORY"), JSON.stringify(history));
 
-  const doneReportItems = tasks.filter(t => t.done).map(t => ({name: t.name, comment: t.comment, due: t.due}));
-  const doneExtraItems = extras.filter(e => e.done).map(e => ({name: e.name + " (Extra)", comment: e.comment, due: e.due}));
-  const allDone = [...doneReportItems, ...doneExtraItems];
+  // 🧾 WORK DONE TABLE
+  const allDone = [
+    ...tasks.filter(t=>t.done).map(t=>({name:t.name,comment:t.comment,due:t.due})),
+    ...extras.filter(e=>e.done).map(e=>({name:e.name+" (Extra)",comment:e.comment,due:e.due}))
+  ];
 
-  let doneTable = "";
-  if(allDone.length > 0){
-    doneTable = `
-    <h4 style="margin-top:20px;text-align:left;border-top:1px solid #334155;padding-top:10px">Work Done Report</h4>
+  const doneTable = allDone.length ? `
     <table>
-        <thead>
-            <tr>
-                <th style="width:40%">Task</th>
-                <th style="width:30%">Comment</th>
-                <th style="width:30%">Due</th>
-            </tr>
-        </thead>
-        <tbody>
-            ${allDone.map(d => `
-                <tr>
-                    <td style="color:#86efac">${d.name}</td>
-                    <td>${d.comment}</td>
-                    <td style="color:#fca5a5">${d.due}</td>
-                </tr>
-            `).join("")}
-        </tbody>
-    </table>`;
-  } else {
-    doneTable = `<div style="margin-top:20px;color:#fca5a5">No work completed.</div>`;
-  }
+      <thead>
+        <tr><th>Task</th><th>Comment</th><th>Due</th></tr>
+      </thead>
+      <tbody>
+        ${allDone.map(d=>`
+          <tr>
+            <td style="color:#86efac">${d.name}</td>
+            <td>${d.comment}</td>
+            <td style="color:#fca5a5">${d.due}</td>
+          </tr>`).join("")}
+      </tbody>
+    </table>` :
+    `<div style="color:#fca5a5">No work completed.</div>`;
 
+  // ♻️ RESET DAY STATE
   localStorage.setItem(key("TASKS"), JSON.stringify(carry));
-  localStorage.setItem(key("EXTRA"), JSON.stringify([]));
+  localStorage.setItem(key("EXTRA"), "[]");
   localStorage.removeItem(key("LOGS"));
-  localStorage.removeItem(key("TEST_STATE"));
-  
   localStorage.setItem(key("IDLE_STRIKES"), "0");
-  localStorage.setItem(key("DAILY_TIMEOUTS"), "0"); // RESET TIMEOUTS
+  localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
   localStorage.setItem(key("PENALTY"), "0");
-  
-  uploadData(); 
 
-  const tableRef = document.getElementById("logTable");
-  if(tableRef) tableRef.innerHTML = "";
+  uploadData();
 
+  // ✅ FORCE VISIBILITY
+  const studentView = document.getElementById("studentView");
   const reportBox = document.getElementById("reportBox");
+
+  studentView.classList.remove("hidden");
+
   reportBox.innerHTML = `
-  <!-- ADMIN REVIEW -->
-  <div class="card" style="background:#1e1b4b;border-color:#6366f1;margin-bottom:20px">
-    <h4 style="margin:0;color:#c7d2fe">Admin Daily Review</h4>
-    <div style="font-size:13px;color:#e0e7ff;margin-top:4px">
-      [${new Date().toLocaleDateString()}]: Good progress.
-    </div>
-    <button style="
-      margin-top:10px;
-      padding:6px 14px;
-      font-size:12px;
-      border-radius:6px;
-      border:1px solid #818cf8;
-      background:#312e81;
-      color:#fff">
-      Dismiss
-    </button>
-  </div>
-  reportBox.classList.remove("hidden");
-reportBox.scrollIntoView({ behavior: "smooth" });
-
-  <!-- MAIN REPORT -->
-  <div class="card" style="text-align:center">
-    <h2 style="margin:0 0 10px 0;color:#fff">Daily Report Saved</h2>
-
-    <div style="font-size:48px;font-weight:800;color:#38bdf8">
-      ${p.percent}%
+    <div class="card" style="background:#1e1b4b;border-color:#6366f1">
+      <h4>Admin Daily Review</h4>
+      <div>[${new Date().toLocaleDateString()}]: Good progress.</div>
     </div>
 
-    <div style="font-size:20px;font-weight:700;color:#e5e7eb;margin-bottom:8px">
-      ${getLabel(p.percent)}
+    <div class="card" style="text-align:center">
+      <h2>Daily Report Saved</h2>
+      <div style="font-size:48px;font-weight:800;color:#38bdf8">${p.percent}%</div>
+      <div style="font-size:20px">${getLabel(p.percent)}</div>
+      <div style="color:#facc15;font-size:22px;margin:10px 0">
+        Total Study Time: ${timeStr}
+      </div>
+      <div style="font-size:14px">
+        Assigned: ${tasks.length} |
+        Carry Forward: ${carry.length} |
+        Penalty: -${penalty}%
+      </div>
+      <div style="font-size:12px;color:#94a3b8;margin-top:6px">
+        (Waiting for Admin Review…)
+      </div>
     </div>
 
-    <div style="
-      font-size:22px;
-      font-weight:800;
-      color:#facc15;
-      margin:12px 0">
-      Total Study Time: ${timeStr}
+    <div class="card">
+      <h3>Work Done Report</h3>
+      ${doneTable}
     </div>
-
-    <div style="font-size:14px;color:#cbd5f5">
-      Assigned: ${tasks.length} |
-      Carry Forward: ${carry.length} |
-      Penalty: -${penalty}%
-    </div>
-
-    <div style="margin-top:8px;font-size:12px;color:#94a3b8">
-      (Waiting for Admin Review…)
-    </div>
-  </div>
-
-  <!-- WORK DONE -->
-  <div class="card">
-    <h3 style="margin-top:0">Work Done Report</h3>
-    ${doneTable}
-  </div>
-`;
+  `;
 
   reportBox.classList.remove("hidden");
+  reportBox.scrollIntoView({ behavior: "smooth" });
+
   document.getElementById("taskBox").classList.add("hidden");
   document.getElementById("logBox").classList.add("hidden");
   document.getElementById("nextDayBox").classList.add("hidden");
@@ -2634,6 +2581,7 @@ reportBox.scrollIntoView({ behavior: "smooth" });
 
   document.getElementById("statusBox").innerText = "Day End – Thank you";
 }
+
 
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
