@@ -326,7 +326,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
             <h4 style="color:#facc15; margin-bottom:10px;">Last 4 Mock Tests</h4>
             <table style="width:100%">
                 <thead>
-                    <tr><th>Date</th><th>Test Name</th><th>Score</th><th>Marks</th><th>Accuracy</th></tr>
+                    <tr><th>Date</th><th>Test Name</th><th>Score</th><th>Marks</th><th>Cutoff</th><th>Status</th><th>Accuracy</th></tr>
                 </thead>
                 <tbody id="modalBodyMocks"></tbody>
             </table>
@@ -980,21 +980,26 @@ window.renderMockLogs = function(uid, mocks) {
             else if(p >= 80) color = "#4ade80"; // Green
             else color = "#facc15"; // Yellow
         }
+    html += `
+  <tr>
+    <td>${m.date}</td>
+    <td>${m.name}</td>
 
-        html += `
-            <tr>
-                <td>${m.date}</td>
-                <td>${m.name}</td>
-                <td style="color:${color}; font-weight:bold">${m.score} / ${m.total}</td>
-                <td>${
-  m.total && Number(m.total) > 0
-    ? Math.round((Number(m.score) / Number(m.total)) * 100)
-    : 0
-}%</td>
+    <td style="color:${color}; font-weight:bold">
+      ${m.score} / ${m.total}
+    </td>
 
-                <td>${m.acc}%<br><span style="font-size:11px;color:#94a3b8">${m.remark || ""}</span></td>
-            </tr>
-        `;
+    <td>${m.cutoff ?? "-"}</td>
+
+    <td style="font-weight:bold;
+        color:${m.status === "CLEAR" ? "#4ade80" : "#f87171"}">
+      ${m.status ?? "-"}
+    </td>
+
+    <td>${m.acc}%</td>
+  </tr>
+`;
+
     });
     body.innerHTML = html;
 };
@@ -2095,7 +2100,7 @@ function finishTestSequence(testState, loadDashboard = false) {
   let obtained = prompt(
     `Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`
   );
-
+  
   // Handle Cancellation (User pressed Cancel)
   if (obtained === null) {
       if (testState.status === "EXPIRED") {
@@ -2113,12 +2118,31 @@ function finishTestSequence(testState, loadDashboard = false) {
   let accuracy = prompt("Enter Accuracy %:");
   if (accuracy === null || accuracy.trim() === "") accuracy = "0";
   const accuracyRemark = getAccuracyRemark(accuracy);
+  let cutoff = prompt(
+  "Enter Cutoff Marks for this Mock Test:",
+  "0"
+);
+
+if (cutoff === null || cutoff.trim() === "") cutoff = "0";
+
+cutoff = Number(cutoff);
+obtained = Number(obtained);
+
+if (isNaN(cutoff) || cutoff < 0) {
+  alert("Invalid cutoff value.");
+  return;
+}
+const cutStatus = obtained >= cutoff ? "CLEAR" : "NOT CLEAR";
+
 
   const msg =
-    `Please Confirm Details:\n\n` +
-    `Test: ${testState.name}\n` +
-    `Score: ${obtained} / ${testState.fullMarks}\n` +
-    `Accuracy: ${accuracy}%`;
+  `Please Confirm Details:\n\n` +
+  `Test: ${testState.name}\n` +
+  `Score: ${obtained} / ${testState.fullMarks}\n` +
+  `Cutoff: ${cutoff}\n` +
+  `Status: ${cutStatus}\n` +
+  `Accuracy: ${accuracy}%`;
+
 
   if (!confirm(msg)) {
     if (testState.status === "EXPIRED") {
@@ -2131,11 +2155,11 @@ function finishTestSequence(testState, loadDashboard = false) {
 
   const resultComment =
   `Mock Test Result\n` +
-  `Score: ${obtained} out of ${testState.fullMarks}\n` +
+  `Score: ${obtained} / ${testState.fullMarks}\n` +
+  `Cutoff: ${cutoff}\n` +
+  `Status: ${cutStatus}\n` +
   `Accuracy: ${accuracy}%\n` +
   `Remark: ${accuracyRemark}`;
-
-
 
   /* 1️⃣ SAVE AS EXTRA WORK */
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
@@ -2162,14 +2186,16 @@ function finishTestSequence(testState, loadDashboard = false) {
   /* 3️⃣ SAVE TO MOCK TEST HISTORY (MAX 4) */
   let mockLogs = JSON.parse(localStorage.getItem(key("MOCK_LOGS")) || "[]");
   mockLogs.push({
-    date: new Date().toLocaleDateString(),
-    name: testState.name,
-    score: obtained,
-    total: testState.fullMarks,
-    acc: accuracy,
-    remark: accuracyRemark
+  date: new Date().toLocaleDateString(),
+  name: testState.name,
+  score: obtained,
+  total: testState.fullMarks,
+  cutoff: cutoff,
+  status: cutStatus,
+  acc: accuracy,
+  remark: accuracyRemark
+});
 
-  });
   if (mockLogs.length > 4) {
     mockLogs = mockLogs.slice(mockLogs.length - 4);
   }
