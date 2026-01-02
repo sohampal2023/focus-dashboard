@@ -481,37 +481,40 @@ onAuthStateChanged(auth, async (user) => {
     // -------------------------------------------------------------------
     const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
     
-    if (lockedReport) {
-        // 1. FIX THE LAYOUT (Disable Grid so Main takes full width)
-        document.querySelector(".app").style.display = "block"; 
-        document.querySelector(".main").style.width = "100%";
-        document.querySelector(".main").style.height = "100vh";
-        document.querySelector(".main").style.display = "flex";
-        document.querySelector(".main").style.justifyContent = "center";
-        document.querySelector(".main").style.alignItems = "center";
+   if (lockedReport) {
 
-        // 2. HIDE SIDEBAR & OTHERS
-        const sidebar = document.querySelector(".sidebar");
-        if(sidebar) sidebar.classList.add("hidden");
-        
-        document.getElementById("studentView").classList.remove("hidden");
-        
-        // Hide standard boxes
-        document.getElementById("taskBox").classList.add("hidden");
-        document.getElementById("logBox").classList.add("hidden");
-        document.getElementById("noticeBoardBox").classList.add("hidden");
-        document.getElementById("adminBox").classList.add("hidden");
-        document.getElementById("historyBox").classList.add("hidden");
-        document.getElementById("nextDayBox").classList.add("hidden");
-
-        // 3. SHOW LOCKED REPORT
-        const reportBox = document.getElementById("reportBox");
-        reportBox.classList.remove("hidden");
-        reportBox.innerHTML = lockedReport;
-        
-        document.body.style.background = "#020617";
-        return; // ⛔ STOP HERE. DO NOT PROCESS LOGIN.
-    }
+    // Reset everything safely
+    document.body.innerHTML = `
+      <div style="
+        min-height:100vh;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        background:#020617;
+        padding:20px;
+      ">
+        <div style="width:100%;max-width:520px">
+          ${lockedReport}
+          <div style="margin-top:15px;text-align:center">
+            <button 
+              onclick="dismissReportLock()" 
+              style="
+                padding:12px 20px;
+                background:#0ea5e9;
+                border:none;
+                border-radius:8px;
+                color:white;
+                font-size:14px;
+                cursor:pointer;
+              ">
+              Login & Start New Day
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+}
 
     // -------------------------------------------------------------------
     // NORMAL FLOW (Reset Layout if not locked)
@@ -2580,12 +2583,13 @@ function finalDayEnd() {
 }
 
 // --- NEW UNLOCK FUNCTION ---
-window.dismissReportLock = function() {
-    if(confirm("Are you ready to start a new session?")) {
-        localStorage.removeItem("LOCKED_REPORT_VIEW");
-        location.reload(); 
-    }
+window.dismissReportLock = function () {
+    localStorage.removeItem("LOCKED_REPORT_VIEW");
+    signOut(auth).finally(() => {
+        location.reload();
+    });
 };
+
 
 
 function renderLogs() {
