@@ -2568,18 +2568,62 @@ logs.forEach(l => {
 
   const reportBox = document.getElementById("reportBox");
   reportBox.innerHTML = `
-    <h3>Daily Report Saved</h3>
-    <div class="percent">${p.percent}%</div>
-    <div class="rating">${getLabel(p.percent)}</div>
-    <div style="font-size:20px;color:#facc15;margin:10px 0;font-weight:bold">
+  <!-- ADMIN REVIEW -->
+  <div class="card" style="background:#1e1b4b;border-color:#6366f1;margin-bottom:20px">
+    <h4 style="margin:0;color:#c7d2fe">Admin Daily Review</h4>
+    <div style="font-size:13px;color:#e0e7ff;margin-top:4px">
+      [${new Date().toLocaleDateString()}]: Good progress.
+    </div>
+    <button style="
+      margin-top:10px;
+      padding:6px 14px;
+      font-size:12px;
+      border-radius:6px;
+      border:1px solid #818cf8;
+      background:#312e81;
+      color:#fff">
+      Dismiss
+    </button>
+  </div>
+
+  <!-- MAIN REPORT -->
+  <div class="card" style="text-align:center">
+    <h2 style="margin:0 0 10px 0;color:#fff">Daily Report Saved</h2>
+
+    <div style="font-size:48px;font-weight:800;color:#38bdf8">
+      ${p.percent}%
+    </div>
+
+    <div style="font-size:20px;font-weight:700;color:#e5e7eb;margin-bottom:8px">
+      ${getLabel(p.percent)}
+    </div>
+
+    <div style="
+      font-size:22px;
+      font-weight:800;
+      color:#facc15;
+      margin:12px 0">
       Total Study Time: ${timeStr}
     </div>
-    <div class="details">
-      Assigned: ${tasks.length} | Carry Forward: ${carry.length} | Penalty: -${penalty}%
+
+    <div style="font-size:14px;color:#cbd5f5">
+      Assigned: ${tasks.length} |
+      Carry Forward: ${carry.length} |
+      Penalty: -${penalty}%
     </div>
-    <div style="margin-top:10px; color:#94a3b8; font-size:12px;">(Waiting for Admin Review...)</div>
-    ${doneTable}`;
-    
+
+    <div style="margin-top:8px;font-size:12px;color:#94a3b8">
+      (Waiting for Admin Review…)
+    </div>
+  </div>
+
+  <!-- WORK DONE -->
+  <div class="card">
+    <h3 style="margin-top:0">Work Done Report</h3>
+    ${doneTable}
+  </div>
+`;
+
   reportBox.classList.remove("hidden");
   document.getElementById("taskBox").classList.add("hidden");
   document.getElementById("logBox").classList.add("hidden");
