@@ -1377,12 +1377,24 @@ await update(ref(db, `users/${currentUser.uid}`), {
     document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
 
     if (logs.length) {
-        const lastLog = logs[logs.length - 1];
-        if (lastLog.reason === "Pending") {
-            const userReason = prompt("Reason for previous break?", "Bio Break");
-            lastLog.reason = userReason || "Bio Break";
-        }
-    }
+  const lastLog = logs[logs.length - 1];
+
+  if (lastLog.reason === "Pending") {
+    const userReason = prompt(
+      "Reason for previous break?",
+      "Washroom / Water / Phone Call"
+    );
+
+    lastLog.reason =
+      userReason && userReason.trim()
+        ? userReason.trim()
+        : "Bio Break";
+
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    uploadData(); // 🔒 persist to Firebase
+  }
+}
+
 
    const hasActiveSession = logs.length && logs[logs.length - 1].logoutTS === null;
 
@@ -1854,9 +1866,17 @@ function bioBreak() {
     const last = logs[logs.length - 1];
     last.logout = now();
     last.logoutTS = Date.now();
-    last.reason = "Bio Break";
+    last.reason = "Pending"; // 🔑 marker
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
+
+  uploadData();
+
+  signOut(auth).then(() => {
+    location.reload();
+  });
+}
+
 
   uploadData();
 
