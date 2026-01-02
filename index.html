@@ -405,16 +405,15 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
           <div id="liveRating" class="rating">Poor</div>
           <div id="liveDetails" class="details"></div>
         </div>
-          <!-- UPCOMING EXAMS (FIXED POSITION) -->
           <div id="examBox"
-           style="
-         margin-top:8px;
-         padding:10px 12px;
-         border:1px solid #1e40af;
-         background:#020617;
-         border-radius:10px;
-         display:none;
-       ">
+            style="
+          margin-top:8px;
+          padding:10px 12px;
+          border:1px solid #1e40af;
+          background:#020617;
+          border-radius:10px;
+          display:none;
+        ">
     <div style="
       font-size:12px;
       font-weight:800;
@@ -426,7 +425,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     </div>
 
     <div id="examList"
-         style="font-size:13px;color:#e5e7eb">
+          style="font-size:13px;color:#e5e7eb">
     </div>
   </div>
     
@@ -475,12 +474,15 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
+
 onAuthStateChanged(auth, async (user) => {
-    // CHECK FOR LOCKED REPORT FIRST
+    // -------------------------------------------------------------------
+    // 🔒 CHECK FOR LOCKED REPORT FIRST (Logic Change for Persistent Report)
+    // -------------------------------------------------------------------
     const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
     
     if (lockedReport) {
-        // HIDE EVERYTHING
+        // HIDE EVERYTHING ELSE
         document.querySelector(".sidebar").classList.add("hidden");
         document.querySelector(".main").style.display = "block";
         document.getElementById("studentView").classList.remove("hidden");
@@ -490,22 +492,27 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById("logBox").classList.add("hidden");
         document.getElementById("noticeBoardBox").classList.add("hidden");
         document.getElementById("adminBox").classList.add("hidden");
+        document.getElementById("historyBox").classList.add("hidden");
+        document.getElementById("nextDayBox").classList.add("hidden");
 
-        // SHOW REPORT
+        // SHOW LOCKED REPORT
         const reportBox = document.getElementById("reportBox");
         reportBox.classList.remove("hidden");
         reportBox.innerHTML = lockedReport;
         
-        document.body.style.background = "#020617"; // Ensure dark background
-        return; // STOP HERE. DO NOT PROCESS LOGIN.
+        document.body.style.background = "#020617";
+        return; // ⛔ STOP HERE. DO NOT PROCESS NORMAL LOGIN.
     }
 
-    // Normal Login Logic (If no report is locked)
-    document.querySelector(".sidebar").classList.remove("hidden"); // Show Sidebar again
-    
+    // -------------------------------------------------------------------
+    // NORMAL FLOW (If no lock)
+    // -------------------------------------------------------------------
+    document.querySelector(".sidebar").classList.remove("hidden");
+
     if (user) {
         currentUser = user;
         document.getElementById("syncStatus").innerText = "Session Restored";
+
         if (user.email === ADMIN_EMAIL) {
             initAdminDashboard();
         } else {
@@ -517,7 +524,7 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById("loginBtn").classList.remove("hidden");
         document.getElementById("logoutBtn").classList.add("hidden");
         
-        // Hide student view if logged out
+        // Ensure student stuff is hidden on normal logout
         document.getElementById("studentView").classList.add("hidden");
         document.getElementById("reportBox").classList.add("hidden");
     }
@@ -1014,7 +1021,6 @@ window.renderMockLogs = function(uid, mocks) {
   <td>${m.date}</td>
   <td>${m.name}</td>
 
-  <!-- Score only -->
   <td style="font-weight:bold">
     ${m.score} / ${m.total}
   </td>
@@ -2109,7 +2115,7 @@ function restoreTestUI(testState) {
       <h3 style="color:white">${testState.name}</h3>
       <p>Full Marks: ${testState.fullMarks} | Duration: ${hrs}h ${mins}m</p>
       <div style="margin-top:10px; color:#cbd5e1; font-size:14px;">
-         Watchdog locked to Exam Time. Good Luck.
+          Watchdog locked to Exam Time. Good Luck.
       </div>
       <hr style="border-color:#334155; margin: 20px 0;">
       <button onclick="triggerEndTest()" style="background:#dc2626; border:none; padding:15px; font-size:18px; font-weight:bold;">EXAM DONE</button>
@@ -2469,7 +2475,7 @@ function openDayEnd() {
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
 
-window.finalDayEnd = function() {
+function finalDayEnd() {
   if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
 
   // 1. Save Next Day Tasks
@@ -2554,11 +2560,19 @@ window.finalDayEnd = function() {
   localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
 
   // 9. LOGOUT (User goes offline)
-  // The onAuthStateChanged listener will handle the UI update based on the lock
   signOut(auth).then(() => {
-     location.reload(); // Refresh to trigger the locked view
+     location.reload(); 
   });
+}
+
+// --- NEW UNLOCK FUNCTION ---
+window.dismissReportLock = function() {
+    if(confirm("Are you ready to start a new session?")) {
+        localStorage.removeItem("LOCKED_REPORT_VIEW");
+        location.reload(); 
+    }
 };
+
 
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
@@ -2592,12 +2606,6 @@ function renderLogs() {
       </tr>`;
   });
 }
-window.dismissReportLock = function() {
-    if(confirm("Are you ready to start a new session?")) {
-        localStorage.removeItem("LOCKED_REPORT_VIEW");
-        location.reload(); // Reloads page, finds no lock, shows Login button
-    }
-};
 window.toggleNoticeBoard = function () {
     const noticeBox = document.getElementById("noticeBoardBox");
     const taskBox = document.getElementById("taskBox");
@@ -2662,6 +2670,7 @@ window.softRefresh = function () {
     window.sendNotice = window.sendNotice;
     window.dismissNoticePopup = window.dismissNoticePopup;
     window.softRefresh = window.softRefresh;
+    window.dismissReportLock = window.dismissReportLock;
 
   </script>
 
