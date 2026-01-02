@@ -824,43 +824,52 @@ window.sendWarning = async function(uid) {
 };
 window.setExamSchedule = async function (uid) {
 
-  const exams = [];
+  const userRef = ref(db, `users/${uid}/UPCOMING_EXAMS`);
 
-  for (let i = 0; i < 4; i++) {
+  // 1️⃣ Read existing exams first
+  const snap = await get(userRef);
+  let existing = [];
 
-    const name = prompt(
-      `Exam ${i + 1} name (Cancel to stop):`,
-      i === 0 ? "GATE 2026" : ""
-    );
-    if (!name) break;
-
-    const dateStr = prompt(
-      `Exam date for "${name}" (YYYY-MM-DD):`,
-      "2026-02-01"
-    );
-    if (!dateStr) break;
-
-    const examTime = new Date(dateStr + "T00:00:00").getTime();
-    if (isNaN(examTime)) {
-      alert("Invalid date format. Use YYYY-MM-DD");
-      i--;
-      continue;
-    }
-
-    exams.push({
-      name: name,
-      date: examTime
-    });
+  if (snap.exists()) {
+    existing = snap.val();
   }
 
-  if (exams.length === 0) return;
+  if (existing.length >= 8) {
+    alert("Maximum 8 exams already added.");
+    return;
+  }
 
-  await update(ref(db, `users/${uid}`), {
-    UPCOMING_EXAMS: exams
+  // 2️⃣ Take NEW exam input (one at a time)
+  const name = prompt("Enter exam name:");
+  if (!name) return;
+
+  const dateStr = prompt("Enter exam date (YYYY-MM-DD):");
+  if (!dateStr) return;
+
+  const examTime = new Date(dateStr + "T00:00:00").getTime();
+  if (isNaN(examTime)) {
+    alert("Invalid date format.");
+    return;
+  }
+
+  // 3️⃣ Add new exam
+  existing.push({
+    name: name,
+    date: examTime
   });
 
-  alert("Upcoming exams saved.");
+  // 4️⃣ Enforce limit = 8
+  if (existing.length > 8) {
+    alert("Only 8 exams allowed. Extra ignored.");
+    existing = existing.slice(0, 8);
+  }
+
+  // 5️⃣ Save back
+  await set(userRef, existing);
+
+  alert(`Exam added (${existing.length}/8).`);
 };
+
 
 // --- ADMIN MODAL & HISTORY INSPECTOR ---
 window.currentAdminUid = null;
@@ -1325,7 +1334,7 @@ onValue(ref(db, `users/${currentUser.uid}/UPCOMING_EXAMS`), (snap) => {
     return;
   }
 
-  const exams = snap.val();
+  const exams = snap.val().slice(0, 8);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
