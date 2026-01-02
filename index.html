@@ -1866,26 +1866,14 @@ function bioBreak() {
     const last = logs[logs.length - 1];
     last.logout = now();
     last.logoutTS = Date.now();
-    last.reason = "Pending"; // 🔑 marker
+    last.reason = "Pending";
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
 
   uploadData();
 
-  signOut(auth).then(() => {
-    location.reload();
-  });
+  signOut(auth).then(() => location.reload());
 }
-
-
-  uploadData();
-
-  // 🔴 THIS IS THE KEY LINE
-  signOut(auth).then(() => {
-    location.reload();
-  });
-}
-
 
 // --- MOCK TEST LOGIC ---
 function startMockTestSetup() {
