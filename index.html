@@ -2585,6 +2585,8 @@ logs.forEach(l => {
       Dismiss
     </button>
   </div>
+  reportBox.classList.remove("hidden");
+reportBox.scrollIntoView({ behavior: "smooth" });
 
   <!-- MAIN REPORT -->
   <div class="card" style="text-align:center">
@@ -2631,9 +2633,6 @@ logs.forEach(l => {
   document.getElementById("historyBox").classList.add("hidden");
 
   document.getElementById("statusBox").innerText = "Day End – Thank you";
-  document.getElementById("studentControls").classList.add("hidden");
-document.getElementById("loginBtn").classList.remove("hidden");
-document.getElementById("statusBox").innerText = "Day End – Report Generated"; 
 }
 
 function renderLogs() {
