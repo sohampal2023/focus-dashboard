@@ -1162,6 +1162,33 @@ window.unlockStudent = async function(uid) {
 // ==========================================
 // STUDENT LOGIC
 // ==========================================
+  function handleActiveMockTest(activeTest) {
+    if (!activeTest) return false;
+
+    if (activeTest.status === "EXPIRED") {
+        alert("Mock Test Time Ended! Please enter marks.");
+        finishTestSequence(activeTest, true);
+        return true;
+    }
+
+    if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
+        restoreTestUI(activeTest);
+
+        const elapsed = (Date.now() - activeTest.startTime) / 1000;
+        const remaining = (activeTest.durationMins * 60) - elapsed;
+
+        startIdle(remaining > 0 ? remaining : 1);
+        loadTasks();
+        renderLogs();
+        updateProgress();
+
+        return true;
+    } else {
+        finishTestSequence(activeTest, true);
+        return true;
+    }
+}
+
 async function loadNotices() {
     if (!currentUser) return;
 
@@ -1421,32 +1448,15 @@ if (!hasActiveSession) {
     uploadData(); 
 
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-    if (activeTest) {
-        if (activeTest.status === "EXPIRED") {
-           alert("Mock Test Time Ended! Please enter marks.");
-           finishTestSequence(activeTest, true);
-           return void 0;
-        }
-        if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
-            restoreTestUI(activeTest);
-            const elapsed = (Date.now() - activeTest.startTime) / 1000;
-            const remaining = (activeTest.durationMins * 60) - elapsed;
-            startIdle(remaining > 0 ? remaining : 1);
-            loadTasks();
-            renderLogs();
-            updateProgress();
-            return void 0;
-        } else {
-            finishTestSequence(activeTest, true);
-            return;
-        }
-    }
+const handled = handleActiveMockTest(activeTest);
 
+if (!handled) {
     startIdle(1800);
     setupTasks();
     loadTasks();
     renderLogs();
     updateProgress();
+}
 
   
 window.dismissFeedback = async function() {
