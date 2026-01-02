@@ -549,6 +549,7 @@ onAuthStateChanged(auth, async (user) => {
 
 // --- GLOBAL VARIABLES ---
 let currentUser = null; 
+let MOCK_POPUP_ACTIVE = false;
 let idleTimer = null;
 let targetTime = null;
 let totalDuration = 0;
@@ -613,18 +614,21 @@ async function handleLoginFlow() {
     }
 }
 function showMockResultPopup(resultText) {
+  MOCK_POPUP_ACTIVE = true;
+
   const popup = document.getElementById("mockResultPopup");
   const msg = document.getElementById("mockResultMsg");
 
   msg.innerText = resultText;
-
   popup.classList.remove("hidden");
 
-  // Auto hide after 6 seconds (like admin popup)
   setTimeout(() => {
     popup.classList.add("hidden");
-  }, 6000);
+    MOCK_POPUP_ACTIVE = false;
+    location.reload();
+  }, 8000); // popup visible for 8 seconds
 }
+
 
 
 function forceLogout() {
@@ -2021,6 +2025,7 @@ function updateIdle(seconds) {
 }
 
 function autoLogout() {
+  if (MOCK_POPUP_ACTIVE) return;
   clearInterval(idleTimer);
   const idleBox = document.getElementById("idleBox");
   if(idleBox) idleBox.classList.add("hidden");
