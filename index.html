@@ -1426,7 +1426,7 @@ if (!hasActiveSession) {
         if (activeTest.status === "EXPIRED") {
            alert("Mock Test Time Ended! Please enter marks.");
            finishTestSequence(activeTest, true);
-           return;
+           return void 0;
         }
         if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
             restoreTestUI(activeTest);
@@ -1436,7 +1436,7 @@ if (!hasActiveSession) {
             loadTasks();
             renderLogs();
             updateProgress();
-            return;
+            return void 0;
         } else {
             finishTestSequence(activeTest, true);
             return;
@@ -1449,7 +1449,7 @@ if (!hasActiveSession) {
     renderLogs();
     updateProgress();
 
-
+  
 window.dismissFeedback = async function() {
     document.getElementById("adminFeedbackBox").classList.add("hidden");
     if(currentUser) {
