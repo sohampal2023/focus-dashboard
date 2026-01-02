@@ -825,49 +825,77 @@ window.sendWarning = async function(uid) {
 window.setExamSchedule = async function (uid) {
 
   const userRef = ref(db, `users/${uid}/UPCOMING_EXAMS`);
-
-  // 1️⃣ Read existing exams first
   const snap = await get(userRef);
-  let existing = [];
 
-  if (snap.exists()) {
-    existing = snap.val();
+  let exams = snap.exists() ? snap.val() : [];
+
+  // -------- MENU --------
+  let menu = "Choose option:\n";
+  menu += "1. Add new exam\n";
+  menu += "2. Remove existing exam\n";
+  menu += "Cancel to exit";
+
+  const choice = prompt(menu, "1");
+  if (!choice) return;
+
+  // ===== OPTION 1: ADD =====
+  if (choice === "1") {
+
+    if (exams.length >= 8) {
+      alert("Maximum 8 exams allowed.");
+      return;
+    }
+
+    const name = prompt("Enter exam name:");
+    if (!name) return;
+
+    const dateStr = prompt("Enter exam date (YYYY-MM-DD):");
+    if (!dateStr) return;
+
+    const examTime = new Date(dateStr + "T00:00:00").getTime();
+    if (isNaN(examTime)) {
+      alert("Invalid date format.");
+      return;
+    }
+
+    exams.push({ name, date: examTime });
+    await set(userRef, exams);
+
+    alert(`Exam added (${exams.length}/8).`);
   }
 
-  if (existing.length >= 8) {
-    alert("Maximum 8 exams already added.");
-    return;
+  // ===== OPTION 2: REMOVE =====
+  else if (choice === "2") {
+
+    if (exams.length === 0) {
+      alert("No exams to remove.");
+      return;
+    }
+
+    let list = "Select exam number to remove:\n\n";
+    exams.forEach((e, i) => {
+      const d = new Date(e.date).toISOString().slice(0, 10);
+      list += `${i + 1}. ${e.name} (${d})\n`;
+    });
+
+    const index = prompt(list, "1");
+    if (!index) return;
+
+    const idx = parseInt(index) - 1;
+    if (idx < 0 || idx >= exams.length) {
+      alert("Invalid selection.");
+      return;
+    }
+
+    const removed = exams.splice(idx, 1);
+    await set(userRef, exams);
+
+    alert(`Removed exam: ${removed[0].name}`);
   }
 
-  // 2️⃣ Take NEW exam input (one at a time)
-  const name = prompt("Enter exam name:");
-  if (!name) return;
-
-  const dateStr = prompt("Enter exam date (YYYY-MM-DD):");
-  if (!dateStr) return;
-
-  const examTime = new Date(dateStr + "T00:00:00").getTime();
-  if (isNaN(examTime)) {
-    alert("Invalid date format.");
-    return;
+  else {
+    alert("Invalid option.");
   }
-
-  // 3️⃣ Add new exam
-  existing.push({
-    name: name,
-    date: examTime
-  });
-
-  // 4️⃣ Enforce limit = 8
-  if (existing.length > 8) {
-    alert("Only 8 exams allowed. Extra ignored.");
-    existing = existing.slice(0, 8);
-  }
-
-  // 5️⃣ Save back
-  await set(userRef, existing);
-
-  alert(`Exam added (${existing.length}/8).`);
 };
 
 
