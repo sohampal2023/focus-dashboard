@@ -405,6 +405,24 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
           <div id="liveRating" class="rating">Poor</div>
           <div id="liveDetails" class="details"></div>
         </div>
+        <!-- UPCOMING EXAMS BOX -->
+<div id="examBox"
+     style="
+       margin-top:14px;
+       padding:12px;
+       border:1px solid #1e40af;
+       background:#020617;
+       border-radius:12px;
+       display:none;
+     ">
+  <div style="font-size:13px;font-weight:800;color:#60a5fa;margin-bottom:8px">
+    📘 UPCOMING EXAMS
+  </div>
+
+  <div id="examList" style="font-size:13px;color:#e5e7eb">
+  </div>
+</div>
+
       </div>
     </div>
 
@@ -726,6 +744,8 @@ ${u.leaveRequest.reason}
                         <button style="background:#ea580c; margin-top:4px;" onclick="terminateStudent('${uid}')">Lock / Terminate</button>
                         <button style="background:#0891b2; margin-top:4px;" onclick="resetLeaveBalance('${uid}')">Reset Balance (6)</button>
                         <button style="background:#0ea5e9; margin-top:4px;" onclick="sendNotice('${uid}')">📢 Notice</button>
+                        <button style="background:#1e40af; margin-top:4px;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
+
 
                         ${isLocked ? `<button style="background:#22c55e; margin-top:4px;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
                     </div>
@@ -795,6 +815,45 @@ window.sendWarning = async function(uid) {
         await update(ref(db, `users/${uid}`), { activeAlert: msg });
         alert("Warning sent. Student must dismiss it.");
     } catch(e) { alert("Error sending warning: " + e.message); }
+};
+window.setExamSchedule = async function (uid) {
+
+  const exams = [];
+
+  for (let i = 0; i < 4; i++) {
+
+    const name = prompt(
+      `Exam ${i + 1} name (Cancel to stop):`,
+      i === 0 ? "GATE 2026" : ""
+    );
+    if (!name) break;
+
+    const dateStr = prompt(
+      `Exam date for "${name}" (YYYY-MM-DD):`,
+      "2026-02-01"
+    );
+    if (!dateStr) break;
+
+    const examTime = new Date(dateStr + "T00:00:00").getTime();
+    if (isNaN(examTime)) {
+      alert("Invalid date format. Use YYYY-MM-DD");
+      i--;
+      continue;
+    }
+
+    exams.push({
+      name: name,
+      date: examTime
+    });
+  }
+
+  if (exams.length === 0) return;
+
+  await update(ref(db, `users/${uid}`), {
+    UPCOMING_EXAMS: exams
+  });
+
+  alert("Upcoming exams saved.");
 };
 
 // --- ADMIN MODAL & HISTORY INSPECTOR ---
@@ -1249,6 +1308,55 @@ async function initStudentDashboard() {
             popup.classList.add("hidden");
         }
     });
+  // --- UPCOMING EXAMS LISTENER ---
+onValue(ref(db, `users/${currentUser.uid}/UPCOMING_EXAMS`), (snap) => {
+
+  const box = document.getElementById("examBox");
+  const list = document.getElementById("examList");
+
+  if (!snap.exists()) {
+    box.style.display = "none";
+    return;
+  }
+
+  const exams = snap.val();
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const active = exams
+    .map(e => {
+      const daysLeft = Math.ceil(
+        (e.date - today.getTime()) / (24 * 60 * 60 * 1000)
+      );
+      return { ...e, daysLeft };
+    })
+    .filter(e => e.daysLeft >= 0)
+    .sort((a, b) => a.daysLeft - b.daysLeft)
+    .slice(0, 4);
+
+  if (active.length === 0) {
+    box.style.display = "none";
+    return;
+  }
+
+  box.style.display = "block";
+
+  list.innerHTML = active.map(e => `
+    <div style="
+      display:flex;
+      justify-content:space-between;
+      padding:6px 0;
+      border-bottom:1px dashed #334155
+    ">
+      <span>${e.name}</span>
+      <span style="color:#facc15;font-weight:bold">
+        ${e.daysLeft} day${e.daysLeft !== 1 ? "s" : ""} left
+      </span>
+    </div>
+  `).join("");
+});
+
     // --- REALTIME NOTICE POPUP (LIKE WARNING, BUT INFO) ---
 onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
     if (!snapshot.exists()) return;
