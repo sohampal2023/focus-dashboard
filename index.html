@@ -1369,33 +1369,29 @@ await update(ref(db, `users/${currentUser.uid}`), {
     checkLeaveStatus(serverData);
 
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
-    dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
-    penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+  // 🔑 ASK BIO BREAK REASON AFTER LOGIN (ONLY ONCE)
+if (logs.length) {
+  const prevLog = logs[logs.length - 1];
 
-    // Init Timeout UI
-    document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
+  if (prevLog.logoutTS && prevLog.reason === "Pending") {
+    let reason = "";
 
-    if (logs.length) {
-  const lastLog = logs[logs.length - 1];
+    while (!reason) {
+      reason = prompt(
+        "Reason for previous Bio Break?",
+        "Washroom / Water / Phone Call"
+      );
 
-  if (lastLog.reason === "Pending") {
-    const userReason = prompt(
-      "Reason for previous break?",
-      "Washroom / Water / Phone Call"
-    );
+      if (!reason || !reason.trim()) {
+        alert("Reason is mandatory.");
+        reason = "";
+      }
+    }
 
-    lastLog.reason =
-      userReason && userReason.trim()
-        ? userReason.trim()
-        : "Bio Break";
-
+    prevLog.reason = reason.trim();
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-    uploadData(); // 🔒 persist to Firebase
+    uploadData();
   }
-}
-
-
    const hasActiveSession = logs.length && logs[logs.length - 1].logoutTS === null;
 
 if (!hasActiveSession) {
@@ -1410,9 +1406,16 @@ if (!hasActiveSession) {
 
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 }
+}
 
+    idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+    dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
+    penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
 
+    // Init Timeout UI
+    document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
 
+ }
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
@@ -1866,12 +1869,11 @@ function bioBreak() {
     const last = logs[logs.length - 1];
     last.logout = now();
     last.logoutTS = Date.now();
-    last.reason = "Pending";
+    last.reason = "Pending"; // ← IMPORTANT
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
 
   uploadData();
-
   signOut(auth).then(() => location.reload());
 }
 
