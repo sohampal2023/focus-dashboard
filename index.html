@@ -1331,7 +1331,7 @@ onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
   </div>
 `;
 
-        return; 
+        return void 0; 
     }
 
     // --- CHECK LEAVE ACCRUAL (MONTHLY 6 DAYS + CARRYFORWARD) ---
