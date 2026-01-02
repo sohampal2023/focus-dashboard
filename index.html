@@ -1162,33 +1162,6 @@ window.unlockStudent = async function(uid) {
 // ==========================================
 // STUDENT LOGIC
 // ==========================================
-  function handleActiveMockTest(activeTest) {
-    if (!activeTest) return false;
-
-    if (activeTest.status === "EXPIRED") {
-        alert("Mock Test Time Ended! Please enter marks.");
-        finishTestSequence(activeTest, true);
-        return true;
-    }
-
-    if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
-        restoreTestUI(activeTest);
-
-        const elapsed = (Date.now() - activeTest.startTime) / 1000;
-        const remaining = (activeTest.durationMins * 60) - elapsed;
-
-        startIdle(remaining > 0 ? remaining : 1);
-        loadTasks();
-        renderLogs();
-        updateProgress();
-
-        return true;
-    } else {
-        finishTestSequence(activeTest, true);
-        return true;
-    }
-}
-
 async function loadNotices() {
     if (!currentUser) return;
 
@@ -1358,7 +1331,7 @@ onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
   </div>
 `;
 
-        throw new Error("LOCKOUT_ACTIVE");
+        return; 
     }
 
     // --- CHECK LEAVE ACCRUAL (MONTHLY 6 DAYS + CARRYFORWARD) ---
@@ -1394,31 +1367,35 @@ await update(ref(db, `users/${currentUser.uid}`), {
     }
 
     checkLeaveStatus(serverData);
-}
+
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-  // 🔑 ASK BIO BREAK REASON AFTER LOGIN (ONLY ONCE)
-if (logs.length) {
-  const prevLog = logs[logs.length - 1];
+    idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+    dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
+    penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
 
-  if (prevLog.logoutTS && prevLog.reason === "Pending") {
-    let reason = "";
+    // Init Timeout UI
+    document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
 
-    while (!reason) {
-      reason = prompt(
-        "Reason for previous Bio Break?",
-        "Washroom / Water / Phone Call"
-      );
+    if (logs.length) {
+  const lastLog = logs[logs.length - 1];
 
-      if (!reason || !reason.trim()) {
-        alert("Reason is mandatory.");
-        reason = "";
-      }
-    }
+  if (lastLog.reason === "Pending") {
+    const userReason = prompt(
+      "Reason for previous break?",
+      "Washroom / Water / Phone Call"
+    );
 
-    prevLog.reason = reason.trim();
+    lastLog.reason =
+      userReason && userReason.trim()
+        ? userReason.trim()
+        : "Bio Break";
+
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-    uploadData();
+    uploadData(); // 🔒 persist to Firebase
   }
+}
+
+
    const hasActiveSession = logs.length && logs[logs.length - 1].logoutTS === null;
 
 if (!hasActiveSession) {
@@ -1433,24 +1410,37 @@ if (!hasActiveSession) {
 
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
 }
-}
 
-    idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
-    dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
-    penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
 
-    // Init Timeout UI
-    document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
 
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
+    
     uploadData(); 
 
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-const handled = handleActiveMockTest(activeTest);
+    if (activeTest) {
+        if (activeTest.status === "EXPIRED") {
+           alert("Mock Test Time Ended! Please enter marks.");
+           finishTestSequence(activeTest, true);
+           return;
+        }
+        if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
+            restoreTestUI(activeTest);
+            const elapsed = (Date.now() - activeTest.startTime) / 1000;
+            const remaining = (activeTest.durationMins * 60) - elapsed;
+            startIdle(remaining > 0 ? remaining : 1);
+            loadTasks();
+            renderLogs();
+            updateProgress();
+            return;
+        } else {
+            finishTestSequence(activeTest, true);
+            return;
+        }
+    }
 
-if (!handled) {
     startIdle(1800);
     setupTasks();
     loadTasks();
@@ -1458,7 +1448,6 @@ if (!handled) {
     updateProgress();
 }
 
-  
 window.dismissFeedback = async function() {
     document.getElementById("adminFeedbackBox").classList.add("hidden");
     if(currentUser) {
@@ -1877,13 +1866,16 @@ function bioBreak() {
     const last = logs[logs.length - 1];
     last.logout = now();
     last.logoutTS = Date.now();
-    last.reason = "Pending"; // ← IMPORTANT
+    last.reason = "Pending";
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
 
   uploadData();
+
   signOut(auth).then(() => location.reload());
 }
+
+
 
 // --- MOCK TEST LOGIC ---
 function startMockTestSetup() {
