@@ -1367,7 +1367,7 @@ await update(ref(db, `users/${currentUser.uid}`), {
     }
 
     checkLeaveStatus(serverData);
-
+}
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   // 🔑 ASK BIO BREAK REASON AFTER LOGIN (ONLY ONCE)
 if (logs.length) {
@@ -1418,7 +1418,6 @@ if (!hasActiveSession) {
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
-}    
     uploadData(); 
 
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
