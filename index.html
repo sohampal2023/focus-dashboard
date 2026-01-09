@@ -263,6 +263,8 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
       <button id="leaveBtn" onclick="requestLeave()">Request Leave</button>
       <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
       <button id="histBtn" onclick="toggleHistory()" disabled>History</button>
+      <button onclick="toggleSubjectProgress()" disabled>📘 Subject Progress</button>
+
       <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
   </div>
 
@@ -358,7 +360,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 </div>
 
     <div id="historyBox" class="card hidden">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
             <h3 style="color:#7dd3fc">History (Last 4 Days)</h3>
             <button onclick="toggleHistory()" style="width:auto; padding:5px 15px;">Close</button>
         </div>
@@ -375,6 +377,50 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
             <tbody id="historyTable"></tbody>
         </table>
     </div>
+  <div id="subjectProgressBox" class="card hidden">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
+    <h3 style="color:#38bdf8">Subject Wise Progress</h3>
+    <button onclick="toggleSubjectProgress()" style="width:auto;padding:5px 15px">
+      Close
+    </button>
+  </div>
+
+  <!-- Subject selector -->
+  <div style="margin-bottom:12px">
+    <select id="subjectSelect" style="
+      padding:8px;
+      border-radius:6px;
+      background:#020617;
+      color:#e5e7eb;
+      border:1px solid #334155;
+      width:100%;
+    ">
+      <option value="">Select Subject</option>
+    </select>
+  </div>
+
+  <!-- Subject table -->
+  <table style="width:100%">
+    <thead>
+      <tr>
+        <th style="width:15%">Date</th>
+        <th style="width:45%">Covered Portion</th>
+        <th style="width:40%">Uncovered / Due Portion</th>
+      </tr>
+    </thead>
+    <tbody id="subjectTableBody">
+      <tr>
+        <td colspan="3" style="color:#94a3b8">
+          Select a subject to view progress
+        </td>
+      </tr>
+    </tbody>
+  </table>
+
+  <button onclick="addSubjectProgress()" style="margin-top:12px">
+    + Add Today’s Entry
+  </button>
+</div>
 
     <div id="taskBox" class="card hidden">
       <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
@@ -549,6 +595,7 @@ onAuthStateChanged(auth, async (user) => {
 
 // --- GLOBAL VARIABLES ---
 let currentUser = null; 
+const SUBJECT_TABLE_KEY = () => key("SUBJECT_WISE_TABLE");
 let MOCK_POPUP_ACTIVE = false;
 let idleTimer = null;
 let targetTime = null;
