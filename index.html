@@ -2042,25 +2042,6 @@ window.renderSubjectTable = function(subject) {
   });
 }
 
-window.addSubjectDayRow = function() {
-  const box = document.getElementById("subjectDayInputs");
-  if (!box) return;
-
-  const row = document.createElement("div");
-  row.style.display = "grid";
-  row.style.gridTemplateColumns = "1fr 1fr 1fr";
-  row.style.gap = "8px";
-  row.style.marginBottom = "6px";
-
-  row.innerHTML = `
-    <input class="nextInput" placeholder="Subject (e.g. Physics)">
-    <input class="nextInput" placeholder="Topic Covered">
-    <input class="nextInput" placeholder="Left / Due Portion">
-  `;
-
-  box.appendChild(row);
-}
-
 
 // --- HISTORY LOGIC ---
 function toggleHistory() {
@@ -2477,14 +2458,35 @@ const cutStatus = obtained >= cutoff ? "CLEAR" : "NOT CLEAR";
 // --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
 function setupTasks() {
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-  const next = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
+  const nextData = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
 
-  let merged = [...carried, ...next.map(n => ({ name: n, done: false, comment: "", due: "" }))];
+  // Convert NEXT_TASKS (objects) into Task format
+  // If nextData contains strings (old format), handle that too
+  const newTasks = nextData.map(item => {
+    if (typeof item === 'object' && item !== null) {
+      return { 
+        name: item.subject,      // Main identifier
+        target: item.topic,      // The target topic to display
+        done: false, 
+        comment: "", 
+        due: "" 
+      };
+    } else {
+      // Old string format fallback
+      return { name: item, target: "", done: false, comment: "", due: "" };
+    }
+  });
+
+  // Merge carried tasks (ensure they have 'target' property if missing)
+  const cleanCarried = carried.map(t => ({...t, target: t.target || ""}));
+
+  let merged = [...cleanCarried, ...newTasks];
+  
+  // Default tasks if empty
   if (!merged.length) {
     merged = [
-      { name: "Study", done: false, comment: "", due: "" },
-      { name: "Revise", done: false, comment: "", due: "" },
-      { name: "Practice", done: false, comment: "", due: "" }
+      { name: "Study", target: "General", done: false, comment: "", due: "" },
+      { name: "Revise", target: "Notes", done: false, comment: "", due: "" }
     ];
   }
 
@@ -2510,8 +2512,10 @@ function loadTasks() {
   if(!tList || !eList) return;
   tList.innerHTML = "";
   eList.innerHTML = "";
+  
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  
   const updateLogTask = (name, isChecked, comment, due) => {
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if(logs.length){
@@ -2527,6 +2531,22 @@ function loadTasks() {
       renderLogs();
     }
   };
+
+  // --- AUTOMATED SUBJECT PROGRESS HELPER ---
+  const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
+      const subjectData = getSubjectData();
+      if(!subjectData[subject]) subjectData[subject] = [];
+      
+      subjectData[subject].push({
+          date: new Date().toLocaleDateString(),
+          covered: covered || "-",
+          uncovered: uncovered || "-"
+      });
+      
+      saveSubjectData(subjectData);
+      uploadData(); // Sync to Firebase
+  };
+
   tasks.forEach(t => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
@@ -2534,27 +2554,38 @@ function loadTasks() {
     cb.type = "checkbox";
     cb.checked = t.done;
     const label = document.createElement("span");
+    
     const updateLabel = () => {
+       let display = t.name;
+       if(t.target) display += ` <span style='font-size:11px;color:#38bdf8'>(${t.target})</span>`;
+       
        if(t.done){
-           label.innerHTML = ` ${t.name} <span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>`;
+           label.innerHTML = ` ${display} <span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>`;
        } else {
-           label.innerText = " " + t.name;
+           label.innerHTML = " " + display;
        }
     };
     updateLabel();
+    
     cb.onchange = () => {
-      // STRICT CONFIRMATION
       if (!confirm(`CONFIRM TASK:\n\nMark '${t.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) { 
           cb.checked = !cb.checked; 
           return; 
       }
       
       if(cb.checked){
-        const remark = prompt(`Comment for ${t.name}?`, "Done");
-        const dueVal = prompt(`Any pending work/marks left for ${t.name}?`, "None");
+        const remark = prompt(`What did you cover in ${t.name}? (Covered Portion)`, "Done");
+        const dueVal = prompt(`Any pending work left for ${t.name}? (Uncovered Portion)`, "None");
         t.comment = remark || "-";
         t.due = dueVal || "-";
-      } else { t.comment = ""; t.due = ""; }
+        
+        // --- AUTO SAVE TO SUBJECT TABLE ---
+        saveAutomatedSubjectProgress(t.name, t.comment, t.due);
+        
+      } else { 
+          t.comment = ""; 
+          t.due = ""; 
+      }
       t.done = cb.checked;
       updateLabel();
       updateLogTask(t.name, t.done, t.comment, t.due);
@@ -2563,6 +2594,7 @@ function loadTasks() {
     container.append(cb, label);
     tList.append(container);
   });
+  
   extras.forEach(e => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
@@ -2663,24 +2695,24 @@ function openDayEnd() {
   clearInterval(idleTimer);
   const idleBox = document.getElementById("idleBox");
   if(idleBox) idleBox.classList.add("hidden");
-  const nextInputs = document.getElementById("nextInputs");
-  nextInputs.innerHTML = "";
   
-  // Standard Next Day Tasks
-  for (let i = 0; i < 7; i++) {
-    nextInputs.innerHTML += `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">`;
-  }
-
-  // --- NEW SUBJECT PROGRESS INPUT SECTION ---
-  nextInputs.innerHTML += `
-    <div style="margin-top:20px; border-top:1px dashed #334155; padding-top:10px;">
-        <h4 style="color:#38bdf8; margin-bottom:8px">📘 Update Subject Progress</h4>
-        <div id="subjectDayInputs"></div>
-        <button type="button" onclick="addSubjectDayRow()" style="width:auto; margin-top:5px; font-size:12px">+ Add Subject Entry</button>
+  const nextInputs = document.getElementById("nextInputs");
+  nextInputs.innerHTML = `
+    <div style="margin-bottom:15px; color:#cbd5e1; font-size:13px; text-align:center">
+      Enter your plan for tomorrow. <br>
+      <span style="color:#facc15">Subject</span> is mandatory. <span style="color:#38bdf8">Topic</span> is your target.
     </div>
   `;
-  // Add one empty row by default
-  addSubjectDayRow();
+  
+  // Standard Next Day Tasks (Split into Subject + Topic inputs)
+  for (let i = 0; i < 7; i++) {
+    nextInputs.innerHTML += `
+      <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:10px; margin-bottom:8px;">
+        <input class="nextInput" id="nd_sub_${i}" placeholder="Subject (e.g. Physics)" style="margin:0">
+        <input class="nextInput" id="nd_top_${i}" placeholder="Target Topic (e.g. Optics)" style="margin:0">
+      </div>
+    `;
+  }
 
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
@@ -2688,36 +2720,17 @@ function openDayEnd() {
 function finalDayEnd() {
   if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
 
-  // 1. Save Next Day Tasks
+  // 1. Save Next Day Tasks (As Objects: {subject, topic})
   const next = [];
   for (let i = 0; i < 7; i++) {
-    const el = document.getElementById("nd" + i);
-    if(el && el.value.trim()) next.push(el.value.trim());
+    const sub = document.getElementById("nd_sub_" + i).value.trim();
+    const top = document.getElementById("nd_top_" + i).value.trim();
+    
+    if(sub) {
+      next.push({ subject: sub, topic: top });
+    }
   }
   localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
-
-  // --- 1.5 SAVE SUBJECT PROGRESS ---
-  const subjectData = getSubjectData();
-  const subjectRows = document.getElementById("subjectDayInputs").children;
-  
-  for(let row of subjectRows) {
-      const inputs = row.querySelectorAll("input");
-      if(inputs.length >= 3) {
-          const subName = inputs[0].value.trim();
-          const covered = inputs[1].value.trim();
-          const uncovered = inputs[2].value.trim();
-          
-          if(subName && covered) {
-              if(!subjectData[subName]) subjectData[subName] = [];
-              subjectData[subName].push({
-                  date: new Date().toLocaleDateString(),
-                  covered: covered,
-                  uncovered: uncovered || "-"
-              });
-          }
-      }
-  }
-  saveSubjectData(subjectData);
 
   // 2. Calculate Stats
   const p = calculate();
@@ -2753,7 +2766,8 @@ function finalDayEnd() {
   localStorage.setItem(key("HISTORY"), JSON.stringify(history));
   
   // 5. Clean up current session data
-  localStorage.setItem(key("TASKS"), JSON.stringify(tasks.filter(t => !t.done))); // Carry forward
+  const carried = tasks.filter(t => !t.done);
+  localStorage.setItem(key("TASKS"), JSON.stringify(carried)); 
   localStorage.setItem(key("EXTRA"), "[]");
   localStorage.removeItem(key("LOGS"));
   localStorage.setItem(key("IDLE_STRIKES"), "0");
@@ -2920,7 +2934,6 @@ window.softRefresh = function () {
     window.dismissReportLock = window.dismissReportLock;
     window.toggleSubjectProgress = window.toggleSubjectProgress;
     window.renderSubjectTable = window.renderSubjectTable;
-    window.addSubjectDayRow = window.addSubjectDayRow;
     window.clearSubjectProgress = window.clearSubjectProgress;
 
   </script>
