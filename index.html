@@ -360,7 +360,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 </div>
 
     <div id="historyBox" class="card hidden">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
             <h3 style="color:#7dd3fc">History (Last 4 Days)</h3>
             <button onclick="toggleHistory()" style="width:auto; padding:5px 15px;">Close</button>
         </div>
@@ -377,7 +377,8 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
             <tbody id="historyTable"></tbody>
         </table>
     </div>
-  <div id="subjectProgressBox" class="card hidden">
+
+<div id="subjectProgressBox" class="card hidden">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
     <h3 style="color:#38bdf8">Subject Wise Progress</h3>
     <button onclick="toggleSubjectProgress()" style="width:auto;padding:5px 15px">
@@ -385,7 +386,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     </button>
   </div>
 
-  <!-- Subject selector -->
   <div style="margin-bottom:12px">
     <select id="subjectSelect" style="
       padding:8px;
@@ -394,17 +394,17 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
       color:#e5e7eb;
       border:1px solid #334155;
       width:100%;
-    ">
+      cursor:pointer;
+    " onchange="renderSubjectTable(this.value)">
       <option value="">Select Subject</option>
     </select>
   </div>
 
-  <!-- Subject table -->
   <table style="width:100%">
     <thead>
       <tr>
-        <th style="width:15%">Date</th>
-        <th style="width:45%">Covered Portion</th>
+        <th style="width:20%">Date</th>
+        <th style="width:40%">Covered Portion</th>
         <th style="width:40%">Uncovered / Due Portion</th>
       </tr>
     </thead>
@@ -416,13 +416,8 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
       </tr>
     </tbody>
   </table>
-
-  <button onclick="addSubjectProgress()" style="margin-top:12px">
-    + Add Today’s Entry
-  </button>
 </div>
-
-    <div id="taskBox" class="card hidden">
+<div id="taskBox" class="card hidden">
       <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
         <div>
           <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -595,7 +590,6 @@ onAuthStateChanged(auth, async (user) => {
 
 // --- GLOBAL VARIABLES ---
 let currentUser = null; 
-const SUBJECT_TABLE_KEY = () => key("SUBJECT_WISE_TABLE");
 let MOCK_POPUP_ACTIVE = false;
 let idleTimer = null;
 let targetTime = null;
@@ -605,6 +599,10 @@ let idleStrikes = 0;
 let dailyTimeouts = 0;
 let lastApprovedState = false; 
 const ADMIN_EMAIL = "admin@study.com";
+
+// --- NEW KEY FOR SUBJECT PROGRESS ---
+const SUBJECT_TABLE_KEY = () => key("SUBJECT_WISE_TABLE");
+
 function isAdmin() {
     return currentUser && currentUser.email === ADMIN_EMAIL;
 }
@@ -676,18 +674,6 @@ function showMockResultPopup(resultText) {
   }, 8000); // popup visible for 8 seconds
 }
 
-window.clearSubjectProgress = async function(uid) {
-  if (!isAdmin()) return;
-
-  if (!confirm("ALL CLEAR subject-wise progress for this student?")) return;
-
-  try {
-    await remove(ref(db, `users/${uid}/SUBJECT_WISE_TABLE`));
-    alert("Subject progress cleared successfully.");
-  } catch (e) {
-    alert("Failed to clear subject progress.");
-  }
-};
 
 
 function forceLogout() {
@@ -868,6 +854,8 @@ ${u.leaveRequest.reason}
                         <button style="background:#0ea5e9; margin-top:4px;" onclick="sendNotice('${uid}')">📢 Notice</button>
                         <button style="background:#1e40af; margin-top:4px;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
 
+                        <button style="background:#475569; margin-top:4px; border:1px solid #94a3b8" onclick="clearSubjectProgress('${uid}')">Clear Subj. Prog</button>
+
 
                         ${isLocked ? `<button style="background:#22c55e; margin-top:4px;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
                     </div>
@@ -924,6 +912,20 @@ window.sendNotice = async function (uid) {
   await set(noticeRef, existing);
 
   alert("Notice published successfully.");
+};
+
+// --- NEW ADMIN FUNCTION: CLEAR SUBJECT PROGRESS ---
+window.clearSubjectProgress = async function(uid) {
+  if (!isAdmin()) return;
+
+  if (!confirm("ALL CLEAR subject-wise progress for this student?")) return;
+
+  try {
+    await remove(ref(db, `users/${uid}/SUBJECT_WISE_TABLE`));
+    alert("Subject progress cleared successfully.");
+  } catch (e) {
+    alert("Failed to clear subject progress.");
+  }
 };
 
 
@@ -1688,6 +1690,9 @@ if (!hasActiveSession) {
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
     document.querySelector("button[onclick='toggleSubjectProgress()']").disabled = false;
+    
+    // Load subjects into selector
+    loadSubjectList();
 
     uploadData(); 
 
@@ -1886,13 +1891,7 @@ function showApprovedPopup(dates, comment) {
 async function downloadData(uid) {
     const syncStatus = document.getElementById("syncStatus");
     syncStatus.innerText = "Syncing...";
-    if (data.SUBJECT_WISE_TABLE) {
-  localStorage.setItem(
-    SUBJECT_TABLE_KEY(),
-    data.SUBJECT_WISE_TABLE
-  );
-}
-
+    
     try {
         const snapshot = await get(child(ref(db), `users/${uid}`));
         if (snapshot.exists()) {
@@ -1909,6 +1908,9 @@ async function downloadData(uid) {
             // DOWNLOAD MOCK LOGS
             if(data.MOCK_LOGS) localStorage.setItem(key("MOCK_LOGS"), data.MOCK_LOGS);
 
+            // DOWNLOAD SUBJECT PROGRESS
+            if(data.SUBJECT_WISE_TABLE) localStorage.setItem(SUBJECT_TABLE_KEY(), data.SUBJECT_WISE_TABLE);
+
             localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
             localStorage.setItem(key("DAILY_TIMEOUTS"), data.DAILY_TIMEOUTS || "0"); 
             localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
@@ -1923,18 +1925,6 @@ async function downloadData(uid) {
         syncStatus.innerText = "Auth Error";
         return null;
     }
-}
-function getSubjectData() {
-  return JSON.parse(
-    localStorage.getItem(SUBJECT_TABLE_KEY()) || "{}"
-  );
-}
-
-function saveSubjectData(data) {
-  localStorage.setItem(
-    SUBJECT_TABLE_KEY(),
-    JSON.stringify(data)
-  );
 }
 
 function uploadData() {
@@ -1952,11 +1942,11 @@ function uploadData() {
         TEST_STATE: localStorage.getItem(key("TEST_STATE")),
         NEXT_TASKS: localStorage.getItem(key("NEXT_TASKS")),
         HISTORY: localStorage.getItem(key("HISTORY")), 
-        MOCK_LOGS: localStorage.getItem(key("MOCK_LOGS")), // UPLOAD MOCK LOGS
+        MOCK_LOGS: localStorage.getItem(key("MOCK_LOGS")),
+        SUBJECT_WISE_TABLE: localStorage.getItem(SUBJECT_TABLE_KEY()), // Upload new table
         IDLE_STRIKES: localStorage.getItem(key("IDLE_STRIKES")),
         DAILY_TIMEOUTS: localStorage.getItem(key("DAILY_TIMEOUTS")),
-        PENALTY: localStorage.getItem(key("PENALTY")),
-        SUBJECT_WISE_TABLE: localStorage.getItem(SUBJECT_TABLE_KEY())
+        PENALTY: localStorage.getItem(key("PENALTY"))
     };
 
     update(ref(db, `users/${currentUser.uid}`), payload)
@@ -1969,16 +1959,121 @@ function uploadData() {
     });
 }
 
+// --- SUBJECT HELPER FUNCTIONS ---
+function getSubjectData() {
+  return JSON.parse(
+    localStorage.getItem(SUBJECT_TABLE_KEY()) || "{}"
+  );
+}
+
+function saveSubjectData(data) {
+  localStorage.setItem(
+    SUBJECT_TABLE_KEY(),
+    JSON.stringify(data)
+  );
+}
+
+// --- NEW SUBJECT UI LOGIC ---
+window.toggleSubjectProgress = function() {
+  const subjectBox = document.getElementById("subjectProgressBox");
+  const historyBox = document.getElementById("historyBox");
+  const taskBox = document.getElementById("taskBox");
+  const logBox = document.getElementById("logBox");
+
+  if (subjectBox.classList.contains("hidden")) {
+    subjectBox.classList.remove("hidden");
+    if (historyBox) historyBox.classList.add("hidden");
+    if (taskBox) taskBox.classList.add("hidden");
+    if (logBox) logBox.classList.add("hidden");
+  } else {
+    subjectBox.classList.add("hidden");
+    if (taskBox) taskBox.classList.remove("hidden");
+    if (logBox) logBox.classList.remove("hidden");
+  }
+}
+
+window.loadSubjectList = function() {
+  const select = document.getElementById("subjectSelect");
+  if (!select) return;
+
+  const data = getSubjectData();
+  
+  // Keep first option
+  select.innerHTML = `<option value="">Select Subject</option>`;
+
+  Object.keys(data).forEach(sub => {
+    const opt = document.createElement("option");
+    opt.value = sub;
+    opt.innerText = sub;
+    select.appendChild(opt);
+  });
+}
+
+window.renderSubjectTable = function(subject) {
+  const tbody = document.getElementById("subjectTableBody");
+  const data = getSubjectData();
+
+  if (!subject || !data[subject] || data[subject].length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="3" style="color:#94a3b8">
+          No data available for this subject
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = "";
+
+  // Reverse so newest is top
+  const rows = [...data[subject]].reverse();
+
+  rows.forEach(row => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${row.date}</td>
+        <td style="text-align:left">${row.covered}</td>
+        <td style="text-align:left;color:#fca5a5">
+          ${row.uncovered}
+        </td>
+      </tr>
+    `;
+  });
+}
+
+window.addSubjectDayRow = function() {
+  const box = document.getElementById("subjectDayInputs");
+  if (!box) return;
+
+  const row = document.createElement("div");
+  row.style.display = "grid";
+  row.style.gridTemplateColumns = "1fr 1fr 1fr";
+  row.style.gap = "8px";
+  row.style.marginBottom = "6px";
+
+  row.innerHTML = `
+    <input class="nextInput" placeholder="Subject (e.g. Physics)">
+    <input class="nextInput" placeholder="Topic Covered">
+    <input class="nextInput" placeholder="Left / Due Portion">
+  `;
+
+  box.appendChild(row);
+}
+
+
 // --- HISTORY LOGIC ---
 function toggleHistory() {
     const histBox = document.getElementById("historyBox");
     const taskBox = document.getElementById("taskBox");
     const logBox = document.getElementById("logBox");
+    const subjectBox = document.getElementById("subjectProgressBox");
 
     if (histBox.classList.contains("hidden")) {
         histBox.classList.remove("hidden");
         taskBox.classList.add("hidden");
         logBox.classList.add("hidden");
+        if(subjectBox) subjectBox.classList.add("hidden");
 
         let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
         // Limit display to 4
@@ -2016,67 +2111,6 @@ function toggleHistory() {
             logBox.classList.remove("hidden");
         }
     }
-}
-function toggleSubjectProgress() {
-  const subjectBox = document.getElementById("subjectProgressBox");
-  const historyBox = document.getElementById("historyBox");
-  const taskBox = document.getElementById("taskBox");
-  const logBox = document.getElementById("logBox");
-
-  if (subjectBox.classList.contains("hidden")) {
-    subjectBox.classList.remove("hidden");
-    if (historyBox) historyBox.classList.add("hidden");
-    if (taskBox) taskBox.classList.add("hidden");
-    if (logBox) logBox.classList.add("hidden");
-  } else {
-    subjectBox.classList.add("hidden");
-    if (taskBox) taskBox.classList.remove("hidden");
-    if (logBox) logBox.classList.remove("hidden");
-  }
-}
-function loadSubjectList() {
-  const select = document.getElementById("subjectSelect");
-  if (!select) return;
-
-  const data = getSubjectData();
-
-  select.innerHTML = `<option value="">Select Subject</option>`;
-
-  Object.keys(data).forEach(sub => {
-    const opt = document.createElement("option");
-    opt.value = sub;
-    opt.innerText = sub;
-    select.appendChild(opt);
-  });
-}
-function renderSubjectTable(subject) {
-  const tbody = document.getElementById("subjectTableBody");
-  const data = getSubjectData();
-
-  if (!subject || !data[subject] || data[subject].length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="3" style="color:#94a3b8">
-          No data available for this subject
-        </td>
-      </tr>
-    `;
-    return;
-  }
-
-  tbody.innerHTML = "";
-
-  data[subject].forEach(row => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${row.date}</td>
-        <td style="text-align:left">${row.covered}</td>
-        <td style="text-align:left;color:#fca5a5">
-          ${row.uncovered}
-        </td>
-      </tr>
-    `;
-  });
 }
 
 // --- IDLE TIMER & WATCHDOG LOGIC ---
@@ -2477,23 +2511,6 @@ function loadTasks() {
   tList.innerHTML = "";
   eList.innerHTML = "";
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-  tasks.forEach(t => {
-  if (!t.done && t.name) {
-    const subjectData = getSubjectData();
-    const subject = t.name; // task name treated as subject
-
-    if (!subjectData[subject]) subjectData[subject] = [];
-
-    subjectData[subject].push({
-      date: new Date().toLocaleDateString(),
-      covered: "-",
-      uncovered: t.due || "Pending"
-    });
-
-    saveSubjectData(subjectData);
-  }
-});
-
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
   const updateLogTask = (name, isChecked, comment, due) => {
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
@@ -2647,52 +2664,26 @@ function openDayEnd() {
   const idleBox = document.getElementById("idleBox");
   if(idleBox) idleBox.classList.add("hidden");
   const nextInputs = document.getElementById("nextInputs");
-nextInputs.innerHTML = "";
+  nextInputs.innerHTML = "";
+  
+  // Standard Next Day Tasks
+  for (let i = 0; i < 7; i++) {
+    nextInputs.innerHTML += `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">`;
+  }
 
-// next-day tasks
-for (let i = 0; i < 7; i++) {
+  // --- NEW SUBJECT PROGRESS INPUT SECTION ---
   nextInputs.innerHTML += `
-    <input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">
+    <div style="margin-top:20px; border-top:1px dashed #334155; padding-top:10px;">
+        <h4 style="color:#38bdf8; margin-bottom:8px">📘 Update Subject Progress</h4>
+        <div id="subjectDayInputs"></div>
+        <button type="button" onclick="addSubjectDayRow()" style="width:auto; margin-top:5px; font-size:12px">+ Add Subject Entry</button>
+    </div>
   `;
-}
-
-// subject-topic section
-nextInputs.innerHTML += `
-  <div style="margin-top:16px;border-top:1px dashed #334155;padding-top:12px">
-    <h4 style="color:#38bdf8;margin-bottom:8px">
-      📘 Subject & Topic Covered Today
-    </h4>
-
-    <div id="subjectDayInputs"></div>
-
-    <button type="button"
-      onclick="addSubjectDayRow()"
-      style="width:auto;margin-top:6px">
-      + Add Subject
-    </button>
-  </div>
-`;
+  // Add one empty row by default
+  addSubjectDayRow();
 
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
-function addSubjectDayRow() {
-  const box = document.getElementById("subjectDayInputs");
-  if (!box) return;
-
-  const row = document.createElement("div");
-  row.style.display = "grid";
-  row.style.gridTemplateColumns = "1fr 2fr";
-  row.style.gap = "8px";
-  row.style.marginBottom = "6px";
-
-  row.innerHTML = `
-    <input class="nextInput" placeholder="Subject name">
-    <input class="nextInput" placeholder="Topic covered today">
-  `;
-
-  box.appendChild(row);
-}
-
 
 function finalDayEnd() {
   if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
@@ -2704,6 +2695,29 @@ function finalDayEnd() {
     if(el && el.value.trim()) next.push(el.value.trim());
   }
   localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
+
+  // --- 1.5 SAVE SUBJECT PROGRESS ---
+  const subjectData = getSubjectData();
+  const subjectRows = document.getElementById("subjectDayInputs").children;
+  
+  for(let row of subjectRows) {
+      const inputs = row.querySelectorAll("input");
+      if(inputs.length >= 3) {
+          const subName = inputs[0].value.trim();
+          const covered = inputs[1].value.trim();
+          const uncovered = inputs[2].value.trim();
+          
+          if(subName && covered) {
+              if(!subjectData[subName]) subjectData[subName] = [];
+              subjectData[subName].push({
+                  date: new Date().toLocaleDateString(),
+                  covered: covered,
+                  uncovered: uncovered || "-"
+              });
+          }
+      }
+  }
+  saveSubjectData(subjectData);
 
   // 2. Calculate Stats
   const p = calculate();
@@ -2723,32 +2737,6 @@ function finalDayEnd() {
   const hrs = Math.floor(Math.floor(totalMillis / 60000) / 60);
   const mins = Math.floor(totalMillis / 60000) % 60;
   const timeStr = `${hrs} hr ${mins} min`;
-  // ===== SUBJECT-WISE PROGRESS SAVE =====
-const subjectData = getSubjectData();
-
-// Read subject rows
-const subjectBox = document.getElementById("subjectDayInputs");
-if (subjectBox) {
-  [...subjectBox.children].forEach(row => {
-    const inputs = row.querySelectorAll("input");
-    if (inputs.length < 2) return;
-
-    const subject = inputs[0].value.trim();
-    const topic = inputs[1].value.trim();
-
-    if (!subject || !topic) return;
-
-    if (!subjectData[subject]) subjectData[subject] = [];
-
-    subjectData[subject].push({
-      date: new Date().toLocaleDateString(),
-      covered: topic,
-      uncovered: "-"
-    });
-  });
-
-  saveSubjectData(subjectData);
-}
 
   // 4. Update History (Backend Sync)
   const historyEntry = {
@@ -2866,6 +2854,8 @@ window.toggleNoticeBoard = function () {
     const taskBox = document.getElementById("taskBox");
     const logBox = document.getElementById("logBox");
     const historyBox = document.getElementById("historyBox");
+    const subjectBox = document.getElementById("subjectProgressBox");
+
 
     if (!noticeBox) {
         alert("Notice Board container not found");
@@ -2878,6 +2868,8 @@ window.toggleNoticeBoard = function () {
     if (taskBox) taskBox.classList.add("hidden");
     if (logBox) logBox.classList.add("hidden");
     if (historyBox) historyBox.classList.add("hidden");
+    if (subjectBox) subjectBox.classList.add("hidden");
+
 
     if (isHidden) {
         noticeBox.classList.remove("hidden");
@@ -2926,6 +2918,10 @@ window.softRefresh = function () {
     window.dismissNoticePopup = window.dismissNoticePopup;
     window.softRefresh = window.softRefresh;
     window.dismissReportLock = window.dismissReportLock;
+    window.toggleSubjectProgress = window.toggleSubjectProgress;
+    window.renderSubjectTable = window.renderSubjectTable;
+    window.addSubjectDayRow = window.addSubjectDayRow;
+    window.clearSubjectProgress = window.clearSubjectProgress;
 
   </script>
 
