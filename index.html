@@ -676,6 +676,18 @@ function showMockResultPopup(resultText) {
   }, 8000); // popup visible for 8 seconds
 }
 
+window.clearSubjectProgress = async function(uid) {
+  if (!isAdmin()) return;
+
+  if (!confirm("ALL CLEAR subject-wise progress for this student?")) return;
+
+  try {
+    await remove(ref(db, `users/${uid}/SUBJECT_WISE_TABLE`));
+    alert("Subject progress cleared successfully.");
+  } catch (e) {
+    alert("Failed to clear subject progress.");
+  }
+};
 
 
 function forceLogout() {
@@ -1675,7 +1687,8 @@ if (!hasActiveSession) {
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
-    
+    document.querySelector("button[onclick='toggleSubjectProgress()']").disabled = false;
+
     uploadData(); 
 
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
@@ -1873,7 +1886,13 @@ function showApprovedPopup(dates, comment) {
 async function downloadData(uid) {
     const syncStatus = document.getElementById("syncStatus");
     syncStatus.innerText = "Syncing...";
-    
+    if (data.SUBJECT_WISE_TABLE) {
+  localStorage.setItem(
+    SUBJECT_TABLE_KEY(),
+    data.SUBJECT_WISE_TABLE
+  );
+}
+
     try {
         const snapshot = await get(child(ref(db), `users/${uid}`));
         if (snapshot.exists()) {
@@ -1905,6 +1924,18 @@ async function downloadData(uid) {
         return null;
     }
 }
+function getSubjectData() {
+  return JSON.parse(
+    localStorage.getItem(SUBJECT_TABLE_KEY()) || "{}"
+  );
+}
+
+function saveSubjectData(data) {
+  localStorage.setItem(
+    SUBJECT_TABLE_KEY(),
+    JSON.stringify(data)
+  );
+}
 
 function uploadData() {
     if(!currentUser) return;
@@ -1924,7 +1955,8 @@ function uploadData() {
         MOCK_LOGS: localStorage.getItem(key("MOCK_LOGS")), // UPLOAD MOCK LOGS
         IDLE_STRIKES: localStorage.getItem(key("IDLE_STRIKES")),
         DAILY_TIMEOUTS: localStorage.getItem(key("DAILY_TIMEOUTS")),
-        PENALTY: localStorage.getItem(key("PENALTY"))
+        PENALTY: localStorage.getItem(key("PENALTY")),
+        SUBJECT_WISE_TABLE: localStorage.getItem(SUBJECT_TABLE_KEY())
     };
 
     update(ref(db, `users/${currentUser.uid}`), payload)
@@ -1984,6 +2016,67 @@ function toggleHistory() {
             logBox.classList.remove("hidden");
         }
     }
+}
+function toggleSubjectProgress() {
+  const subjectBox = document.getElementById("subjectProgressBox");
+  const historyBox = document.getElementById("historyBox");
+  const taskBox = document.getElementById("taskBox");
+  const logBox = document.getElementById("logBox");
+
+  if (subjectBox.classList.contains("hidden")) {
+    subjectBox.classList.remove("hidden");
+    if (historyBox) historyBox.classList.add("hidden");
+    if (taskBox) taskBox.classList.add("hidden");
+    if (logBox) logBox.classList.add("hidden");
+  } else {
+    subjectBox.classList.add("hidden");
+    if (taskBox) taskBox.classList.remove("hidden");
+    if (logBox) logBox.classList.remove("hidden");
+  }
+}
+function loadSubjectList() {
+  const select = document.getElementById("subjectSelect");
+  if (!select) return;
+
+  const data = getSubjectData();
+
+  select.innerHTML = `<option value="">Select Subject</option>`;
+
+  Object.keys(data).forEach(sub => {
+    const opt = document.createElement("option");
+    opt.value = sub;
+    opt.innerText = sub;
+    select.appendChild(opt);
+  });
+}
+function renderSubjectTable(subject) {
+  const tbody = document.getElementById("subjectTableBody");
+  const data = getSubjectData();
+
+  if (!subject || !data[subject] || data[subject].length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="3" style="color:#94a3b8">
+          No data available for this subject
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
+  tbody.innerHTML = "";
+
+  data[subject].forEach(row => {
+    tbody.innerHTML += `
+      <tr>
+        <td>${row.date}</td>
+        <td style="text-align:left">${row.covered}</td>
+        <td style="text-align:left;color:#fca5a5">
+          ${row.uncovered}
+        </td>
+      </tr>
+    `;
+  });
 }
 
 // --- IDLE TIMER & WATCHDOG LOGIC ---
@@ -2384,6 +2477,23 @@ function loadTasks() {
   tList.innerHTML = "";
   eList.innerHTML = "";
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  tasks.forEach(t => {
+  if (!t.done && t.name) {
+    const subjectData = getSubjectData();
+    const subject = t.name; // task name treated as subject
+
+    if (!subjectData[subject]) subjectData[subject] = [];
+
+    subjectData[subject].push({
+      date: new Date().toLocaleDateString(),
+      covered: "-",
+      uncovered: t.due || "Pending"
+    });
+
+    saveSubjectData(subjectData);
+  }
+});
+
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
   const updateLogTask = (name, isChecked, comment, due) => {
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
@@ -2537,12 +2647,52 @@ function openDayEnd() {
   const idleBox = document.getElementById("idleBox");
   if(idleBox) idleBox.classList.add("hidden");
   const nextInputs = document.getElementById("nextInputs");
-  nextInputs.innerHTML = "";
-  for (let i = 0; i < 7; i++) {
-    nextInputs.innerHTML += `<input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">`;
-  }
+nextInputs.innerHTML = "";
+
+// next-day tasks
+for (let i = 0; i < 7; i++) {
+  nextInputs.innerHTML += `
+    <input class="nextInput" id="nd${i}" placeholder="Next Day Task ${i + 1}">
+  `;
+}
+
+// subject-topic section
+nextInputs.innerHTML += `
+  <div style="margin-top:16px;border-top:1px dashed #334155;padding-top:12px">
+    <h4 style="color:#38bdf8;margin-bottom:8px">
+      📘 Subject & Topic Covered Today
+    </h4>
+
+    <div id="subjectDayInputs"></div>
+
+    <button type="button"
+      onclick="addSubjectDayRow()"
+      style="width:auto;margin-top:6px">
+      + Add Subject
+    </button>
+  </div>
+`;
+
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
+function addSubjectDayRow() {
+  const box = document.getElementById("subjectDayInputs");
+  if (!box) return;
+
+  const row = document.createElement("div");
+  row.style.display = "grid";
+  row.style.gridTemplateColumns = "1fr 2fr";
+  row.style.gap = "8px";
+  row.style.marginBottom = "6px";
+
+  row.innerHTML = `
+    <input class="nextInput" placeholder="Subject name">
+    <input class="nextInput" placeholder="Topic covered today">
+  `;
+
+  box.appendChild(row);
+}
+
 
 function finalDayEnd() {
   if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
@@ -2573,6 +2723,32 @@ function finalDayEnd() {
   const hrs = Math.floor(Math.floor(totalMillis / 60000) / 60);
   const mins = Math.floor(totalMillis / 60000) % 60;
   const timeStr = `${hrs} hr ${mins} min`;
+  // ===== SUBJECT-WISE PROGRESS SAVE =====
+const subjectData = getSubjectData();
+
+// Read subject rows
+const subjectBox = document.getElementById("subjectDayInputs");
+if (subjectBox) {
+  [...subjectBox.children].forEach(row => {
+    const inputs = row.querySelectorAll("input");
+    if (inputs.length < 2) return;
+
+    const subject = inputs[0].value.trim();
+    const topic = inputs[1].value.trim();
+
+    if (!subject || !topic) return;
+
+    if (!subjectData[subject]) subjectData[subject] = [];
+
+    subjectData[subject].push({
+      date: new Date().toLocaleDateString(),
+      covered: topic,
+      uncovered: "-"
+    });
+  });
+
+  saveSubjectData(subjectData);
+}
 
   // 4. Update History (Backend Sync)
   const historyEntry = {
