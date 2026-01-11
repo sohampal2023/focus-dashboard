@@ -691,8 +691,15 @@ function showMockResultPopup(resultText) {
   }, 8000); // popup visible for 8 seconds
 }
 
-
-
+window.rejectSubjectDelete = async function(uid, requestKey) {
+  try {
+    // REJECT LOGIC: Only remove the request. Do NOT touch the subject table.
+    await remove(ref(db, `users/${uid}/SUBJECT_DELETE_REQUESTS/${requestKey}`));
+    alert("Request REJECTED. The entry remains in the student's table.");
+  } catch (e) {
+    alert("Error rejecting: " + e.message);
+  }
+};
 function forceLogout() {
     if(confirm("Are you sure you want to Logout?")) {
         signOut(auth).then(() => location.reload());
@@ -1032,27 +1039,42 @@ window.viewSubjectDeleteRequests = async function(uid) {
   const snap = await get(ref(db, `users/${uid}/SUBJECT_DELETE_REQUESTS`));
 
   if (!snap.exists()) {
-    alert("No active delete requests.");
+    alert("No active delete requests for this student.");
     return;
   }
 
   const reqs = snap.val();
 
-  // Loop through every request found
+  // Loop through requests
   for (const [key, r] of Object.entries(reqs)) {
       
-      // Ask Admin to approve
-      const choice = confirm(
-          `PENDING DELETE REQUEST\n\n` +
+      // STEP 1: Ask to APPROVE
+      const doApprove = confirm(
+          `DELETE REQUEST PENDING\n\n` +
           `Subject: ${r.subject}\n` +
           `Reason: ${r.reason}\n` +
           `Date: ${new Date(r.time).toLocaleDateString()}\n\n` +
-          `Click OK to DELETE this entry.\nClick CANCEL to ignore/keep it.`
+          `[OK] = APPROVE (Delete the Data)\n` +
+          `[CANCEL] = Go to Reject Option`
       );
 
-      if (choice) {
-          // If Admin clicks OK, run the delete logic
+      if (doApprove) {
+          // Admin clicked OK -> Delete the data
           await approveSubjectDelete(uid, r.subject, r.rowId);
+      } else {
+          // STEP 2: Ask to REJECT
+          const doReject = confirm(
+              `REJECT REQUEST?\n\n` +
+              `You clicked Cancel.\n` +
+              `Do you want to REJECT this request (remove it from inbox)?\n\n` +
+              `[OK] = YES, REJECT (Keep Data, Clear Request)\n` +
+              `[CANCEL] = NO (Do nothing, keep pending)`
+          );
+
+          if (doReject) {
+              // Admin clicked OK -> Clear the request only
+              await rejectSubjectDelete(uid, key);
+          }
       }
   }
 };
