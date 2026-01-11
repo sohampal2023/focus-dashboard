@@ -413,75 +413,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         </div>
     </div>
 </div>
-<div id="bulkUploadSection" class="admin-section">
-    <h2>📄 Bulk Exam Creator (Word-Style)</h2>
-    
-    <div class="bulk-container">
-        <div class="meta-inputs">
-            <div class="input-group">
-                <label>Exam Title</label>
-                <input type="text" id="bulkExamTitle" placeholder="e.g., Mock Test 5 - Physics">
-            </div>
-            <div class="input-group">
-                <label>Total Duration (Minutes)</label>
-                <input type="number" id="bulkDuration" placeholder="e.g., 60">
-            </div>
-            <div class="input-group">
-                <label>Marks per Question</label>
-                <input type="number" id="bulkMarks" value="4">
-            </div>
-        </div>
 
-        <div class="input-group">
-            <label>Paste Questions Here (Format: "1. Question text... a) Option...")</label>
-            <textarea id="rawQuestions" rows="10" placeholder="1. What is the capital of India?
-a) Mumbai
-b) Delhi
-c) Kolkata
-d) Chennai
-
-2. What is 2+2?
-a) 3
-b) 4
-c) 5
-d) 6"></textarea>
-            <small>Ensure there is a blank line between questions.</small>
-        </div>
-
-        <div class="input-group">
-            <label>Paste Answer Key (Format: "1-b, 2-b" OR "1.b 2.b")</label>
-            <textarea id="rawAnswers" rows="3" placeholder="1-b, 2-b"></textarea>
-        </div>
-
-        <div class="action-buttons">
-            <button onclick="lockAndPreview()" class="btn-lock">🔒 Lock & Preview</button>
-            <button onclick="clearBulkForm()" class="btn-danger">❌ Clear</button>
-        </div>
-    </div>
-
-    <div id="previewArea" class="hidden">
-        <h3>✅ Confirmation Preview</h3>
-        <p>Please check carefully before publishing.</p>
-        <div id="previewStats"></div>
-        <div class="table-responsive">
-            <table id="previewTable">
-                <thead>
-                    <tr>
-                        <th>#</th>
-                        <th>Question</th>
-                        <th>Options Detected</th>
-                        <th>Correct Ans</th>
-                    </tr>
-                </thead>
-                <tbody id="previewBody"></tbody>
-            </table>
-        </div>
-        <div class="action-buttons">
-            <button onclick="finalPublish()" class="btn-success">🚀 Publish Exam</button>
-            <button onclick="editAgain()" class="btn-warning">✏️ Unlock & Edit</button>
-        </div>
-    </div>
-</div>
 <div id="studentView">
     
     <div id="adminFeedbackBox" class="feedback-box hidden">
