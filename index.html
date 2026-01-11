@@ -855,7 +855,12 @@ ${u.leaveRequest.reason}
                         <button style="background:#0ea5e9; margin-top:4px;" onclick="sendNotice('${uid}')">📢 Notice</button>
                         <button style="background:#1e40af; margin-top:4px;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
 
-                        <button style="background:#475569; margin-top:4px; border:1px solid #94a3b8" onclick="clearSubjectProgress('${uid}')">Clear Subj. Prog</button>
+                        <button
+  style="background:#991b1b; margin-top:4px"
+  onclick="clearSingleSubject('${uid}')">
+  🗑 Delete ONE Subject
+</button>
+
 
 
                         ${isLocked ? `<button style="background:#22c55e; margin-top:4px;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
@@ -927,6 +932,93 @@ window.clearSubjectProgress = async function(uid) {
   } catch (e) {
     alert("Failed to clear subject progress.");
   }
+};
+  window.clearSingleSubject = async function(uid) {
+  if (!isAdmin()) return;
+
+  const subject = prompt(
+    "Enter EXACT subject name to delete:\n(example: Physics)"
+  );
+  if (!subject) return;
+
+  if (!confirm(`Delete entire subject "${subject}" for this student?`)) return;
+
+  try {
+    const snap = await get(ref(db, `users/${uid}/SUBJECT_WISE_TABLE`));
+    if (!snap.exists()) {
+      alert("No subject data found.");
+      return;
+    }
+
+    const data = JSON.parse(snap.val());
+
+    if (!data[subject]) {
+      alert("Subject not found.");
+      return;
+    }
+
+    delete data[subject]; // 🔥 ONLY THIS SUBJECT
+
+    await update(ref(db, `users/${uid}`), {
+      SUBJECT_WISE_TABLE: JSON.stringify(data)
+    });
+
+    alert(`Subject "${subject}" deleted successfully.`);
+  } catch (e) {
+    alert("Subject delete failed.");
+  }
+};
+
+window.approveSubjectDelete = async function(uid, subject, rowId) {
+  if (!isAdmin()) return;
+
+  if (!confirm("Approve deletion of this subject entry?")) return;
+
+  try {
+    const snap = await get(ref(db, `users/${uid}/SUBJECT_WISE_TABLE`));
+    if (!snap.exists()) return;
+
+    const data = JSON.parse(snap.val());
+    if (!data[subject]) return;
+
+    data[subject] = data[subject].filter(r => r.id !== rowId);
+
+    await update(ref(db, `users/${uid}`), {
+      SUBJECT_WISE_TABLE: JSON.stringify(data)
+    });
+
+    await remove(
+      ref(db, `users/${uid}/SUBJECT_DELETE_REQUESTS/${rowId}`)
+    );
+
+    alert("Subject entry deleted.");
+  } catch (e) {
+    alert("Delete failed.");
+  }
+};
+window.viewSubjectDeleteRequests = async function(uid) {
+  if (!isAdmin()) return;
+
+  const snap = await get(
+    ref(db, `users/${uid}/SUBJECT_DELETE_REQUESTS`)
+  );
+
+  if (!snap.exists()) {
+    alert("No subject delete requests.");
+    return;
+  }
+
+  const reqs = snap.val();
+  let msg = "PENDING SUBJECT DELETE REQUESTS\n\n";
+
+  Object.values(reqs).forEach(r => {
+    msg +=
+      `Subject: ${r.subject}\n` +
+      `Reason: ${r.reason}\n` +
+      `Row ID: ${r.rowId}\n\n`;
+  });
+
+  alert(msg);
 };
 
 
@@ -2947,6 +3039,7 @@ window.requestSubjectDelete = async function(subject, rowId) {
     window.startMockTestSetup = startMockTestSetup;
     window.triggerEndTest = triggerEndTest;
     window.addExtra = addExtra;
+    window.clearSingleSubject = window.clearSingleSubject;
     window.toggleHistory = toggleHistory;
     window.requestLeave = requestLeave;
     window.forceLogout = forceLogout;
