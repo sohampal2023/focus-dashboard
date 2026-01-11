@@ -988,7 +988,7 @@ window.approveSubjectDelete = async function(uid, subject, rowId) {
     });
 
     await remove(
-      ref(db, `users/${uid}/SUBJECT_DELETE_REQUESTS/${rowId}`)
+      remove(ref(db, `SUBJECT_DELETE_REQUESTS/${uid}/${rowId}`))
     );
 
     alert("Subject entry deleted.");
@@ -1000,7 +1000,8 @@ window.viewSubjectDeleteRequests = async function(uid) {
   if (!isAdmin()) return;
 
   const snap = await get(
-    ref(db, `users/${uid}/SUBJECT_DELETE_REQUESTS`)
+    ref(db, `SUBJECT_DELETE_REQUESTS/${uid}`)
+
   );
 
   if (!snap.exists()) {
