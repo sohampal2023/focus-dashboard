@@ -3020,7 +3020,7 @@ window.requestSubjectDelete = async function(subject, rowId) {
 
   try {
     await set(
-  ref(db, `users/${currentUser.uid}/SUBJECT_DELETE_REQUESTS/${String(rowId)}`),
+  ref(db, `SUBJECT_DELETE_REQUESTS/${currentUser.uid}/${String(rowId)}`)
   payload
 );
 
