@@ -2499,71 +2499,67 @@ function triggerEndTest() {
 
 
 function finishTestSequence(testState, loadDashboard = false) {
-  let obtained = prompt(
-    `Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`
-  );
+  let obtained = prompt(`Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`);
   
-  // Handle Cancellation (User pressed Cancel)
+  // Handle Expired Timer (Must Enter Marks)
   if (obtained === null) {
       if (testState.status === "EXPIRED") {
-          alert("Time is UP! You MUST enter your score to save progress.");
-          // Recursively call to force prompt again if expired
+          alert("Time is UP! You MUST enter your score.");
           finishTestSequence(testState, loadDashboard);
           return;
       }
-      return; // If running, allow cancel
+      return; // If not expired, allow cancel
   }
 
-  // Handle Empty Input (User pressed OK with empty field)
   if (obtained.trim() === "") obtained = "0";
 
   let accuracy = prompt("Enter Accuracy %:");
   if (accuracy === null || accuracy.trim() === "") accuracy = "0";
-  const accuracyRemark = getAccuracyRemark(accuracy);
-  let cutoff = prompt(
-  "Enter Cutoff Marks for this Mock Test:",
-  "0"
-);
+  
+  let cutoff = prompt("Enter Cutoff Marks:", "0");
+  if (cutoff === null) cutoff = "0";
 
-if (cutoff === null || cutoff.trim() === "") cutoff = "0";
-
-cutoff = Number(cutoff);
-obtained = Number(obtained);
-
-if (isNaN(cutoff) || cutoff < 0) {
-  alert("Invalid cutoff value.");
-  return;
-}
-const cutStatus = obtained >= cutoff ? "CLEAR" : "NOT CLEAR";
-
-
-  const msg =
-  `Please Confirm Details:\n\n` +
-  `Test: ${testState.name}\n` +
-  `Score: ${obtained} / ${testState.fullMarks}\n` +
-  `Cutoff: ${cutoff}\n` +
-  `Status: ${cutStatus}\n` +
-  `Accuracy: ${accuracy}%`;
-
-
+  const cutStatus = Number(obtained) >= Number(cutoff) ? "CLEAR" : "NOT CLEAR";
+  
+  const msg = `Confirm:\nTest: ${testState.name}\nScore: ${obtained}/${testState.fullMarks}\nStatus: ${cutStatus}`;
   if (!confirm(msg)) {
-    if (testState.status === "EXPIRED") {
-      alert("You must save marks to proceed.");
-      finishTestSequence(testState, loadDashboard);
+      if (testState.status === "EXPIRED") {
+          finishTestSequence(testState, loadDashboard); // Force retry if expired
+          return;
+      }
       return;
-    }
-    return;
   }
 
-  const resultComment =
-  `Mock Test Result\n` +
-  `Score: ${obtained} / ${testState.fullMarks}\n` +
-  `Cutoff: ${cutoff}\n` +
-  `Status: ${cutStatus}\n` +
-  `Accuracy: ${accuracy}%\n` +
-  `Remark: ${accuracyRemark}`;
+  const resultComment = `Score: ${obtained}/${testState.fullMarks} | Acc: ${accuracy}% | ${cutStatus}`;
 
-  /* 1️⃣ SAVE AS EXTRA WORK */
+  // 1. SAVE TO MOCK LOGS (For History Tab)
+  let mockLogs = JSON.parse(localStorage.getItem(key("MOCK_LOGS")) || "[]");
+  mockLogs.push({
+    date: new Date().toLocaleDateString(),
+    name: testState.name,
+    score: obtained,
+    total: testState.fullMarks,
+    cutoff: cutoff,
+    status: cutStatus,
+    acc: accuracy
+  });
+  if (mockLogs.length > 20) mockLogs = mockLogs.slice(mockLogs.length - 20);
+  localStorage.setItem(key("MOCK_LOGS"), JSON.stringify(mockLogs));
+
+  // 2. 🔥 SAVE TO SUBJECT WISE VIEW (Key: "Mock Test")
+  // This makes it appear in the Subject View for the Admin
+  const subjectData = getSubjectData(); 
+  if(!subjectData["Mock Test"]) subjectData["Mock Test"] = []; 
+
+  subjectData["Mock Test"].push({
+    id: Date.now(),
+    date: new Date().toLocaleDateString(),
+    covered: `${testState.name}`,        // The Test Name
+    uncovered: `Score: ${obtained} / ${testState.fullMarks}` // The Score
+  });
+  saveSubjectData(subjectData);
+
+  // 3. CREATE LOCKED EXTRA WORK ENTRY
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
   extras.push({
     name: `MOCK TEST: ${testState.name}`,
@@ -2573,7 +2569,7 @@ const cutStatus = obtained >= cutoff ? "CLEAR" : "NOT CLEAR";
   });
   localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
 
-  /* 2️⃣ ADD TO CURRENT SESSION LOG */
+  // 4. ADD TO CURRENT SESSION LOG
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
     const active = logs[logs.length - 1];
@@ -2583,68 +2579,29 @@ const cutStatus = obtained >= cutoff ? "CLEAR" : "NOT CLEAR";
       comment: resultComment,
       due: "None"
     });
+    
+    // Close session log
+    active.logout = now();
+    active.logoutTS = Date.now();
+    active.reason = "Mock Test Completed";
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
 
-  /* 3️⃣ SAVE TO MOCK TEST HISTORY (MAX 4) */
-  let mockLogs = JSON.parse(localStorage.getItem(key("MOCK_LOGS")) || "[]");
-  mockLogs.push({
-  date: new Date().toLocaleDateString(),
-  name: testState.name,
-  score: obtained,
-  total: testState.fullMarks,
-  cutoff: cutoff,
-  status: cutStatus,
-  acc: accuracy,
-  remark: accuracyRemark
-});
-
-  if (mockLogs.length > 20) {
-    mockLogs = mockLogs.slice(mockLogs.length - 20);
-  }
-  localStorage.setItem(key("MOCK_LOGS"), JSON.stringify(mockLogs));
-  
-
-  /* 4️⃣ MARK TEST FINISHED */
-  testState.status = testState.status === "EXPIRED"
-    ? "EXPIRED"
-    : "COMPLETED";
-
-  /* 5️⃣ CLOSE THE SESSION */
-  if (logs.length) {
-    const last = logs[logs.length - 1];
-    last.logout = now();
-    last.logoutTS = Date.now();
-    last.reason =
-      testState.status === "EXPIRED"
-        ? "Mock Test Expired"
-        : "Mock Test Completed";
-  }
-
-  localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-
-  /* 6️⃣ CLEAN UP + SYNC */
+  // 5. CLEANUP & SYNC
   localStorage.removeItem(key("TEST_STATE"));
-  uploadData();
+  uploadData(); 
 
+  // Reset Button
   const btn = document.querySelector(".watchdog-btn");
   if (btn) btn.innerText = "I AM STUDYING";
 
-  /* 7️⃣ RETURN TO DASHBOARD */
   if (loadDashboard) {
-    startIdle(1800);
-    setupTasks();
-    loadTasks();
-    renderLogs();
-    updateProgress();
+    location.reload();
   } else {
     showMockResultPopup(resultComment);
-
-  setTimeout(() => {
-    location.reload();
-  }, 6000); 
+    setTimeout(() => location.reload(), 4000);
   }
 }
-
 // --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
 function setupTasks() {
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
@@ -2853,14 +2810,17 @@ function loadTasks() {
 }
 
 function addExtra() {
-  // LOGIC CHANGE: Ask for Subject Name here (e.g. Physics, Chemistry, Mock Test)
-  const subjectName = prompt("Enter SUBJECT Name for this work:\n(e.g. Physics, Chemistry, Maths, or Mock Test)");
+  const subjectName = prompt("Enter SUBJECT Name for this work:\n(e.g. Physics, Chemistry, Maths)");
   
-  if (!subjectName) return; // If user cancels
+  if (!subjectName) return; 
+
+  // 🔒 SECURITY BLOCK: Prevent user from manually adding Mock Tests here
+  if (subjectName.toLowerCase().includes("mock")) {
+      alert("⚠️ ACCESS DENIED\n\nTo add a Mock Test, you MUST use the orange 'Start Mock Test' button on the dashboard.\n\nThis ensures accurate timer and scoring logs.");
+      return;
+  }
 
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  
-  // We store the Subject Name as the 'name' of the item
   extras.push({ name: subjectName, done: false, comment: "", due: "" });
   
   localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
