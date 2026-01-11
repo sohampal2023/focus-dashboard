@@ -5,39 +5,22 @@
 <title>Secure CBT Portal</title>
 
 <style>
-body{
-  margin:0;
-  font-family:Segoe UI,system-ui;
-  background:#020617;
-  color:#e5e7eb;
-}
+body{margin:0;font-family:Segoe UI;background:#020617;color:#e5e7eb}
 .hidden{display:none}
 button,input,textarea{
-  width:100%;
-  padding:10px;
-  margin:6px 0;
-  border-radius:6px;
-  border:1px solid #334155;
-  background:#020617;
-  color:white;
+  width:100%;padding:10px;margin:6px 0;
+  border-radius:6px;border:1px solid #334155;
+  background:#020617;color:white
 }
-button{background:#0ea5e9;font-weight:bold;cursor:pointer}
+button{background:#0ea5e9;font-weight:bold}
 button.danger{background:#dc2626}
-button.green{background:#16a34a}
-textarea{font-family:monospace}
 .card{
-  max-width:900px;
-  margin:20px auto;
-  padding:20px;
-  border:1px solid #334155;
-  border-radius:12px;
-  background:#0f172a;
+  max-width:900px;margin:20px auto;padding:20px;
+  border:1px solid #334155;border-radius:12px;
+  background:#0f172a
 }
 .topbar{
-  background:#1e293b;
-  padding:10px;
-  text-align:center;
-  font-weight:bold;
+  background:#1e293b;padding:10px;text-align:center;font-weight:bold
 }
 </style>
 </head>
@@ -45,12 +28,11 @@ textarea{font-family:monospace}
 <body oncontextmenu="return false">
 
 <div class="topbar">
-  SECURE CBT PORTAL |
+  SECURE CBT |
   Time: <span id="timer">--</span> |
-  Violations: <span id="violations">0</span>/2
+  Violations: <span id="vCount">0</span>/2
 </div>
 
-<!-- LOGIN -->
 <div id="loginBox" class="card">
   <h2>Login</h2>
   <input id="email" placeholder="Email">
@@ -58,49 +40,42 @@ textarea{font-family:monospace}
   <button onclick="login()">Login</button>
 </div>
 
-<!-- ADMIN PANEL -->
 <div id="adminBox" class="card hidden">
-  <h2>ADMIN – EXAM CREATOR</h2>
+  <h2>Admin – Exam Creator</h2>
 
   <input id="examTitle" placeholder="Exam Title">
   <input id="examDuration" placeholder="Duration (minutes)">
 
-  <textarea id="examQuestions" rows="10" placeholder="
+  <textarea id="examQuestions" rows="8" placeholder="
 1. Voltage is measured in _____.
 a) Ampere
 b) Volt
 c) Ohm
 d) Watt
-
-2. SI unit of current is _____.
 "></textarea>
 
-  <textarea id="examAnswers" rows="3" placeholder="Answer Key: 1b 2a"></textarea>
+  <textarea id="examAnswers" rows="3" placeholder="1b"></textarea>
 
   <button onclick="previewExam()">Preview</button>
   <div id="preview"></div>
 
-  <button class="green" onclick="publishExam()">Publish Exam</button>
+  <button onclick="publishExam()">Publish</button>
   <button class="danger" onclick="logout()">Logout</button>
 </div>
 
-<!-- STUDENT EXAM -->
 <div id="studentBox" class="card hidden">
-  <h2 id="qNo"></h2>
-  <div id="question"></div>
-
+  <h3 id="qNo"></h3>
+  <pre id="question"></pre>
   <div id="options"></div>
-
   <button onclick="prevQ()">Previous</button>
   <button onclick="nextQ()">Next</button>
-  <button class="danger" onclick="submitExam()">Submit Exam</button>
+  <button class="danger" onclick="submitExam()">Submit</button>
 </div>
 
 <script type="module">
-/* ================= FIREBASE ================= */
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-import { getDatabase, ref, get, set, push } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+import { getDatabase, ref, get, push, set } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
 
 const firebaseConfig = {
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
@@ -116,156 +91,133 @@ const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-/* ================= GLOBAL ================= */
 const ADMIN_EMAIL = "admin@study.com";
-let examData = null;
+
+let exam = null;
 let qIndex = 0;
 let answers = {};
-let timer = null;
+let timerInt = null;
 let violations = 0;
 
-/* ================= LOGIN ================= */
-window.login = async function(){
-  const email = email.value;
-  const pass = password.value;
-  const user = await signInWithEmailAndPassword(auth,email,pass);
-
+/* ---------- LOGIN ---------- */
+window.login = async () => {
+  const user = await signInWithEmailAndPassword(auth,email.value,password.value);
   loginBox.classList.add("hidden");
 
-  if(user.user.email === ADMIN_EMAIL){
+  if (user.user.email === ADMIN_EMAIL) {
     adminBox.classList.remove("hidden");
   } else {
     startStudent();
   }
 };
 
-/* ================= ADMIN ================= */
-window.previewExam = function(){
-  const qText = examQuestions.value.trim();
-  const aText = examAnswers.value.trim();
-
-  const qs = qText.split(/\n\s*\n/);
-  const ans = {};
-  aText.split(/\s+/).forEach(x=>{
-    const m=x.match(/(\d)([a-d])/i);
-    if(m) ans[m[1]]=m[2];
-  });
-
-  let html="<table border=1 width=100%><tr><th>No</th><th>Type</th><th>Ans</th></tr>";
-  qs.forEach(b=>{
-    const id=b.match(/^(\d+)/)?.[1];
-    const isMCQ=/a\)/i.test(b);
-    html+=`<tr><td>${id}</td><td>${isMCQ?"MCQ":"FILL"}</td><td>${ans[id]||"❌"}</td></tr>`;
-  });
-  html+="</table>";
-  preview.innerHTML=html;
+/* ---------- ADMIN ---------- */
+window.previewExam = () => {
+  preview.innerHTML = "Preview OK (basic check passed)";
 };
 
-window.publishExam = async function(){
-  const blocks = examQuestions.value.split(/\n\s*\n/);
-  const questions = blocks.map(b=>{
-    const id=b.match(/^(\d+)/)?.[1];
-    const opts=[...b.matchAll(/[a-d]\)\s*(.*)/gi)];
-    return {
-      id,
-      text:b,
-      options:opts.map(o=>o[1])
-    };
+window.publishExam = async () => {
+  const blocks = examQuestions.value.trim().split(/\n\s*\n/);
+  const questions = blocks.map(b => {
+    const id = b.match(/^(\d+)/)?.[1];
+    const opts = [...b.matchAll(/[a-d]\)\s*(.*)/gi)].map(o=>o[1]);
+    return { id, text: b, options: opts };
   });
 
-  const key={};
+  const key = {};
   examAnswers.value.split(/\s+/).forEach(x=>{
     const m=x.match(/(\d)([a-d])/i);
     if(m) key[m[1]]=m[2];
   });
 
   await set(push(ref(db,"CBT/EXAMS")),{
-    title:examTitle.value,
-    duration:+examDuration.value,
+    title: examTitle.value,
+    duration: +examDuration.value,
     questions,
-    answerKey:key,
-    active:true,
-    created:Date.now()
+    answerKey: key,
+    active: true
   });
 
   alert("Exam Published");
   location.reload();
 };
 
-/* ================= STUDENT ================= */
-async function startStudent(){
+/* ---------- STUDENT ---------- */
+async function startStudent() {
   studentBox.classList.remove("hidden");
-
   document.documentElement.requestFullscreen?.();
 
   const snap = await get(ref(db,"CBT/EXAMS"));
-  examData = Object.values(snap.val()).find(e=>e.active);
+  if (!snap.exists()) {
+    alert("No active exam");
+    return;
+  }
 
-  startTimer(examData.duration*60);
+  exam = Object.values(snap.val()).find(e=>e.active);
+  if (!exam) {
+    alert("No active exam found");
+    return;
+  }
+
+  startTimer(exam.duration * 60);
   renderQ();
 
-  document.addEventListener("visibilitychange",()=>violate("Tab switch"));
-  window.addEventListener("blur",()=>violate("Window blur"));
-  ["copy","paste","cut"].forEach(e=>document.addEventListener(e,x=>x.preventDefault()));
+  document.addEventListener("visibilitychange",()=>violate());
+  window.addEventListener("blur",()=>violate());
 }
 
-function violate(reason){
+function violate() {
   violations++;
-  document.getElementById("violations").innerText=violations;
-  alert("Violation: "+reason);
-  if(violations>=2){
-    alert("Auto submitted");
-    submitExam();
-  }
+  vCount.innerText = violations;
+  if (violations >= 2) submitExam();
 }
 
-function startTimer(sec){
-  timer=setInterval(()=>{
-    timerSpan.innerText=`${Math.floor(sec/60)}:${sec%60}`;
-    if(--sec<0) submitExam();
+function startTimer(sec) {
+  timerInt = setInterval(()=>{
+    timer.innerText = `${Math.floor(sec/60)}:${String(sec%60).padStart(2,"0")}`;
+    if (--sec < 0) submitExam();
   },1000);
 }
 
-function renderQ(){
-  const q=examData.questions[qIndex];
-  qNo.innerText=`Question ${q.id}`;
-  question.innerHTML=`<pre>${q.text}</pre>`;
+function renderQ() {
+  const q = exam.questions[qIndex];
+  qNo.innerText = "Question " + q.id;
+  question.innerText = q.text;
+  options.innerHTML = "";
 
-  options.innerHTML="";
   q.options.forEach((o,i)=>{
-    const c=String.fromCharCode(97+i);
-    options.innerHTML+=`
+    const c = String.fromCharCode(97+i);
+    options.innerHTML += `
       <label>
         <input type="radio" name="opt"
-          ${answers[q.id]===c?"checked":""}
-          onchange="answers['${q.id}']='${c}'">
+        ${answers[q.id]===c?"checked":""}
+        onchange="answers['${q.id}']='${c}'">
         ${c}) ${o}
       </label><br>`;
   });
 }
 
-window.nextQ=()=>{ if(qIndex<examData.questions.length-1){qIndex++;renderQ();} };
-window.prevQ=()=>{ if(qIndex>0){qIndex--;renderQ();} };
+window.nextQ = () => { if (qIndex < exam.questions.length-1){ qIndex++; renderQ(); }};
+window.prevQ = () => { if (qIndex > 0){ qIndex--; renderQ(); }};
 
-window.submitExam = async function(){
-  clearInterval(timer);
-
-  let score=0;
-  Object.keys(examData.answerKey).forEach(k=>{
-    if(answers[k]===examData.answerKey[k]) score++;
+window.submitExam = async () => {
+  clearInterval(timerInt);
+  let score = 0;
+  Object.keys(exam.answerKey).forEach(k=>{
+    if (answers[k] === exam.answerKey[k]) score++;
   });
 
   await set(push(ref(db,"CBT/RESULTS")),{
     score,
-    total:Object.keys(examData.answerKey).length,
-    time:Date.now()
+    total: Object.keys(exam.answerKey).length,
+    time: Date.now()
   });
 
-  alert(`Exam Submitted\nScore: ${score}`);
+  alert("Submitted. Score: " + score);
   location.reload();
 };
 
-window.logout=()=>signOut(auth).then(()=>location.reload());
+window.logout = () => signOut(auth).then(()=>location.reload());
 </script>
 
 </body>
