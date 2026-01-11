@@ -2728,17 +2728,17 @@ function loadTasks() {
       if(!subjectData[subject]) subjectData[subject] = [];
       
       subjectData[subject].push({
-    id: Date.now(),
-    date: new Date().toLocaleDateString(),
-    covered: covered || "-",
-    uncovered: uncovered || "-"
-});
-
+        id: Date.now(),
+        date: new Date().toLocaleDateString(),
+        covered: covered || "-",
+        uncovered: uncovered || "-"
+      });
       
       saveSubjectData(subjectData);
       uploadData(); // Sync to Firebase
   };
 
+  // --- RENDER STANDARD TASKS ---
   tasks.forEach(t => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
@@ -2771,7 +2771,8 @@ function loadTasks() {
         t.comment = remark || "-";
         t.due = dueVal || "-";
         
-        // --- AUTO SAVE TO SUBJECT TABLE ---
+        // AUTO SAVE Standard Task to Subject Table
+        // (Assuming Task Name IS the Subject Name, e.g., "Physics")
         saveAutomatedSubjectProgress(t.name, t.comment, t.due);
         
       } else { 
@@ -2787,6 +2788,7 @@ function loadTasks() {
     tList.append(container);
   });
   
+  // --- RENDER EXTRA WORK ---
   extras.forEach(e => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
@@ -2794,6 +2796,7 @@ function loadTasks() {
     cb.type = "checkbox";
     cb.checked = e.done;
     if(e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
+    
     const label = document.createElement("span");
     const updateLabel = () => {
        if(e.done){
@@ -2803,17 +2806,40 @@ function loadTasks() {
        }
     };
     updateLabel();
+    
     cb.onchange = () => {
       if (!confirm(`CONFIRM EXTRA WORK:\n\nMark '${e.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) { 
           cb.checked = !cb.checked; 
           return; 
       }
+      
       if(cb.checked){
         const remark = prompt(`Comment for ${e.name}?`, "Done");
         const dueVal = prompt(`Any pending work/marks left for ${e.name}?`, "None");
+        
+        // --- NEW FEATURE: ASK FOR SUBJECT ---
+        const subjectName = prompt(
+            "Enter SUBJECT NAME to add this to Subject Progress Table:\n(e.g., Physics, Math)\n\nLeave EMPTY if not related to a subject.",
+            ""
+        );
+
         e.comment = remark || "-";
         e.due = dueVal || "-";
-      } else { e.comment = ""; e.due = ""; }
+
+        // If user entered a subject, save it to the table!
+        if (subjectName && subjectName.trim() !== "") {
+            saveAutomatedSubjectProgress(
+                subjectName.trim(), 
+                `${e.name} (${e.comment})`, // Covered = Name + Comment
+                e.due                       // Uncovered = Due value
+            );
+        }
+
+      } else { 
+          e.comment = ""; 
+          e.due = ""; 
+      }
+      
       e.done = cb.checked;
       updateLabel();
       updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
