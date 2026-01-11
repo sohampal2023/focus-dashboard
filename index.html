@@ -987,9 +987,10 @@ window.approveSubjectDelete = async function(uid, subject, rowId) {
       SUBJECT_WISE_TABLE: JSON.stringify(data)
     });
 
-    await remove(
-      remove(ref(db, `SUBJECT_DELETE_REQUESTS/${uid}/${rowId}`))
-    );
+   await remove(
+  ref(db, `SUBJECT_DELETE_REQUESTS/${uid}/${rowId}`)
+);
+
 
     alert("Subject entry deleted.");
   } catch (e) {
