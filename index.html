@@ -2133,7 +2133,7 @@ window.renderSubjectTable = function(subject) {
     <td>
       <button
         style="font-size:11px;background:#7f1d1d"
-        onclick='requestSubjectDelete(${JSON.stringify(subject)}, ${row.id})'>
+        onclick="requestSubjectDelete('${subject.replace(/'/g, "\\'")}', ${row.id || 0})">
         Request Delete
       </button>
     </td>
@@ -3004,6 +3004,12 @@ window.softRefresh = function () {
 window.requestSubjectDelete = async function(subject, rowId) {
   if (!currentUser) return;
 
+  // FIX 1: Check if rowId is valid. Old data might have undefined IDs.
+  if (!rowId) {
+    alert("System Error: This entry is from an old version and has no ID. It cannot be requested for deletion. Ask Admin to clear it manually.");
+    return;
+  }
+
   const reason = prompt(
     "Why do you want to delete this entry?",
     "Wrong entry by mistake"
@@ -3014,21 +3020,23 @@ window.requestSubjectDelete = async function(subject, rowId) {
 
   const payload = {
     subject: subject,
-    rowId: rowId,
+    rowId: rowId,       // Firebase throws error if this is undefined
     reason: reason,
     time: Date.now(),
     status: "Pending"
   };
 
   try {
-    await set(
-      ref(db, `SUBJECT_DELETE_REQUESTS/${currentUser.uid}/${rowId}`),
-      payload
-    );
+    // FIX 2: Ensure path uses string version of ID
+    const path = `users/${currentUser.uid}/SUBJECT_DELETE_REQUESTS/${String(rowId)}`;
+    
+    await set(ref(db, path), payload);
+
     alert("Delete request sent to admin.");
   } catch (e) {
-    console.error(e);
-    alert("Failed to send delete request.");
+    // FIX 3: Log the ACTUAL error to console and alert message
+    console.error("DELETE REQUEST ERROR:", e);
+    alert("Failed to send delete request: " + e.message);
   }
 };
 
