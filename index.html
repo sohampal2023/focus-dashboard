@@ -737,7 +737,8 @@ async function cleanupDeletedData() {
             }
         }
     } catch (e) {
-        console.warn("Cleanup skipped (no permission)");
+        console.error("ADMIN CLEANUP ERROR:", e); // This will show the real server error
+        alert("Admin Cleanup Failed: " + e.message);
     }
 }
 
