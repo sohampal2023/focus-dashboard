@@ -3022,17 +3022,16 @@ window.requestSubjectDelete = async function(subject, rowId) {
 
   try {
     await set(
-      
-ref(db, `SUBJECT_DELETE_REQUESTS/${uid}/${String(rowId)}`);
-
-  payload
-);
-
+      ref(db, `SUBJECT_DELETE_REQUESTS/${currentUser.uid}/${rowId}`),
+      payload
+    );
     alert("Delete request sent to admin.");
   } catch (e) {
+    console.error(e);
     alert("Failed to send delete request.");
   }
 };
+
 
 
 // --- ATTACH TO WINDOW ---
