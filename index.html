@@ -118,7 +118,70 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 }
 .log-row:hover { background: #1e293b; }
 .log-header { font-weight: bold; color: #94a3b8; text-transform: uppercase; background: #1e293b; border-bottom: none; }
+/* --- BULK CREATOR STYLES --- */
+.bulk-container {
+    background: #fff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    margin-bottom: 20px;
+}
 
+.bulk-container textarea {
+    width: 95%; /* Fits container */
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    font-family: monospace;
+    resize: vertical;
+    margin-top: 5px;
+}
+
+.meta-inputs {
+    display: flex; /* Makes inputs sit side-by-side */
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.input-group {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+.hidden { display: none !important; }
+
+/* Preview Area */
+#previewArea {
+    margin-top: 30px;
+    padding: 20px;
+    background: #eefdf0;
+    border: 2px solid #28a745;
+    border-radius: 8px;
+}
+
+/* Table Design */
+#previewTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 10px;
+    background: white;
+}
+
+#previewTable th, #previewTable td {
+    padding: 10px;
+    border: 1px solid #ddd;
+    text-align: left;
+    font-size: 14px;
+}
+
+#previewTable th { background: #333; color: white; }
+
+/* Buttons */
+.btn-lock { background: #007bff; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 4px; }
+.btn-success { background: #28a745; color: white; padding: 12px 25px; border: none; cursor: pointer; font-size: 16px; font-weight: bold; border-radius: 4px; }
+.btn-warning { background: #ffc107; color: black; padding: 10px 20px; border: none; cursor: pointer; border-radius: 4px; }
+.btn-danger { background: #dc3545; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 4px; margin-left: 10px;}
 /* --- SPEEDOMETER --- */
 .speedo{
   width:300px;height:150px;border-radius:300px 300px 0 0;
@@ -350,7 +413,75 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         </div>
     </div>
 </div>
+<div id="bulkUploadSection" class="admin-section">
+    <h2>📄 Bulk Exam Creator (Word-Style)</h2>
+    
+    <div class="bulk-container">
+        <div class="meta-inputs">
+            <div class="input-group">
+                <label>Exam Title</label>
+                <input type="text" id="bulkExamTitle" placeholder="e.g., Mock Test 5 - Physics">
+            </div>
+            <div class="input-group">
+                <label>Total Duration (Minutes)</label>
+                <input type="number" id="bulkDuration" placeholder="e.g., 60">
+            </div>
+            <div class="input-group">
+                <label>Marks per Question</label>
+                <input type="number" id="bulkMarks" value="4">
+            </div>
+        </div>
 
+        <div class="input-group">
+            <label>Paste Questions Here (Format: "1. Question text... a) Option...")</label>
+            <textarea id="rawQuestions" rows="10" placeholder="1. What is the capital of India?
+a) Mumbai
+b) Delhi
+c) Kolkata
+d) Chennai
+
+2. What is 2+2?
+a) 3
+b) 4
+c) 5
+d) 6"></textarea>
+            <small>Ensure there is a blank line between questions.</small>
+        </div>
+
+        <div class="input-group">
+            <label>Paste Answer Key (Format: "1-b, 2-b" OR "1.b 2.b")</label>
+            <textarea id="rawAnswers" rows="3" placeholder="1-b, 2-b"></textarea>
+        </div>
+
+        <div class="action-buttons">
+            <button onclick="lockAndPreview()" class="btn-lock">🔒 Lock & Preview</button>
+            <button onclick="clearBulkForm()" class="btn-danger">❌ Clear</button>
+        </div>
+    </div>
+
+    <div id="previewArea" class="hidden">
+        <h3>✅ Confirmation Preview</h3>
+        <p>Please check carefully before publishing.</p>
+        <div id="previewStats"></div>
+        <div class="table-responsive">
+            <table id="previewTable">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Question</th>
+                        <th>Options Detected</th>
+                        <th>Correct Ans</th>
+                    </tr>
+                </thead>
+                <tbody id="previewBody"></tbody>
+            </table>
+        </div>
+        <div class="action-buttons">
+            <button onclick="finalPublish()" class="btn-success">🚀 Publish Exam</button>
+            <button onclick="editAgain()" class="btn-warning">✏️ Unlock & Edit</button>
+        </div>
+    </div>
+</div>
 <div id="studentView">
     
     <div id="adminFeedbackBox" class="feedback-box hidden">
@@ -729,7 +860,154 @@ async function initAdminDashboard() {
     cleanupDeletedData(); // Run soft-delete cleanup
     startAdminListener();
 }
+// ==========================================
+// BULK UPLOAD LOGIC
+// ==========================================
 
+let parsedExamData = []; // Stores the questions temporarily
+
+// 1. LOCK & PREVIEW FUNCTION
+function lockAndPreview() {
+    const rawQ = document.getElementById('rawQuestions').value;
+    const rawA = document.getElementById('rawAnswers').value;
+    
+    if(!rawQ || !rawA) {
+        alert("Please fill in both Questions and Answer Key!");
+        return;
+    }
+
+    parsedExamData = []; // Reset storage
+    
+    // Split text by blank lines (Detects separate question blocks)
+    const questionsBlock = rawQ.split(/\n\s*\n/); 
+    
+    questionsBlock.forEach((block) => {
+        block = block.trim();
+        if(!block) return;
+
+        // Extract Question Number & Text
+        const qMatch = block.match(/^(\d+)\.\s*([\s\S]*?)(?=\n?[a-d]\))/i);
+        
+        // Extract Options a,b,c,d
+        const optionsMatch = {
+            a: block.match(/a\)\s*(.*)/i),
+            b: block.match(/b\)\s*(.*)/i),
+            c: block.match(/c\)\s*(.*)/i),
+            d: block.match(/d\)\s*(.*)/i)
+        };
+
+        if (qMatch) {
+            let qObj = {
+                id: qMatch[1], // e.g. "1"
+                text: qMatch[2].trim().replace(/\n/g, "<br>"),
+                options: {
+                    a: optionsMatch.a ? optionsMatch.a[1].trim() : "Missing",
+                    b: optionsMatch.b ? optionsMatch.b[1].trim() : "Missing",
+                    c: optionsMatch.c ? optionsMatch.c[1].trim() : "Missing",
+                    d: optionsMatch.d ? optionsMatch.d[1].trim() : "Missing"
+                },
+                correct: null // Answer key fills this later
+            };
+            parsedExamData.push(qObj);
+        }
+    });
+
+    // Parse Answer Key (e.g., "1-b, 2-c" or "1.b 2.c")
+    const answers = rawA.split(/[\n,]\s*/); 
+    
+    answers.forEach(ans => {
+        const match = ans.match(/(\d+)[\s\.\-]*([a-d])/i);
+        if(match) {
+            const qNum = match[1];
+            const correctOpt = match[2].toLowerCase();
+            
+            // Find matching question and update answer
+            const targetQ = parsedExamData.find(q => q.id == qNum);
+            if(targetQ) {
+                targetQ.correct = correctOpt;
+            }
+        }
+    });
+
+    renderPreviewTable();
+}
+
+// 2. RENDER TABLE
+function renderPreviewTable() {
+    const tbody = document.getElementById('previewBody');
+    tbody.innerHTML = "";
+    let invalidCount = 0;
+
+    parsedExamData.forEach(q => {
+        let row = `<tr>
+            <td>${q.id}</td>
+            <td>${q.text.substring(0, 50)}...</td>
+            <td>
+                A: ${q.options.a.substring(0, 15)}... <br>
+                B: ${q.options.b.substring(0, 15)}...
+            </td>
+            <td style="font-weight:bold; color:${q.correct ? 'green' : 'red'}">
+                ${q.correct ? q.correct.toUpperCase() : 'MISSING!'}
+            </td>
+        </tr>`;
+        tbody.innerHTML += row;
+        
+        if(!q.correct) invalidCount++;
+    });
+
+    document.getElementById('previewStats').innerHTML = `
+        <strong>Total Questions:</strong> ${parsedExamData.length} | 
+        <strong>Errors:</strong> ${invalidCount} (If > 0, check your answer key)
+    `;
+
+    // Swap Views
+    document.querySelector('.bulk-container').classList.add('hidden');
+    document.getElementById('previewArea').classList.remove('hidden');
+}
+
+// 3. EDIT AGAIN
+function editAgain() {
+    document.querySelector('.bulk-container').classList.remove('hidden');
+    document.getElementById('previewArea').classList.add('hidden');
+}
+
+function clearBulkForm() {
+    document.getElementById('rawQuestions').value = "";
+    document.getElementById('rawAnswers').value = "";
+}
+
+// 4. PUBLISH TO FIREBASE
+function finalPublish() {
+    const title = document.getElementById('bulkExamTitle').value;
+    const duration = document.getElementById('bulkDuration').value;
+    const marks = document.getElementById('bulkMarks').value;
+
+    if(!title || !duration) {
+        alert("Please enter Exam Title and Duration!");
+        return;
+    }
+
+    // Create Final Object
+    const examPayload = {
+        title: title,
+        duration: parseInt(duration),
+        marksPerQ: parseInt(marks),
+        questions: parsedExamData,
+        createdAt: firebase.database.ServerValue.TIMESTAMP,
+        active: true
+    };
+
+    // Upload
+    const examRef = firebase.database().ref('exams').push();
+    examRef.set(examPayload)
+    .then(() => {
+        alert("✅ Exam Published Successfully!");
+        location.reload(); 
+    })
+    .catch((error) => {
+        alert("Error: " + error.message);
+    });
+}
 async function cleanupDeletedData() {
     // 🔒 HARD GUARD: do not run unless admin
     if (!currentUser || currentUser.email !== ADMIN_EMAIL) return;
