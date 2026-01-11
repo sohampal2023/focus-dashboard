@@ -302,24 +302,19 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
             <button class="tab-btn active" onclick="switchAdminTab('logs')">Live Logs</button>
             <button class="tab-btn" onclick="switchAdminTab('history')">Performance</button>
             <button class="tab-btn" onclick="switchAdminTab('mocks')" style="color:#facc15">Mock Tests</button>
+            <button class="tab-btn" onclick="switchAdminTab('subjects')" style="color:#a78bfa">Subject View</button>
         </div>
 
         <div id="tabLogs">
              <div class="log-row log-header">
-                <div>Login</div>
-                <div>Logout</div>
-                <div>Reason</div>
-                <div>Work Completed</div>
-                <div>Action</div>
+                <div>Login</div><div>Logout</div><div>Reason</div><div>Work Completed</div><div>Action</div>
             </div>
             <div id="modalBodyLogs">Loading...</div>
         </div>
 
         <div id="tabHistory" class="hidden">
             <table style="width:100%">
-                <thead>
-                    <tr><th>Date</th><th>Score</th><th>Time</th><th>Rating</th><th>Admin Review</th><th>Action</th></tr>
-                </thead>
+                <thead><tr><th>Date</th><th>Score</th><th>Time</th><th>Rating</th><th>Admin Review</th><th>Action</th></tr></thead>
                 <tbody id="modalBodyHistory"></tbody>
             </table>
         </div>
@@ -327,14 +322,34 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         <div id="tabMocks" class="hidden">
             <h4 style="color:#facc15; margin-bottom:10px;">Last 20 Mock Tests</h4>
             <table style="width:100%">
-                <thead>
-                    <tr><th>Date</th><th>Test Name</th><th>Score</th><th>Cutoff</th><th>Status</th><th>Accuracy</th></tr>
-                </thead>
+                <thead><tr><th>Date</th><th>Test Name</th><th>Score</th><th>Cutoff</th><th>Status</th><th>Accuracy</th></tr></thead>
                 <tbody id="modalBodyMocks"></tbody>
             </table>
         </div>
+
+        <div id="tabSubjects" class="hidden">
+            <div style="margin-bottom:10px; display:flex; gap:10px; align-items:center;">
+                <label style="color:#94a3b8">Select Subject:</label>
+                <select id="adminSubjectSelect" onchange="renderAdminSelectedSubject()" 
+                    style="padding:8px; background:#020617; color:#e5e7eb; border:1px solid #334155; border-radius:6px; flex-grow:1;">
+                    <option value="">-- Choose --</option>
+                </select>
+            </div>
+            <table style="width:100%">
+                <thead>
+                    <tr>
+                        <th style="width:20%">Date</th>
+                        <th style="width:40%">Covered</th>
+                        <th style="width:40%">Uncovered</th>
+                    </tr>
+                </thead>
+                <tbody id="modalBodySubjects">
+                    <tr><td colspan="3" style="text-align:center; color:#64748b">Select a subject above</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
-</div>
+</div>>
 
 <div id="studentView">
     
@@ -600,6 +615,7 @@ let idleStrikes = 0;
 let dailyTimeouts = 0;
 let lastApprovedState = false; 
 const ADMIN_EMAIL = "admin@study.com";
+let currentAdminSubjectData = {}; // Stores the loaded student's subject data
 
 // --- NEW KEY FOR SUBJECT PROGRESS ---
 const SUBJECT_TABLE_KEY = () => key("SUBJECT_WISE_TABLE");
@@ -1136,47 +1152,99 @@ window.currentAdminUid = null;
 window.openAdminModal = async function(uid, email) {
     window.currentAdminUid = uid;
     const modal = document.getElementById("adminModal");
-    const bodyLogs = document.getElementById("modalBodyLogs");
-    const bodyHist = document.getElementById("modalBodyHistory");
-    const bodyMocks = document.getElementById("modalBodyMocks");
     
+    // Reset Views
+    document.getElementById("modalBodyLogs").innerHTML = "Loading...";
+    document.getElementById("modalBodyHistory").innerHTML = "Loading...";
+    document.getElementById("modalBodyMocks").innerHTML = "Loading...";
+    document.getElementById("modalBodySubjects").innerHTML = ""; // Clear table
+    
+    // Open Modal & Default Tab
     modal.classList.remove("hidden");
-    bodyLogs.innerHTML = "Loading...";
-    bodyHist.innerHTML = "Loading...";
-    bodyMocks.innerHTML = "Loading...";
-    
-    // Default to logs tab
     window.switchAdminTab('logs');
 
     try {
         const snapshot = await get(child(ref(db), `users/${uid}`));
         const user = snapshot.val() || {};
         
+        // 1. Logs
         let logs = JSON.parse(user.LOGS || "[]");
         renderAdminLogs(uid, logs);
 
+        // 2. History
         let history = JSON.parse(user.HISTORY || "[]");
         renderAdminHistory(uid, history);
 
-        // NEW: Load Mock Logs
+        // 3. Mock Tests
         let mocks = JSON.parse(user.MOCK_LOGS || "[]");
         renderMockLogs(uid, mocks);
 
+        // 4. NEW: Subjects
+        window.currentAdminSubjectData = JSON.parse(user.SUBJECT_WISE_TABLE || "{}");
+        initAdminSubjectDropdown(); // Call helper to fill dropdown
+
     } catch(e) {
-        bodyLogs.innerHTML = "Error loading data: " + e.message;
+        document.getElementById("modalBodyLogs").innerHTML = "Error loading data: " + e.message;
     }
+};
+  // Populate the dropdown with subjects found in the student's data
+window.initAdminSubjectDropdown = function() {
+    const select = document.getElementById("adminSubjectSelect");
+    select.innerHTML = `<option value="">-- Select Subject --</option>`;
+    
+    const subjects = Object.keys(window.currentAdminSubjectData);
+    
+    if (subjects.length === 0) {
+        select.innerHTML = `<option value="">No Subject Data Found</option>`;
+        return;
+    }
+
+    subjects.forEach(sub => {
+        const opt = document.createElement("option");
+        opt.value = sub;
+        opt.innerText = sub;
+        select.appendChild(opt);
+    });
+};
+
+// Render table when Admin selects a subject
+window.renderAdminSelectedSubject = function() {
+    const subject = document.getElementById("adminSubjectSelect").value;
+    const tbody = document.getElementById("modalBodySubjects");
+    
+    if (!subject || !window.currentAdminSubjectData[subject]) {
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#64748b">Select a subject to view details</td></tr>`;
+        return;
+    }
+
+    const rows = window.currentAdminSubjectData[subject].slice().reverse(); // Newest first
+    
+    let html = "";
+    rows.forEach(row => {
+        html += `
+        <tr>
+            <td style="color:#94a3b8">${row.date}</td>
+            <td style="white-space:pre-wrap;">${row.covered}</td>
+            <td style="white-space:pre-wrap; color:#fca5a5">${row.uncovered}</td>
+        </tr>`;
+    });
+    
+    tbody.innerHTML = html;
 };
 
 window.switchAdminTab = function(tabName) {
     const tabLogs = document.getElementById("tabLogs");
     const tabHist = document.getElementById("tabHistory");
     const tabMocks = document.getElementById("tabMocks");
+    const tabSub = document.getElementById("tabSubjects"); // NEW
     const btns = document.querySelectorAll(".tab-btn");
     
+    // Reset all
     btns.forEach(b => b.classList.remove("active"));
     tabLogs.classList.add("hidden");
     tabHist.classList.add("hidden");
     tabMocks.classList.add("hidden");
+    tabSub.classList.add("hidden"); // NEW
     
     if (tabName === 'logs') {
         tabLogs.classList.remove("hidden");
@@ -1187,6 +1255,9 @@ window.switchAdminTab = function(tabName) {
     } else if (tabName === 'mocks') {
         tabMocks.classList.remove("hidden");
         btns[2].classList.add("active");
+    } else if (tabName === 'subjects') { // NEW
+        tabSub.classList.remove("hidden");
+        btns[3].classList.add("active");
     }
 }
 
