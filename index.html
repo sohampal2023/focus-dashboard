@@ -2508,7 +2508,7 @@ function finishTestSequence(testState, loadDashboard = false) {
           finishTestSequence(testState, loadDashboard);
           return;
       }
-      return; // If not expired, allow cancel
+      return; 
   }
 
   if (obtained.trim() === "") obtained = "0";
@@ -2519,20 +2519,26 @@ function finishTestSequence(testState, loadDashboard = false) {
   let cutoff = prompt("Enter Cutoff Marks:", "0");
   if (cutoff === null) cutoff = "0";
 
+  // Calculate Logic
   const cutStatus = Number(obtained) >= Number(cutoff) ? "CLEAR" : "NOT CLEAR";
+  const remark = getAccuracyRemark(accuracy); // Uses your existing helper function
+
+  // Confirmation Msg
+  const msg = `Confirm Details:\n\nTest: ${testState.name}\nScore: ${obtained} / ${testState.fullMarks}\nCutoff: ${cutoff}\nAccuracy: ${accuracy}%\nStatus: ${cutStatus}\nRemark: ${remark}`;
   
-  const msg = `Confirm:\nTest: ${testState.name}\nScore: ${obtained}/${testState.fullMarks}\nStatus: ${cutStatus}`;
   if (!confirm(msg)) {
       if (testState.status === "EXPIRED") {
-          finishTestSequence(testState, loadDashboard); // Force retry if expired
+          finishTestSequence(testState, loadDashboard); 
           return;
       }
       return;
   }
 
-  const resultComment = `Score: ${obtained}/${testState.fullMarks} | Acc: ${accuracy}% | ${cutStatus}`;
+  // 1. CREATE THE DETAILED DATA STRING
+  // This matches exactly what you asked for:
+  const fullDetails = `Score: ${obtained}/${testState.fullMarks} | Cutoff: ${cutoff} | Status: ${cutStatus} | Acc: ${accuracy}% | Remark: ${remark}`;
 
-  // 1. SAVE TO MOCK LOGS (For History Tab)
+  // 2. SAVE TO MOCK LOGS (History Tab)
   let mockLogs = JSON.parse(localStorage.getItem(key("MOCK_LOGS")) || "[]");
   mockLogs.push({
     date: new Date().toLocaleDateString(),
@@ -2541,42 +2547,43 @@ function finishTestSequence(testState, loadDashboard = false) {
     total: testState.fullMarks,
     cutoff: cutoff,
     status: cutStatus,
-    acc: accuracy
+    acc: accuracy,
+    remark: remark
   });
   if (mockLogs.length > 20) mockLogs = mockLogs.slice(mockLogs.length - 20);
   localStorage.setItem(key("MOCK_LOGS"), JSON.stringify(mockLogs));
 
-  // 2. 🔥 SAVE TO SUBJECT WISE VIEW (Key: "Mock Test")
-  // This makes it appear in the Subject View for the Admin
+  // 3. 🔥 SAVE TO SUBJECT WISE VIEW (Key: "Mock Test")
+  // Admin will see the Test Name in "Covered" and ALL details in "Uncovered"
   const subjectData = getSubjectData(); 
   if(!subjectData["Mock Test"]) subjectData["Mock Test"] = []; 
 
   subjectData["Mock Test"].push({
     id: Date.now(),
     date: new Date().toLocaleDateString(),
-    covered: `${testState.name}`,        // The Test Name
-    uncovered: `Score: ${obtained} / ${testState.fullMarks}` // The Score
+    covered: `${testState.name}`, 
+    uncovered: fullDetails // <--- SAVES ALL DATA HERE
   });
   saveSubjectData(subjectData);
 
-  // 3. CREATE LOCKED EXTRA WORK ENTRY
+  // 4. CREATE LOCKED EXTRA WORK ENTRY (Dashboard View)
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
   extras.push({
     name: `MOCK TEST: ${testState.name}`,
     done: true,
-    comment: resultComment,
+    comment: fullDetails,
     due: "None"
   });
   localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
 
-  // 4. ADD TO CURRENT SESSION LOG
+  // 5. ADD TO CURRENT SESSION LOG (Log View)
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   if (logs.length) {
     const active = logs[logs.length - 1];
     if (!active.completed) active.completed = [];
     active.completed.push({
       name: `MOCK TEST: ${testState.name}`,
-      comment: resultComment,
+      comment: fullDetails,
       due: "None"
     });
     
@@ -2587,7 +2594,7 @@ function finishTestSequence(testState, loadDashboard = false) {
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
   }
 
-  // 5. CLEANUP & SYNC
+  // 6. CLEANUP & SYNC
   localStorage.removeItem(key("TEST_STATE"));
   uploadData(); 
 
@@ -2598,8 +2605,8 @@ function finishTestSequence(testState, loadDashboard = false) {
   if (loadDashboard) {
     location.reload();
   } else {
-    showMockResultPopup(resultComment);
-    setTimeout(() => location.reload(), 4000);
+    showMockResultPopup(fullDetails);
+    setTimeout(() => location.reload(), 5000);
   }
 }
 // --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
