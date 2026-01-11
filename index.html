@@ -3022,12 +3022,7 @@ window.requestSubjectDelete = async function(subject, rowId) {
 
   try {
     await set(
-      const uid = window.currentUser?.uid;
-if (!uid) {
-  alert("Not logged in");
-  return;
-}
-
+      
 ref(db, `SUBJECT_DELETE_REQUESTS/${uid}/${String(rowId)}`);
 
   payload
