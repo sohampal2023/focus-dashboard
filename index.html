@@ -2706,6 +2706,7 @@ function loadTasks() {
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
   
+  // Helper to update main logs
   const updateLogTask = (name, isChecked, comment, due) => {
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if(logs.length){
@@ -2722,20 +2723,21 @@ function loadTasks() {
     }
   };
 
-  // --- AUTOMATED SUBJECT PROGRESS HELPER ---
+  // Helper to save to Subject Table (For Admin View)
+  // This adds the unique ID needed for deletion
   const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
-      const subjectData = getSubjectData();
+      const subjectData = getSubjectData(); 
       if(!subjectData[subject]) subjectData[subject] = [];
       
       subjectData[subject].push({
-        id: Date.now(),
+        id: Date.now(), // Unique ID for Admin deletion
         date: new Date().toLocaleDateString(),
         covered: covered || "-",
         uncovered: uncovered || "-"
       });
       
-      saveSubjectData(subjectData);
-      uploadData(); // Sync to Firebase
+      saveSubjectData(subjectData); 
+      uploadData(); 
   };
 
   // --- RENDER STANDARD TASKS ---
@@ -2750,7 +2752,6 @@ function loadTasks() {
     const updateLabel = () => {
        let display = t.name;
        if(t.target) display += ` <span style='font-size:11px;color:#38bdf8'>(${t.target})</span>`;
-       
        if(t.done){
            label.innerHTML = ` ${display} <span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>`;
        } else {
@@ -2766,13 +2767,11 @@ function loadTasks() {
       }
       
       if(cb.checked){
-        const remark = prompt(`What did you cover in ${t.name}? (Covered Portion)`, "Done");
-        const dueVal = prompt(`Any pending work left for ${t.name}? (Uncovered Portion)`, "None");
+        const remark = prompt(`What did you cover in ${t.name}?`, "Done");
+        const dueVal = prompt(`Any pending work left?`, "None");
         t.comment = remark || "-";
         t.due = dueVal || "-";
         
-        // AUTO SAVE Standard Task to Subject Table
-        // (Assuming Task Name IS the Subject Name, e.g., "Physics")
         saveAutomatedSubjectProgress(t.name, t.comment, t.due);
         
       } else { 
@@ -2788,52 +2787,55 @@ function loadTasks() {
     tList.append(container);
   });
   
-  // --- RENDER EXTRA WORK ---
+  // --- RENDER EXTRA WORK (UPDATED LOGIC) ---
   extras.forEach(e => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
+    
     const cb = document.createElement("input");
     cb.type = "checkbox";
     cb.checked = e.done;
+    
     if(e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
     
     const label = document.createElement("span");
+    
     const updateLabel = () => {
        if(e.done){
-           label.innerHTML = ` ${e.name} <span style="font-size:12px;color:#94a3b8">[${e.comment}]</span>`;
+           // Display: Subject Name [Topic Name]
+           label.innerHTML = ` <span style='color:#facc15'>${e.name}</span> <span style="font-size:12px;color:#e5e7eb">[${e.comment}]</span>`;
        } else {
-           label.innerText = " " + e.name;
+           // Display: Subject Name
+           label.innerHTML = " " + e.name;
        }
     };
     updateLabel();
     
     cb.onchange = () => {
-      if (!confirm(`CONFIRM EXTRA WORK:\n\nMark '${e.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) { 
+      if (!confirm(`CONFIRM WORK:\n\nSubject: ${e.name}\nMark as DONE?`)) { 
           cb.checked = !cb.checked; 
           return; 
       }
       
       if(cb.checked){
-        const remark = prompt(`Comment for ${e.name}?`, "Done");
-        const dueVal = prompt(`Any pending work/marks left for ${e.name}?`, "None");
+        // LOGIC CHANGE: When ticked, ask for Topic Name
+        const topicName = prompt(`Enter TOPIC NAME (or Test Name) for ${e.name}:`, "");
         
-        // --- NEW FEATURE: ASK FOR SUBJECT ---
-        const subjectName = prompt(
-            "Enter SUBJECT NAME to add this to Subject Progress Table:\n(e.g., Physics, Math)\n\nLeave EMPTY if not related to a subject.",
-            ""
-        );
+        if (!topicName) {
+            // If user cancels topic entry, uncheck the box
+            cb.checked = false;
+            return; 
+        }
 
-        e.comment = remark || "-";
+        const dueVal = prompt(`Any pending work/marks?`, "None");
+        
+        e.comment = topicName; // We save Topic Name in the 'comment' field for display
         e.due = dueVal || "-";
 
-        // If user entered a subject, save it to the table!
-        if (subjectName && subjectName.trim() !== "") {
-            saveAutomatedSubjectProgress(
-                subjectName.trim(), 
-                `${e.name} (${e.comment})`, // Covered = Name + Comment
-                e.due                       // Uncovered = Due value
-            );
-        }
+        // 🔥 SAVE TO SUBJECT WISE VIEW
+        // e.name = "Physics" (or Mock Test)
+        // topicName = "Thermodynamics" (or Full Syllabus Test)
+        saveAutomatedSubjectProgress(e.name, topicName, e.due);
 
       } else { 
           e.comment = ""; 
@@ -2851,10 +2853,16 @@ function loadTasks() {
 }
 
 function addExtra() {
-  const name = prompt("Extra work?");
-  if (!name) return;
+  // LOGIC CHANGE: Ask for Subject Name here (e.g. Physics, Chemistry, Mock Test)
+  const subjectName = prompt("Enter SUBJECT Name for this work:\n(e.g. Physics, Chemistry, Maths, or Mock Test)");
+  
+  if (!subjectName) return; // If user cancels
+
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  extras.push({ name, done: false, comment: "", due: "" });
+  
+  // We store the Subject Name as the 'name' of the item
+  extras.push({ name: subjectName, done: false, comment: "", due: "" });
+  
   localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
   loadTasks();
   uploadData();
