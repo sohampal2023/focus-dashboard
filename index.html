@@ -1,3399 +1,6820 @@
 <!DOCTYPE html>
+
 <html lang="en">
+
 <head>
+
 <meta charset="UTF-8">
+
 <title>Focus Watchdog Advance Pro Version</title>
 
+
+
 <style>
+
 /* --- BASE STYLES --- */
+
 *{box-sizing:border-box}
+
 html,body{margin:0;height:100%;font-family:Segoe UI,system-ui,sans-serif}
+
 body{background:#020617;color:#e5e7eb}
+
+
 
 .app{display:grid;grid-template-columns:280px 1fr;height:100vh}
 
+
+
 /* --- SIDEBAR --- */
+
 .sidebar{padding:20px;border-right:1px solid #1e293b; display:flex; flex-direction:column;}
+
 .sidebar h2{text-align:center;color:#7dd3fc;margin-bottom:12px; font-size: 1.2rem; letter-spacing: 1px;}
+
 .status{padding:10px;border:1px solid #334155;border-radius:10px;text-align:center;margin-bottom:10px;font-size:0.9rem}
 
+
+
 button{
+
   width:100%;padding:12px;margin:6px 0;
+
   border-radius:10px;border:1px solid #334155;
+
   background:#0f172a;color:#e5e7eb;cursor:pointer;
+
   transition: all 0.2s; font-weight: 600;
+
 }
+
 button:hover:not(:disabled){ background: #1e293b; border-color: #7dd3fc; }
+
 button:active:not(:disabled){ transform: scale(0.98); }
+
 button:disabled{opacity:.4; cursor: not-allowed;}
 
+
+
 /* --- WATCHDOG TIMER --- */
+
 .idleBox{
+
   padding:15px; border:1px solid #334155;
+
   border-radius:16px; text-align:center;
+
   margin-bottom:12px; background:#0f172a;
+
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.5);
+
 }
+
+
 
 .timer-container { position: relative; width: 120px; height: 120px; margin: 0 auto 10px; }
+
 .timer-svg { transform: rotate(-90deg); width: 100%; height: 100%; }
+
 .timer-circle-bg { fill: none; stroke: #1e293b; stroke-width: 8; }
+
 .timer-circle-fg {
+
     fill: none; stroke-width: 8; stroke-linecap: round;
+
     stroke-dasharray: 339; stroke-dashoffset: 0;
+
     transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
+
 }
+
 .timer-label {
+
     position: absolute; top: 50%; left: 50%;
+
     transform: translate(-50%, -50%);
+
     display: flex; flex-direction: column; align-items: center;
+
 }
+
 .timer-time { font-size: 22px; font-weight: 800; color: #f8fafc; line-height: 1; }
+
 .timer-sub { font-size: 10px; color: #94a3b8; margin-top: 2px; text-transform: uppercase; }
 
+
+
 /* TIMEOUT COUNTER STYLE */
+
 .timeout-display {
+
     font-size: 11px; font-weight: bold; color: #ef4444; 
+
     margin-top: 8px; background: #450a0a; 
+
     padding: 2px 8px; border-radius: 4px; display: inline-block;
+
     border: 1px solid #7f1d1d;
+
 }
 
+
+
 @keyframes pulse-red {
+
     0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+
     70% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+
     100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+
 }
+
+
 
 .critical { animation: pulse-red 1.5s infinite; border-color: #ef4444 !important; }
 
+
+
 .watchdog-btn {
+
     background: #0ea5e9; border:none; color:white;
+
     text-transform: uppercase; font-size: 12px; letter-spacing: 0.5px;
+
 }
+
 .watchdog-btn:hover { background: #0284c7; }
 
+
+
 /* --- MAIN LAYOUT --- */
+
 .main{padding:24px;overflow:auto; position: relative;}
+
 .card{
+
   background:#020617;border:1px solid #334155;
+
   border-radius:14px;padding:20px;margin-bottom:20px
+
 }
+
 .hidden{display:none !important}
 
+
+
 /* --- ADMIN PANEL --- */
+
 .admin-row {
+
     display: grid; grid-template-columns: 2fr 1fr 1fr 2fr 1.5fr; gap:10px; align-items: start;
+
     padding: 15px; border-bottom: 1px solid #334155; background: #0f172a; margin-bottom:5px; border-radius:8px;
+
 }
+
 .admin-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; display:inline-block; margin-bottom:4px; }
+
 .badge-red { background: #7f1d1d; color: #fca5a5; }
+
 .badge-green { background: #14532d; color: #86efac; }
+
 .badge-yellow { background: #713f12; color: #fde047; }
+
 .admin-btn-group { display: flex; gap: 4px; flex-wrap: wrap; }
+
 .admin-btn-group button { width: auto; padding: 6px 8px; font-size: 10px; margin: 0; flex-grow: 1; }
 
+
+
 .prog-bar { height:6px; background:#334155; border-radius:3px; overflow:hidden; margin-top:5px; width:100%; }
+
 .prog-fill { height:100%; background:#3b82f6; transition:width 0.3s; }
 
+
+
 /* --- ADMIN MODAL --- */
+
 .modal-overlay {
+
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+
     background: rgba(0, 0, 0, 0.9); z-index: 1000;
+
     display: flex; justify-content: center; align-items: center;
+
 }
+
 .modal-content {
+
     background: #0f172a; border: 1px solid #334155; border-radius: 12px;
+
     width: 800px; max-height: 90vh; overflow-y: auto; padding: 20px;
+
     box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+
 }
+
 .tab-header { display: flex; gap: 10px; margin-bottom: 15px; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+
 .tab-btn { background: transparent; border: none; color: #94a3b8; padding: 8px 16px; border-radius: 6px; cursor: pointer; width: auto; margin:0;}
+
 .tab-btn.active { background: #1e293b; color: #38bdf8; font-weight: bold; }
 
+
+
 .log-row {
+
     display: grid; grid-template-columns: 1fr 1fr 1fr 2fr 50px; gap: 10px;
+
     padding: 10px; border-bottom: 1px dashed #334155; font-size: 12px;
+
     align-items: start;
+
 }
+
 .log-row:hover { background: #1e293b; }
+
 .log-header { font-weight: bold; color: #94a3b8; text-transform: uppercase; background: #1e293b; border-bottom: none; }
+
 /* --- BULK CREATOR STYLES --- */
+
 .bulk-container {
+
     background: #fff;
+
     padding: 20px;
+
     border-radius: 8px;
+
     box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+
     margin-bottom: 20px;
+
 }
+
+
 
 .bulk-container textarea {
+
     width: 95%; /* Fits container */
+
     padding: 10px;
+
     border: 1px solid #ccc;
+
     border-radius: 5px;
+
     font-family: monospace;
+
     resize: vertical;
+
     margin-top: 5px;
+
 }
+
+
 
 .meta-inputs {
+
     display: flex; /* Makes inputs sit side-by-side */
+
     gap: 15px;
+
     margin-bottom: 20px;
+
 }
 
+
+
 .input-group {
+
     flex: 1;
+
     display: flex;
+
     flex-direction: column;
+
 }
+
+
 
 .hidden { display: none !important; }
 
+
+
 /* Preview Area */
+
 #previewArea {
+
     margin-top: 30px;
+
     padding: 20px;
+
     background: #eefdf0;
+
     border: 2px solid #28a745;
+
     border-radius: 8px;
+
 }
+
+
 
 /* Table Design */
+
 #previewTable {
+
     width: 100%;
+
     border-collapse: collapse;
+
     margin-top: 10px;
+
     background: white;
+
 }
 
+
+
 #previewTable th, #previewTable td {
+
     padding: 10px;
+
     border: 1px solid #ddd;
+
     text-align: left;
+
     font-size: 14px;
+
 }
+
+
 
 #previewTable th { background: #333; color: white; }
 
+
+
 /* Buttons */
+
 .btn-lock { background: #007bff; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 4px; }
+
 .btn-success { background: #28a745; color: white; padding: 12px 25px; border: none; cursor: pointer; font-size: 16px; font-weight: bold; border-radius: 4px; }
+
 .btn-warning { background: #ffc107; color: black; padding: 10px 20px; border: none; cursor: pointer; border-radius: 4px; }
+
 .btn-danger { background: #dc3545; color: white; padding: 10px 20px; border: none; cursor: pointer; border-radius: 4px; margin-left: 10px;}
+
 /* --- SPEEDOMETER --- */
+
 .speedo{
+
   width:300px;height:150px;border-radius:300px 300px 0 0;
+
   background:conic-gradient(from -90deg, #7f1d1d,#92400e,#a16207,#14532d,#312e81);
+
   position:relative; margin: 0 auto;
+
   box-shadow:inset 0 0 0 14px #020617,inset 0 0 0 18px #1e293b
+
 }
+
 .needle{
+
   position:absolute;width:4px;height:110px;
+
   background:#e5e7eb;left:50%;bottom:0;
+
   transform-origin:bottom center;transform:rotate(-90deg);
+
   transition:.6s cubic-bezier(.15,.85,.2,1)
+
 }
+
 .cap{
+
   position:absolute;width:14px;height:14px;background:#e5e7eb;
+
   border-radius:50%;left:50%;bottom:0;
+
   transform:translate(-50%,50%)
+
 }
+
+
 
 .percent{text-align:center;font-size:36px;font-weight:800;color:#7dd3fc}
+
 .rating{text-align:center;font-size:18px;font-weight:700}
+
 .details{text-align:center;font-size:14px;color:#cbd5f5}
 
+
+
 /* --- TABLE --- */
+
 table{width:100%;border-collapse:collapse;font-size:14px}
+
 th,td{border:1px solid #334155;padding:6px;text-align:center}
 
+
+
 .sync-status { font-size: 10px; color: #64748b; text-align: center; margin-top:5px; }
+
 .nextInput{ width:100%; padding:10px; margin:6px 0; border-radius:8px; border:1px solid #334155; background:#020617; color:#e5e7eb; }
 
+
+
 /* --- REJECTED POPUP (Red) --- */
+
 .rejected-popup {
+
     position: fixed; top: 15%; left: 50%; transform: translate(-50%, 0); z-index: 9999;
+
     background: #7f1d1d; border: 1px solid #ef4444; color: #fee2e2; 
+
     padding: 20px 30px; border-radius: 12px;
+
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
+
     text-align: center; display: flex; flex-direction: column; gap: 12px;
+
     min-width: 320px; animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
 }
+
 .rejected-popup h2 { 
+
     margin: 0; font-size: 20px; color: #fca5a5; 
+
     text-transform: uppercase; letter-spacing: 1px; font-weight: 800;
+
 }
+
 .popup-line { height: 1px; background: rgba(255,255,255,0.2); width: 100%; }
+
 .rejected-popup p { margin: 0; font-style: italic; font-size: 16px; color: #fff; font-weight:500; }
 
+
+
 .dismiss-btn { 
+
     background: #450a0a; border: 1px solid #ef4444; color: #fca5a5;
+
     margin-top: 5px; font-size: 12px; text-transform: uppercase;
+
 }
+
 .dismiss-btn:hover { background: #991b1b; color: white; border-color:white; }
 
+
+
 /* --- APPROVED POPUP (Green) - NO DISMISS BUTTON --- */
+
 .approved-popup {
+
     position: fixed; top: 15%; left: 50%; transform: translate(-50%, 0); z-index: 9999;
+
     background: #064e3b; border: 1px solid #22c55e; color: #dcfce7; 
+
     padding: 20px 30px; border-radius: 12px;
+
     box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.7);
+
     text-align: center; display: flex; flex-direction: column; gap: 12px;
+
     min-width: 320px; animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+
 }
+
 .approved-popup h2 { 
+
     margin: 0; font-size: 20px; color: #4ade80; 
+
     text-transform: uppercase; letter-spacing: 1px; font-weight: 800;
+
 }
+
 .approved-popup p { margin: 0; font-style: italic; font-size: 16px; color: #fff; font-weight:500; }
 
+
+
 @keyframes bounceIn { 
+
     0% { transform: translate(-50%, -100%) scale(0.5); opacity:0; } 
+
     100% { transform: translate(-50%, 0) scale(1); opacity:1; } 
+
 }
+
+
 
 /* --- FEEDBACK & LEAVE DASHBOARD BOXES --- */
+
 .feedback-box {
+
     border: 1px solid #a855f7; background: #2e1065; color: #e9d5ff;
+
     padding: 15px; border-radius: 8px; margin-bottom: 20px;
+
 }
+
+
 
 .leave-status-box {
+
     border: 1px solid #3b82f6; background: #172554; color: #dbeafe;
+
     padding: 15px; border-radius: 8px; margin-bottom: 20px;
+
     position: relative;
+
 }
+
 .leave-status-approved { border-color: #22c55e; background: #064e3b; color: #dcfce7; }
+
 .leave-status-half { border-color: #eab308; background: #422006; color: #fef08a; }
+
 .leave-status-rejected { border-color: #ef4444; background: #450a0a; color: #fee2e2; }
 
+
+
 </style>
+
 </head>
 
+
+
 <body>
+
 <div class="app">
 
+
+
 <div id="rejectedPopup" class="rejected-popup hidden">
+
     <h2>× REJECTED</h2>
+
     <div class="popup-line"></div>
+
     <p id="rejectedMsg">Admin: "not allowed"</p>
+
     <button class="dismiss-btn" onclick="dismissRejected()">Dismiss</button>
+
 </div>
+
+
 
 <div id="approvedPopup" class="approved-popup hidden">
+
     <h2 id="approvedTitle">✔ APPROVED</h2>
+
     <div class="popup-line"></div>
+
     <p id="approvedMsg">Admin: "ok you can take"</p>
+
 </div>
+
 <div id="mockResultPopup" class="approved-popup hidden">
+
   <h2 id="mockResultTitle">📊 MOCK TEST RESULT</h2>
+
   <div class="popup-line"></div>
+
   <p id="mockResultMsg"></p>
+
 </div>
+
+
 
 <div id="noticePopup" class="approved-popup hidden">
+
     <h2>📢 NEW NOTICE</h2>
+
     <div class="popup-line"></div>
+
     <p id="noticePopupMsg">You have a new notice</p>
+
     <button class="dismiss-btn" onclick="dismissNoticePopup()">View Later</button>
+
 </div>
+
+
 
 <div class="sidebar">
+
   <h2>SECURE WATCHDOG</h2>
 
+
+
   <div id="statusBox" class="status">Logged out</div>
+
   <div id="syncStatus" class="sync-status">Offline</div>
 
+
+
   <div id="studentControls" class="hidden">
+
       <div id="idleBox" class="idleBox hidden">
+
         <div class="timer-container">
+
             <svg class="timer-svg" viewBox="0 0 120 120">
+
                 <circle class="timer-circle-bg" cx="60" cy="60" r="54"></circle>
+
                 <circle id="timerRing" class="timer-circle-fg" cx="60" cy="60" r="54"></circle>
+
             </svg>
+
             <div class="timer-label">
+
                 <div id="idleTime" class="timer-time">30:00</div>
+
                 <div class="timer-sub">Watchdog</div>
+
             </div>
+
         </div>
+
         <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
+
         <div id="timeoutCounter" class="timeout-display">Timeouts: 0</div>
+
       </div>
+
       <button id="noticeBtn" onclick="toggleNoticeBoard()">📢 Notice Board</button>
+
       <button onclick="softRefresh()">🔄 Refresh</button>
+
       <button id="leaveBtn" onclick="requestLeave()">Request Leave</button>
+
       <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
+
       <button id="histBtn" onclick="toggleHistory()" disabled>History</button>
+
       <button onclick="toggleSubjectProgress()" disabled>📘 Subject Progress</button>
 
+
+
       <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
+
   </div>
 
+
+
   <div style="flex-grow:1"></div> 
+
     
+
   <button id="loginBtn" onclick="handleLoginFlow()">Secure Login</button>
+
   <button id="logoutBtn" class="hidden" onclick="forceLogout()">Logout</button>
+
 </div>
+
+
 
 <div class="main">
 
+
+
 <div id="adminBox" class="card hidden" style="border-color: #a855f7;">
+
     <h2 style="color:#a855f7; border-bottom:1px solid #334155; padding-bottom:10px;">ADMINISTRATOR DASHBOARD</h2>
-    <button
-    style="background:#0ea5e9;margin-bottom:10px;width:auto"
-    onclick="openAdminSubjectManager()">
-    📘 Subject List (Global)
-  </button>
+
     <div style="text-align:right; margin-bottom:10px; font-size:12px; color:#4ade80">
+
         ● Live System Active
+
     </div>
+
     <div style="display:grid; grid-template-columns: 2fr 1fr 1fr 2fr 1.5fr; gap:10px; padding:10px; color:#94a3b8; font-size:12px; font-weight:bold; text-transform:uppercase;">
+
         <div>Student ID</div>
+
         <div style="text-align:center">Balance</div>
+
         <div style="text-align:center">Progress</div>
+
         <div style="text-align:center">Status / Watchdog</div>
+
         <div style="text-align:center">Actions</div>
+
     </div>
+
     <div id="studentList">Loading...</div>
+
 </div>
 
-<div id="adminSubjectPopup" class="modal-overlay hidden">
-  <div class="modal-content" style="max-width:420px">
-    <h3 style="color:#38bdf8">📘 Common Subject List</h3>
 
-    <input
-      id="adminSubjectInput"
-      class="nextInput"
-      placeholder="Enter subject name"
-    />
-
-    <button onclick="addAdminSubject()" style="background:#22c55e">
-      ➕ Add Subject
-    </button>
-
-    <hr style="border-color:#334155;margin:15px 0">
-
-    <div id="adminSubjectList"></div>
-
-    <button
-      onclick="closeAdminSubjectManager()"
-      style="margin-top:15px;background:#334155">
-      Close
-    </button>
-  </div>
-</div>
 
 <div id="adminModal" class="modal-overlay hidden">
+
     <div class="modal-content">
+
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+
             <h3 style="margin:0; color:#38bdf8">Student Detailed Records</h3>
+
             <button onclick="closeAdminModal()" style="width:auto; padding:5px 10px; background:#334155">Close</button>
+
         </div>
+
         
+
         <div class="tab-header">
+
             <button class="tab-btn active" onclick="switchAdminTab('logs')">Live Logs</button>
+
             <button class="tab-btn" onclick="switchAdminTab('history')">Performance</button>
+
             <button class="tab-btn" onclick="switchAdminTab('mocks')" style="color:#facc15">Mock Tests</button>
+
             <button class="tab-btn" onclick="switchAdminTab('subjects')" style="color:#a78bfa">Subject View</button>
+
         </div>
+
+
 
         <div id="tabLogs">
+
              <div class="log-row log-header">
+
                 <div>Login</div><div>Logout</div><div>Reason</div><div>Work Completed</div><div>Action</div>
+
             </div>
+
             <div id="modalBodyLogs">Loading...</div>
+
         </div>
+
+
 
         <div id="tabHistory" class="hidden">
+
             <table style="width:100%">
+
                 <thead><tr><th>Date</th><th>Score</th><th>Time</th><th>Rating</th><th>Admin Review</th><th>Action</th></tr></thead>
+
                 <tbody id="modalBodyHistory"></tbody>
+
             </table>
+
         </div>
+
+
 
         <div id="tabMocks" class="hidden">
+
             <h4 style="color:#facc15; margin-bottom:10px;">Last 20 Mock Tests</h4>
+
             <table style="width:100%">
+
                 <thead><tr><th>Date</th><th>Test Name</th><th>Score</th><th>Cutoff</th><th>Status</th><th>Accuracy</th></tr></thead>
+
                 <tbody id="modalBodyMocks"></tbody>
+
             </table>
+
         </div>
+
+
 
         <div id="tabSubjects" class="hidden">
+
             <div style="margin-bottom:10px; display:flex; gap:10px; align-items:center;">
+
                 <label style="color:#94a3b8">Select Subject:</label>
+
                 <select id="adminSubjectSelect" onchange="renderAdminSelectedSubject()" 
+
                     style="padding:8px; background:#020617; color:#e5e7eb; border:1px solid #334155; border-radius:6px; flex-grow:1;">
+
                     <option value="">-- Choose --</option>
+
                 </select>
+
             </div>
+
             <table style="width:100%">
+
                 <thead>
+
                     <tr>
+
                         <th style="width:20%">Date</th>
+
                         <th style="width:40%">Covered</th>
+
                         <th style="width:40%">Uncovered</th>
+
                     </tr>
+
                 </thead>
+
                 <tbody id="modalBodySubjects">
+
                     <tr><td colspan="3" style="text-align:center; color:#64748b">Select a subject above</td></tr>
+
                 </tbody>
+
             </table>
+
         </div>
+
     </div>
+
 </div>
+
+
 
 <div id="studentView">
+
     
+
     <div id="adminFeedbackBox" class="feedback-box hidden">
+
         <h3 style="margin:0 0 5px 0; color:#fff">Admin Daily Review</h3>
+
         <div id="adminFeedbackText" style="font-style:italic"></div>
+
         <button onclick="dismissFeedback()" style="width:auto; margin-top:10px; background:#6b21a8; font-size:11px;">Dismiss</button>
+
     </div>
+
+
 
     <div id="leaveDashboardBox" class="hidden">
+
     </div>
+
     <div id="noticeBoardBox" class="card hidden">
+
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+
     <h3 style="color:#38bdf8">📢 Notice Board</h3>
+
     <button onclick="toggleNoticeBoard()" style="width:auto;padding:5px 15px">
+
       Close
+
     </button>
+
   </div>
+
+
 
   <div id="noticeList" style="font-size:14px;color:#cbd5e1">
+
     No notices available.
+
   </div>
+
 </div>
+
+
 
     <div id="historyBox" class="card hidden">
+
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+
             <h3 style="color:#7dd3fc">History (Last 4 Days)</h3>
+
             <button onclick="toggleHistory()" style="width:auto; padding:5px 15px;">Close</button>
+
         </div>
+
         <table>
+
             <thead>
+
                 <tr>
+
                     <th style="width:15%">Date</th>
+
                     <th style="width:10%">Score</th>
+
                     <th style="width:15%">Time</th>
+
                     <th style="width:15%">Rating</th>
+
                     <th style="width:45%">Covered Subjects</th>
+
                 </tr>
+
             </thead>
+
             <tbody id="historyTable"></tbody>
+
         </table>
+
     </div>
+
+
 
 <div id="subjectProgressBox" class="card hidden">
+
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
+
     <h3 style="color:#38bdf8">Subject Wise Progress</h3>
+
     <button onclick="toggleSubjectProgress()" style="width:auto;padding:5px 15px">
+
       Close
+
     </button>
+
   </div>
+
+
 
   <div style="margin-bottom:12px">
+
     <select id="subjectSelect" style="
+
       padding:8px;
+
       border-radius:6px;
+
       background:#020617;
+
       color:#e5e7eb;
+
       border:1px solid #334155;
+
       width:100%;
+
       cursor:pointer;
+
     " onchange="renderSubjectTable(this.value)">
+
       <option value="">Select Subject</option>
+
     </select>
+
   </div>
+
+
 
   <table style="width:100%">
+
     <thead>
+
       <tr>
+
         <th style="width:20%">Date</th>
+
         <th style="width:40%">Covered Portion</th>
+
         <th style="width:40%">Uncovered / Due Portion</th>
+
         <th style="width:15%">Action</th>
+
       </tr>
+
     </thead>
+
     <tbody id="subjectTableBody">
+
       <tr>
+
         <td colspan="3" style="color:#94a3b8">
+
           Select a subject to view progress
+
         </td>
+
       </tr>
+
     </tbody>
+
   </table>
+
 </div>
+
 <div id="taskBox" class="card hidden">
+
       <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
+
         <div>
+
           <div style="display:flex; justify-content:space-between; align-items:center;">
+
              <h3>Assigned Tasks</h3>
+
              <div id="leaveBalanceDisplay" style="font-size:12px; color:#38bdf8; font-weight:bold; border:1px solid #1e40af; padding:4px 8px; border-radius:4px;">
+
                  Leave Bal: --
+
              </div>
+
           </div>
+
           
+
           <div style="margin-bottom:15px; padding:10px; border:1px dashed #facc15; border-radius:8px; text-align:center; margin-top:10px;">
+
                <button onclick="startMockTestSetup()" style="background:#a16207; width:auto; padding:8px 20px;">Start Mock Test</button>
+
           </div>
+
           <div id="taskList"></div>
+
           <hr style="border-color:#334155; margin:15px 0">
+
           <h4>Extra Work</h4>
+
           <div id="extraList"></div>
+
           <button onclick="addExtra()" style="margin-top:10px">+ Add Extra Work</button>
+
         </div>
+
         <div>
+
           <h3 style="text-align:center">Live Progress</h3>
+
           <div class="speedo">
+
             <div id="needle" class="needle"></div>
+
             <div class="cap"></div>
+
           </div>
+
           <div id="livePercent" class="percent">0%</div>
+
           <div id="liveRating" class="rating">Poor</div>
+
           <div id="liveDetails" class="details"></div>
+
         </div>
+
           <div id="examBox"
+
             style="
+
           margin-top:8px;
+
           padding:10px 12px;
+
           border:1px solid #1e40af;
+
           background:#020617;
+
           border-radius:10px;
+
           display:none;
+
         ">
+
     <div style="
+
       font-size:12px;
+
       font-weight:800;
+
       color:#60a5fa;
+
       margin-bottom:6px;
+
       text-align:left
+
     ">
+
       📘 UPCOMING EXAMS
+
     </div>
+
+
 
     <div id="examList"
+
           style="font-size:13px;color:#e5e7eb">
+
     </div>
+
   </div>
+
     
+
     </div>
+
+
 
     <div id="logBox" class="card hidden">
+
       <h3>Login / Logout Log (Today)</h3>
+
       <table style="width:100%">
+
         <thead>
+
           <tr><th>Login</th><th>Logout</th><th>Reason</th><th>Work Ticked</th></tr>
+
         </thead>
+
         <tbody id="logTable"></tbody>
+
       </table>
+
     </div>
+
+
 
     <div id="nextDayBox" class="card hidden">
+
       <h3>Enter Next Day Tasks</h3>
+
       <div id="nextInputs"></div>
+
       <button onclick="finalDayEnd()">Submit Day End</button>
+
     </div>
 
+
+
     <div id="reportBox" class="card hidden"></div>
+
+</div>
+
+
+
 </div>
 
 </div>
-</div>
+
+
 
 <script type="module">
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+
 import { getDatabase, ref, set, get, child, update, remove, onValue } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-database.js";
+
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged} 
+
 from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 
 
+
+
+
+
 const firebaseConfig = {
+
   apiKey: "AIzaSyD16NhAUgo3sgag01nZPZGHXjMvAZZ0rDE",
+
   authDomain: "focus-dashboard-5965a.firebaseapp.com",
+
   databaseURL: "https://focus-dashboard-5965a-default-rtdb.firebaseio.com",
+
   projectId: "focus-dashboard-5965a",
+
   storageBucket: "focus-dashboard-5965a.appspot.com",
+
   messagingSenderId: "337204334808",
+
   appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
+
 };
+
+
 
 const app = initializeApp(firebaseConfig);
+
 const db = getDatabase(app);
+
 const auth = getAuth(app);
 
+
+
 onAuthStateChanged(auth, async (user) => {
+
     // -------------------------------------------------------------------
+
     // 🔒 CHECK FOR LOCKED REPORT FIRST (FIXED LAYOUT)
+
     // -------------------------------------------------------------------
+
     const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
+
     
+
    if (lockedReport) {
 
+
+
     // Reset everything safely
+
     document.body.innerHTML = `
+
       <div style="
+
         min-height:100vh;
+
         display:flex;
+
         justify-content:center;
+
         align-items:center;
+
         background:#020617;
+
         padding:20px;
+
       ">
+
         <div style="width:100%;max-width:520px">
+
           ${lockedReport}
+
           <div style="margin-top:15px;text-align:center">
+
             <button 
+
               onclick="dismissReportLock()" 
+
               style="
+
                 padding:12px 20px;
+
                 background:#0ea5e9;
+
                 border:none;
+
                 border-radius:8px;
+
                 color:white;
+
                 font-size:14px;
+
                 cursor:pointer;
+
               ">
+
               Login & Start New Day
+
             </button>
+
           </div>
+
         </div>
+
       </div>
+
     `;
+
     return;
+
 }
 
+
+
     // -------------------------------------------------------------------
+
     // NORMAL FLOW (Reset Layout if not locked)
+
     // -------------------------------------------------------------------
+
     // Reset Grid Layout
+
     document.querySelector(".app").style.display = "grid"; 
+
     document.querySelector(".main").style.width = "auto";
+
     document.querySelector(".main").style.display = "block"; // Reset from flex
 
+
+
     const sidebar = document.querySelector(".sidebar");
+
     if(sidebar) sidebar.classList.remove("hidden");
 
+
+
     if (user) {
+
         currentUser = user;
+
         document.getElementById("syncStatus").innerText = "Session Restored";
 
+
+
         if (user.email === ADMIN_EMAIL) {
+
             initAdminDashboard();
+
         } else {
+
             initStudentDashboard();
+
         }
+
     } else {
+
         currentUser = null;
+
         document.getElementById("statusBox").innerText = "Logged out";
+
         document.getElementById("loginBtn").classList.remove("hidden");
+
         document.getElementById("logoutBtn").classList.add("hidden");
+
         
+
         document.getElementById("studentView").classList.add("hidden");
+
         document.getElementById("reportBox").classList.add("hidden");
+
     }
+
 });
 
+
+
 // --- GLOBAL VARIABLES ---
+
 let currentUser = null; 
+
 let MOCK_POPUP_ACTIVE = false;
+
 let idleTimer = null;
+
 let targetTime = null;
+
 let totalDuration = 0;
+
 let penalty = 0;
+
 let idleStrikes = 0; 
+
 let dailyTimeouts = 0;
+
 let lastApprovedState = false; 
+
 const ADMIN_EMAIL = "admin@study.com";
+
 let currentAdminSubjectData = {}; // Stores the loaded student's subject data
 
+
+
 // --- NEW KEY FOR SUBJECT PROGRESS ---
+
 const SUBJECT_TABLE_KEY = () => key("SUBJECT_WISE_TABLE");
 
+
+
 function isAdmin() {
+
     return currentUser && currentUser.email === ADMIN_EMAIL;
+
 }
+
+
 
 // --- WHITELIST ---
+
 const ALLOWED_EMAILS = [
+
     "admin@study.com",
+
     "soham@study.com",
+
     "soham@test.com",
+
     "priyanjali@study.com"
+
 ];
 
+
+
 const now = () => new Date().toLocaleString();
+
 const key = k => (currentUser ? currentUser.uid : "GUEST") + "_" + k;
 
+
+
 // --- AUTHENTICATION FLOW ---
+
 async function handleLoginFlow() {
+
     const email = prompt("Enter Authorized Email:");
+
     if (!email) return;
 
+
+
     if (!ALLOWED_EMAILS.includes(email.trim().toLowerCase())) {
+
         alert("ACCESS DENIED: You are not an enrolled student.");
+
         return;
+
     }
+
+
 
     const password = prompt("Enter Password:");
+
     if (!password) return;
 
+
+
     try {
+
         document.getElementById("syncStatus").innerText = "Authenticating...";
+
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
         currentUser = userCredential.user;
+
         
+
         if (currentUser.email === ADMIN_EMAIL) {
+
             initAdminDashboard();
+
         } else {
+
             initStudentDashboard();
+
         }
+
     } catch (error) {
+
         if(error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
+
             if(confirm("User not found. Register new account for this email?")) {
+
                 try {
+
                     const newUser = await createUserWithEmailAndPassword(auth, email, password);
+
                     currentUser = newUser.user;
+
                     initStudentDashboard();
+
                 } catch (createErr) {
+
                     alert("Registration failed: " + createErr.message);
+
                 }
+
             }
+
         } else {
+
             alert("Login Failed: " + error.message);
+
         }
+
         document.getElementById("syncStatus").innerText = "Auth Failed";
+
     }
+
 }
+
 function showMockResultPopup(resultText) {
+
   MOCK_POPUP_ACTIVE = true;
 
+
+
   const popup = document.getElementById("mockResultPopup");
+
   const msg = document.getElementById("mockResultMsg");
 
+
+
   msg.innerText = resultText;
+
   popup.classList.remove("hidden");
 
+
+
   setTimeout(() => {
+
     popup.classList.add("hidden");
+
     MOCK_POPUP_ACTIVE = false;
+
     location.reload();
+
   }, 8000); // popup visible for 8 seconds
+
 }
+
+
 
 window.rejectSubjectDelete = async function(uid, requestKey) {
+
   try {
+
     // REJECT LOGIC: Only remove the request. Do NOT touch the subject table.
+
     await remove(ref(db, `users/${uid}/SUBJECT_DELETE_REQUESTS/${requestKey}`));
+
     alert("Request REJECTED. The entry remains in the student's table.");
+
   } catch (e) {
+
     alert("Error rejecting: " + e.message);
+
   }
+
 };
+
 function forceLogout() {
+
     if(confirm("Are you sure you want to Logout?")) {
+
         signOut(auth).then(() => location.reload());
+
     }
+
 }
+
 window.logoutFromTermination = function () {
+
   signOut(auth).then(() => {
+
     location.reload();
+
   });
+
 };
 
+
+
 // ==========================================
+
 // ADMIN DASHBOARD LOGIC (REAL-TIME)
+
 // ==========================================
+
 async function initAdminDashboard() {
+
     document.getElementById("statusBox").innerText = "ADMINISTRATOR";
+
     document.getElementById("statusBox").style.borderColor = "#a855f7";
+
     document.getElementById("statusBox").style.color = "#d8b4fe";
+
     
+
     document.getElementById("loginBtn").classList.add("hidden");
+
     document.getElementById("logoutBtn").classList.remove("hidden");
+
     document.getElementById("studentView").classList.add("hidden");
+
     document.getElementById("studentControls").classList.add("hidden");
+
     document.getElementById("adminBox").classList.remove("hidden");
+
     
+
     document.getElementById("syncStatus").innerText = "Admin Access Granted";
+
     cleanupDeletedData(); // Run soft-delete cleanup
+
     startAdminListener();
-}
-// ===============================
-// GLOBAL SUBJECT MASTER (ADMIN)
-// ===============================
-function openAdminSubjectManager() {
-  document.getElementById("adminSubjectPopup").classList.remove("hidden");
-  loadAdminSubjects();
+
 }
 
-function closeAdminSubjectManager() {
-  document.getElementById("adminSubjectPopup").classList.add("hidden");
+// ==========================================
+
+// BULK UPLOAD LOGIC
+
+// ==========================================
+
+
+
+let parsedExamData = []; // Stores the questions temporarily
+
+
+
+// 1. LOCK & PREVIEW FUNCTION
+
+function lockAndPreview() {
+
+    const rawQ = document.getElementById('rawQuestions').value;
+
+    const rawA = document.getElementById('rawAnswers').value;
+
+    
+
+    if(!rawQ || !rawA) {
+
+        alert("Please fill in both Questions and Answer Key!");
+
+        return;
+
+    }
+
+
+
+    parsedExamData = []; // Reset storage
+
+    
+
+    // Split text by blank lines (Detects separate question blocks)
+
+    const questionsBlock = rawQ.split(/\n\s*\n/); 
+
+    
+
+    questionsBlock.forEach((block) => {
+
+        block = block.trim();
+
+        if(!block) return;
+
+
+
+        // Extract Question Number & Text
+
+        const qMatch = block.match(/^(\d+)\.\s*([\s\S]*?)(?=\n?[a-d]\))/i);
+
+        
+
+        // Extract Options a,b,c,d
+
+        const optionsMatch = {
+
+            a: block.match(/a\)\s*(.*)/i),
+
+            b: block.match(/b\)\s*(.*)/i),
+
+            c: block.match(/c\)\s*(.*)/i),
+
+            d: block.match(/d\)\s*(.*)/i)
+
+        };
+
+
+
+        if (qMatch) {
+
+            let qObj = {
+
+                id: qMatch[1], // e.g. "1"
+
+                text: qMatch[2].trim().replace(/\n/g, "<br>"),
+
+                options: {
+
+                    a: optionsMatch.a ? optionsMatch.a[1].trim() : "Missing",
+
+                    b: optionsMatch.b ? optionsMatch.b[1].trim() : "Missing",
+
+                    c: optionsMatch.c ? optionsMatch.c[1].trim() : "Missing",
+
+                    d: optionsMatch.d ? optionsMatch.d[1].trim() : "Missing"
+
+                },
+
+                correct: null // Answer key fills this later
+
+            };
+
+            parsedExamData.push(qObj);
+
+        }
+
+    });
+
+
+
+    // Parse Answer Key (e.g., "1-b, 2-c" or "1.b 2.c")
+
+    const answers = rawA.split(/[\n,]\s*/); 
+
+    
+
+    answers.forEach(ans => {
+
+        const match = ans.match(/(\d+)[\s\.\-]*([a-d])/i);
+
+        if(match) {
+
+            const qNum = match[1];
+
+            const correctOpt = match[2].toLowerCase();
+
+            
+
+            // Find matching question and update answer
+
+            const targetQ = parsedExamData.find(q => q.id == qNum);
+
+            if(targetQ) {
+
+                targetQ.correct = correctOpt;
+
+            }
+
+        }
+
+    });
+
+
+
+    renderPreviewTable();
+
 }
 
-async function loadAdminSubjects() {
-  const box = document.getElementById("adminSubjectList");
-  const snap = await get(ref(db, "SUBJECT_MASTER"));
-  const subjects = snap.exists() ? snap.val() : [];
 
-  if (subjects.length === 0) {
-    box.innerHTML = "<div style='color:#94a3b8'>No subjects added</div>";
-    return;
-  }
 
-  box.innerHTML = subjects.map((s, i) => `
-    <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-      <span>${s}</span>
-      <button
-        style="background:#7f1d1d;font-size:11px"
-        onclick="removeAdminSubject(${i})">
-        Remove
-      </button>
-    </div>
-  `).join("");
+// 2. RENDER TABLE
+
+function renderPreviewTable() {
+
+    const tbody = document.getElementById('previewBody');
+
+    tbody.innerHTML = "";
+
+    let invalidCount = 0;
+
+
+
+    parsedExamData.forEach(q => {
+
+        let row = `<tr>
+
+            <td>${q.id}</td>
+
+            <td>${q.text.substring(0, 50)}...</td>
+
+            <td>
+
+                A: ${q.options.a.substring(0, 15)}... <br>
+
+                B: ${q.options.b.substring(0, 15)}...
+
+            </td>
+
+            <td style="font-weight:bold; color:${q.correct ? 'green' : 'red'}">
+
+                ${q.correct ? q.correct.toUpperCase() : 'MISSING!'}
+
+            </td>
+
+        </tr>`;
+
+        tbody.innerHTML += row;
+
+        
+
+        if(!q.correct) invalidCount++;
+
+    });
+
+
+
+    document.getElementById('previewStats').innerHTML = `
+
+        <strong>Total Questions:</strong> ${parsedExamData.length} | 
+
+        <strong>Errors:</strong> ${invalidCount} (If > 0, check your answer key)
+
+    `;
+
+
+
+    // Swap Views
+
+    document.querySelector('.bulk-container').classList.add('hidden');
+
+    document.getElementById('previewArea').classList.remove('hidden');
+
 }
 
-async function addAdminSubject() {
-  const input = document.getElementById("adminSubjectInput");
-  const val = input.value.trim();
-  if (!val) return;
 
-  const refPath = ref(db, "SUBJECT_MASTER");
-  const snap = await get(refPath);
-  const subjects = snap.exists() ? snap.val() : [];
 
-  // ✅ HARD LIMIT: ADMIN MAX 70 SUBJECTS
-  if (subjects.length >= 70) {
-    alert("Maximum 70 subjects allowed.");
-    return;
-  }
+// 3. EDIT AGAIN
 
-  if (subjects.includes(val)) {
-    alert("Subject already exists");
-    return;
-  }
+function editAgain() {
 
-  subjects.push(val);
-  await set(refPath, subjects);
+    document.querySelector('.bulk-container').classList.remove('hidden');
 
-  input.value = "";
-  loadAdminSubjects();
+    document.getElementById('previewArea').classList.add('hidden');
+
 }
 
 
-async function removeAdminSubject(index) {
-  const refPath = ref(db, "SUBJECT_MASTER");
-  const snap = await get(refPath);
-  if (!snap.exists()) return;
 
-  const subjects = snap.val();
-  subjects.splice(index, 1);
-  await set(refPath, subjects);
-  loadAdminSubjects();
+function clearBulkForm() {
+
+    document.getElementById('rawQuestions').value = "";
+
+    document.getElementById('rawAnswers').value = "";
+
+}
+
+
+
+// 4. PUBLISH TO FIREBASE
+
+function finalPublish() {
+
+    const title = document.getElementById('bulkExamTitle').value;
+
+    const duration = document.getElementById('bulkDuration').value;
+
+    const marks = document.getElementById('bulkMarks').value;
+
+
+
+    if(!title || !duration) {
+
+        alert("Please enter Exam Title and Duration!");
+
+        return;
+
+    }
+
+
+
+    // Create Final Object
+
+    const examPayload = {
+
+        title: title,
+
+        duration: parseInt(duration),
+
+        marksPerQ: parseInt(marks),
+
+        questions: parsedExamData,
+
+        createdAt: firebase.database.ServerValue.TIMESTAMP,
+
+        active: true
+
+    };
+
+
+
+    // Upload
+
+    const examRef = firebase.database().ref('exams').push();
+
+    examRef.set(examPayload)
+
+    .then(() => {
+
+        alert("✅ Exam Published Successfully!");
+
+        location.reload(); 
+
+    })
+
+    .catch((error) => {
+
+        alert("Error: " + error.message);
+
+    });
+
 }
 
 async function cleanupDeletedData() {
+
     // 🔒 HARD GUARD: do not run unless admin
+
     if (!currentUser || currentUser.email !== ADMIN_EMAIL) return;
+
+
 
     const RETENTION_MS = 5 * 24 * 60 * 60 * 1000;
 
+
+
     try {
+
         const snapshot = await get(ref(db, 'users'));
+
         if (!snapshot.exists()) return;
+
+
 
         const users = snapshot.val();
 
+
+
         for (const uid of Object.keys(users)) {
+
             const u = users[uid];
+
             if (!u.LOGS) continue;
 
+
+
             let logs = JSON.parse(u.LOGS);
+
             const originalLen = logs.length;
 
+
+
             logs = logs.filter(
+
                 l => !l.deleted || (Date.now() - l.deletedTs < RETENTION_MS)
+
             );
 
+
+
             if (logs.length !== originalLen) {
+
                 await update(ref(db, `users/${uid}`), {
+
                     LOGS: JSON.stringify(logs)
+
                 });
+
             }
+
         }
+
     } catch (e) {
+
         console.error("ADMIN CLEANUP ERROR:", e); // This will show the real server error
+
         alert("Admin Cleanup Failed: " + e.message);
+
     }
+
 }
+
+
+
 
 
 function startAdminListener() {
+
     const listDiv = document.getElementById("studentList");
+
     listDiv.innerHTML = "Listening for live data...";
+
     
+
     onValue(ref(db, 'users'), (snapshot) => {
+
         if (snapshot.exists()) {
+
             const users = snapshot.val();
+
             let html = "";
+
             
+
             Object.keys(users).forEach(uid => {
+
                 const u = users[uid];
+
                 const email = u.profile ? u.profile.email : "Unknown User";
+
                 
+
                 if (email === "admin@study.com") return; // Skip Admin
 
+
+
                 // 1. Lockout Status
+
                 let isLocked = false;
+
                 if(u.lockout && u.lockout > Date.now()) isLocked = true;
 
+
+
                 // 2. Alert Status
+
                 let isAlerted = u.activeAlert ? true : false;
 
+
+
                 // 3. Progress Stats
+
                 let progHtml = `<div style="color:#64748b; font-size:11px;">No Data</div>`;
+
                 if(u.stats) {
+
                     let color = "#ef4444";
+
                     if(u.stats.percent >= 40) color = "#facc15";
+
                     if(u.stats.percent >= 80) color = "#4ade80";
+
                     progHtml = `
+
                         <div style="font-size:14px; font-weight:bold; color:${color}">
+
                             ${u.stats.percent}% <span style="font-size:11px; color:#cbd5e1">(${u.stats.rating})</span>
+
                         </div>
+
                         <div class="prog-bar"><div class="prog-fill" style="width:${u.stats.percent}%; background:${color}"></div></div>
+
                     `;
+
                 }
+
                 
+
                 // Leave Balance
+
                 let leaveBalance = u.leaveBalance !== undefined ? u.leaveBalance : 6;
+
                 let balanceHtml = `<div style="text-align:center; font-weight:bold; color:#38bdf8">${leaveBalance} Days</div>`;
 
+
+
                 // 4. Leave Status
+
                 let leaveBadge = `<span style="color:#64748b; font-size:11px;">Active Student</span>`;
+
                 let leaveActions = "";
+
                 let clearBtn = "";
+
                 
+
                 if (u.leaveRequest && u.leaveRequest.status === "Pending") {
+
                     leaveBadge = `
+
                     <span class="admin-badge badge-yellow">
+
                     REQ: ${u.leaveRequest.dates}
+
                     ${u.leaveRequest.medical ? " (MEDICAL)" : ""}
+
                     </span>
+
                     <div style="font-size:10px; color:#fde047; margin-top:3px;">
+
                     ${u.leaveRequest.reason}
+
                     </div>`;
 
+
+
                     leaveActions = `
+
                         <button style="background:#166534" onclick="handleLeave('${uid}', 'Approved', ${leaveBalance})">Approve</button>
+
                         <button style="background:#d97706" onclick="handleLeave('${uid}', 'Half Approved', ${leaveBalance})">Half</button>
+
                         <button style="background:#991b1b" onclick="handleLeave('${uid}', 'Rejected', ${leaveBalance})">Reject</button>
+
                     `;
+
                 } else if (u.leaveRequest) {
+
                     const s = u.leaveRequest.status;
+
                     const c = s === "Approved" ? "#86efac" : "#fca5a5";
+
                     leaveBadge = `<span style="color:${c}; font-size:11px;">On Leave (${s})</span>`;
+
                     clearBtn = `<button onclick="clearLeave('${uid}')" style="background:#334155; padding:2px 6px; font-size:10px; margin-left:5px; width:auto; display:inline-block">Clear</button>`;
+
                 }
+
+
 
                 if(isLocked) {
+
                     const timeLeft = Math.ceil((u.lockout - Date.now())/1000/60);
+
                     leaveBadge += ` <span class="admin-badge badge-red">LOCKED (${timeLeft}m)</span>`;
+
                 }
+
                 if(isAlerted) {
+
                     leaveBadge += ` <span class="admin-badge badge-red" style="background:#450a0a; border:1px solid #ef4444">⚠ REJECT SENT</span>`;
+
                 }
+
+
 
                 // 5. Watchdog Timeout Display
+
                 let watchdogHtml = "";
+
                 const timeouts = u.DAILY_TIMEOUTS || 0;
+
                 if(timeouts > 0) {
+
                       watchdogHtml = `<div style="margin-top:4px;"><span class="admin-badge badge-red">TIMEOUTS: ${timeouts}</span></div>`;
+
                 } else {
+
                       watchdogHtml = `<div style="margin-top:4px;"><span class="admin-badge badge-green">WATCHDOG: OK</span></div>`;
+
                 }
+
+
 
                 // --- NEW LOGIC: CHECK FOR DELETE REQUESTS ---
+
                 let deleteReqBtn = "";
+
                 if (u.SUBJECT_DELETE_REQUESTS) {
+
                     const reqCount = Object.keys(u.SUBJECT_DELETE_REQUESTS).length;
+
                     if (reqCount > 0) {
+
                          // Blinking Red Button
+
                          deleteReqBtn = `
+
                             <button onclick="viewSubjectDeleteRequests('${uid}')" 
+
                                 style="background:#be123c; border:1px solid #fca5a5; margin-top:4px; width:100%; animation: pulse-red 1.5s infinite;">
+
                                 🗑 DELETE REQUESTS (${reqCount})
+
                             </button>
+
                          `;
+
                     }
+
                 }
 
+
+
                 // 6. Render Row
+
                 html += `
+
                 <div class="admin-row">
+
                     <div>
+
                         <div style="font-weight:bold; color:#fff; word-break:break-all">${email}</div>
+
                         <div style="font-size:10px; color:#64748b">ID: ${uid.substring(0,6)}...</div>
+
                     </div>
+
                     
+
                     ${balanceHtml}
 
-                    <div style="text-align:center">
-                        ${progHtml}
-                    </div>
+
 
                     <div style="text-align:center">
-                        ${leaveBadge}
-                        ${clearBtn}
-                        ${watchdogHtml}
+
+                        ${progHtml}
+
                     </div>
+
+
+
+                    <div style="text-align:center">
+
+                        ${leaveBadge}
+
+                        ${clearBtn}
+
+                        ${watchdogHtml}
+
+                    </div>
+
+
 
                     <div class="admin-btn-group">
+
                         ${leaveActions}
+
                         ${deleteReqBtn}  <button style="background:#be123c; margin-top:4px;" onclick="sendWarning('${uid}')">⚠ Warn</button>
+
                         <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
+
                         <button style="background:#ea580c; margin-top:4px;" onclick="terminateStudent('${uid}')">Lock / Terminate</button>
+
                         <button style="background:#0891b2; margin-top:4px;" onclick="resetLeaveBalance('${uid}')">Reset Balance (6)</button>
+
                         <button style="background:#0ea5e9; margin-top:4px;" onclick="sendNotice('${uid}')">📢 Notice</button>
+
                         <button style="background:#1e40af; margin-top:4px;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
 
+
+
                         <button
+
                           style="background:#991b1b; margin-top:4px"
+
                           onclick="clearSingleSubject('${uid}')">
+
                           🗑 Delete ONE Subject
+
                         </button>
 
+
+
                         ${isLocked ? `<button style="background:#22c55e; margin-top:4px;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
+
                     </div>
+
                 </div>`;
+
             });
+
             
+
             listDiv.innerHTML = html || "No students found.";
+
         } else {
+
             listDiv.innerHTML = "No user data available.";
+
         }
+
     });
+
 }
+
 // --- ADMIN WARNING SYSTEM (STRICT CONFIRM) ---
+
 // --- ADMIN NOTICE SYSTEM ---
+
 window.sendNotice = async function (uid) {
+
   if (!isAdmin()) {
+
     alert("ACCESS DENIED: Only Admin can send notices.");
+
     return;
+
   }
+
+
 
   const title = prompt("NOTICE TITLE:", "IMPORTANT");
+
   if (!title) return;
 
+
+
   const message = prompt("NOTICE MESSAGE:");
+
   if (!message) return;
 
+
+
   const daysInput = prompt(
+
     "How many days should this notice stay?\nLeave blank = auto delete next day",
+
     "1"
+
   );
 
+
+
   let expiry = Date.now() + 24 * 60 * 60 * 1000;
+
   if (daysInput && !isNaN(daysInput)) {
+
     expiry = Date.now() + (parseInt(daysInput) * 24 * 60 * 60 * 1000);
+
   }
 
+
+
   const noticeData = {
+
     title,
+
     message,
+
     time: Date.now(),
+
     expiry
+
   };
 
+
+
   const noticeRef = ref(db, `users/${uid}/NOTICES`);
+
   const snap = await get(noticeRef);
+
   let existing = snap.exists() ? snap.val() : {};
 
+
+
   // keep max 5 notices
+
   const keys = Object.keys(existing);
+
   if (keys.length >= 5) delete existing[keys[0]];
 
+
+
   existing[Date.now()] = noticeData;
+
   await set(noticeRef, existing);
 
+
+
   alert("Notice published successfully.");
+
 };
 
+
+
 // --- NEW ADMIN FUNCTION: CLEAR SUBJECT PROGRESS ---
+
 window.clearSubjectProgress = async function(uid) {
+
   if (!isAdmin()) return;
+
+
 
   if (!confirm("ALL CLEAR subject-wise progress for this student?")) return;
 
+
+
   try {
+
     await remove(ref(db, `users/${uid}/SUBJECT_WISE_TABLE`));
+
     alert("Subject progress cleared successfully.");
+
   } catch (e) {
+
     alert("Failed to clear subject progress.");
+
   }
+
 };
+
   window.clearSingleSubject = async function(uid) {
+
   if (!isAdmin()) return;
 
+
+
   const subject = prompt(
+
     "Enter EXACT subject name to delete:\n(example: Physics)"
+
   );
+
   if (!subject) return;
+
+
 
   if (!confirm(`Delete entire subject "${subject}" for this student?`)) return;
 
+
+
   try {
+
     const snap = await get(ref(db, `users/${uid}/SUBJECT_WISE_TABLE`));
+
     if (!snap.exists()) {
+
       alert("No subject data found.");
+
       return;
+
     }
+
+
 
     const data = JSON.parse(snap.val());
 
+
+
     if (!data[subject]) {
+
       alert("Subject not found.");
+
       return;
+
     }
+
+
 
     delete data[subject]; // 🔥 ONLY THIS SUBJECT
 
+
+
     await update(ref(db, `users/${uid}`), {
+
       SUBJECT_WISE_TABLE: JSON.stringify(data)
+
     });
 
+
+
     alert(`Subject "${subject}" deleted successfully.`);
+
   } catch (e) {
+
     alert("Subject delete failed.");
+
   }
+
 };
+
+
 
 window.approveSubjectDelete = async function(uid, subject, rowId) {
+
   try {
+
     // 1. Get current table
+
     const snap = await get(ref(db, `users/${uid}/SUBJECT_WISE_TABLE`));
+
     if (snap.exists()) {
+
        const data = JSON.parse(snap.val());
+
        
+
        // 2. Filter out the specific row
+
        if (data[subject]) {
+
            data[subject] = data[subject].filter(r => r.id !== rowId);
+
            
+
            // 3. Save new table
+
            await update(ref(db, `users/${uid}`), {
+
              SUBJECT_WISE_TABLE: JSON.stringify(data)
+
            });
+
        }
+
     }
 
+
+
     // 4. IMPORTANT: Remove the request from the "Inbox"
+
     // Note: We use String(rowId) because that is how we saved the key
+
     await remove(ref(db, `users/${uid}/SUBJECT_DELETE_REQUESTS/${String(rowId)}`));
 
+
+
     alert("Entry deleted successfully.");
+
     
+
   } catch (e) {
+
     alert("Delete failed: " + e.message);
+
   }
+
 };
+
 window.viewSubjectDeleteRequests = async function(uid) {
+
   if (!isAdmin()) return;
+
+
 
   const snap = await get(ref(db, `users/${uid}/SUBJECT_DELETE_REQUESTS`));
 
+
+
   if (!snap.exists()) {
+
     alert("No active delete requests for this student.");
+
     return;
+
   }
+
+
 
   const reqs = snap.val();
 
+
+
   // Loop through requests
+
   for (const [key, r] of Object.entries(reqs)) {
+
       
+
       // STEP 1: Ask to APPROVE
+
       const doApprove = confirm(
+
           `DELETE REQUEST PENDING\n\n` +
+
           `Subject: ${r.subject}\n` +
+
           `Reason: ${r.reason}\n` +
+
           `Date: ${new Date(r.time).toLocaleDateString()}\n\n` +
+
           `[OK] = APPROVE (Delete the Data)\n` +
+
           `[CANCEL] = Go to Reject Option`
+
       );
 
+
+
       if (doApprove) {
+
           // Admin clicked OK -> Delete the data
+
           await approveSubjectDelete(uid, r.subject, r.rowId);
+
       } else {
+
           // STEP 2: Ask to REJECT
+
           const doReject = confirm(
+
               `REJECT REQUEST?\n\n` +
+
               `You clicked Cancel.\n` +
+
               `Do you want to REJECT this request (remove it from inbox)?\n\n` +
+
               `[OK] = YES, REJECT (Keep Data, Clear Request)\n` +
+
               `[CANCEL] = NO (Do nothing, keep pending)`
+
           );
 
+
+
           if (doReject) {
+
               // Admin clicked OK -> Clear the request only
+
               await rejectSubjectDelete(uid, key);
+
           }
+
       }
+
   }
+
 };
+
+
+
 
 
 window.sendWarning = async function(uid) {
+
     const msg = prompt("Enter REJECT/WARNING Message for Student:", "not allowed");
+
     if(!msg) return;
+
+
 
     if(!confirm(`CONFIRM ACTION AT A GLANCE:\n\nSend Warning: "${msg}"\nTo Student ID: ${uid}?\n\nThis will trigger the Red Alert on their screen immediately.`)) return;
 
+
+
     try {
+
         await update(ref(db, `users/${uid}`), { activeAlert: msg });
+
         alert("Warning sent. Student must dismiss it.");
+
     } catch(e) { alert("Error sending warning: " + e.message); }
+
 };
+
 window.setExamSchedule = async function (uid) {
 
+
+
   const userRef = ref(db, `users/${uid}/UPCOMING_EXAMS`);
+
   const snap = await get(userRef);
+
+
 
   let exams = snap.exists() ? snap.val() : [];
 
+
+
   // -------- MENU --------
+
   let menu = "Choose option:\n";
+
   menu += "1. Add new exam\n";
+
   menu += "2. Remove existing exam\n";
+
   menu += "Cancel to exit";
 
+
+
   const choice = prompt(menu, "1");
+
   if (!choice) return;
 
+
+
   // ===== OPTION 1: ADD =====
+
   if (choice === "1") {
 
+
+
     if (exams.length >= 8) {
+
       alert("Maximum 8 exams allowed.");
+
       return;
+
     }
+
+
 
     const name = prompt("Enter exam name:");
+
     if (!name) return;
 
+
+
     const dateStr = prompt("Enter exam date (YYYY-MM-DD):");
+
     if (!dateStr) return;
 
+
+
     const examTime = new Date(dateStr + "T00:00:00").getTime();
+
     if (isNaN(examTime)) {
+
       alert("Invalid date format.");
+
       return;
+
     }
+
+
 
     exams.push({ name, date: examTime });
+
     await set(userRef, exams);
+
+
 
     alert(`Exam added (${exams.length}/8).`);
+
   }
+
+
 
   // ===== OPTION 2: REMOVE =====
+
   else if (choice === "2") {
 
+
+
     if (exams.length === 0) {
+
       alert("No exams to remove.");
+
       return;
+
     }
+
+
 
     let list = "Select exam number to remove:\n\n";
+
     exams.forEach((e, i) => {
+
       const d = new Date(e.date).toISOString().slice(0, 10);
+
       list += `${i + 1}. ${e.name} (${d})\n`;
+
     });
 
+
+
     const index = prompt(list, "1");
+
     if (!index) return;
 
+
+
     const idx = parseInt(index) - 1;
+
     if (idx < 0 || idx >= exams.length) {
+
       alert("Invalid selection.");
+
       return;
+
     }
 
+
+
     const removed = exams.splice(idx, 1);
+
     await set(userRef, exams);
 
+
+
     alert(`Removed exam: ${removed[0].name}`);
+
   }
 
+
+
   else {
+
     alert("Invalid option.");
+
   }
+
 };
+
+
+
 
 
 // --- ADMIN MODAL & HISTORY INSPECTOR ---
+
 window.currentAdminUid = null;
 
+
+
 window.openAdminModal = async function(uid, email) {
+
     window.currentAdminUid = uid;
+
     const modal = document.getElementById("adminModal");
+
     
+
     // Reset Views
+
     document.getElementById("modalBodyLogs").innerHTML = "Loading...";
+
     document.getElementById("modalBodyHistory").innerHTML = "Loading...";
+
     document.getElementById("modalBodyMocks").innerHTML = "Loading...";
+
     document.getElementById("modalBodySubjects").innerHTML = ""; // Clear table
+
     
+
     // Open Modal & Default Tab
+
     modal.classList.remove("hidden");
+
     window.switchAdminTab('logs');
 
+
+
     try {
+
         const snapshot = await get(child(ref(db), `users/${uid}`));
+
         const user = snapshot.val() || {};
+
         
+
         // 1. Logs
+
         let logs = JSON.parse(user.LOGS || "[]");
+
         renderAdminLogs(uid, logs);
 
+
+
         // 2. History
+
         let history = JSON.parse(user.HISTORY || "[]");
+
         renderAdminHistory(uid, history);
 
+
+
         // 3. Mock Tests
+
         let mocks = JSON.parse(user.MOCK_LOGS || "[]");
+
         renderMockLogs(uid, mocks);
 
+
+
         // 4. NEW: Subjects
+
         window.currentAdminSubjectData = JSON.parse(user.SUBJECT_WISE_TABLE || "{}");
+
         initAdminSubjectDropdown(); // Call helper to fill dropdown
 
+
+
     } catch(e) {
+
         document.getElementById("modalBodyLogs").innerHTML = "Error loading data: " + e.message;
+
     }
+
 };
+
   // Populate the dropdown with subjects found in the student's data
+
 window.initAdminSubjectDropdown = function() {
+
     const select = document.getElementById("adminSubjectSelect");
+
     select.innerHTML = `<option value="">-- Select Subject --</option>`;
+
     
+
     const subjects = Object.keys(window.currentAdminSubjectData);
+
     
+
     if (subjects.length === 0) {
+
         select.innerHTML = `<option value="">No Subject Data Found</option>`;
+
         return;
+
     }
+
+
 
     subjects.forEach(sub => {
+
         const opt = document.createElement("option");
+
         opt.value = sub;
+
         opt.innerText = sub;
+
         select.appendChild(opt);
+
     });
+
 };
+
+
 
 // Render table when Admin selects a subject
+
 window.renderAdminSelectedSubject = function() {
+
     const subject = document.getElementById("adminSubjectSelect").value;
+
     const tbody = document.getElementById("modalBodySubjects");
+
     
+
     if (!subject || !window.currentAdminSubjectData[subject]) {
+
         tbody.innerHTML = `<tr><td colspan="3" style="text-align:center; color:#64748b">Select a subject to view details</td></tr>`;
+
         return;
+
     }
+
+
 
     const rows = window.currentAdminSubjectData[subject].slice().reverse(); // Newest first
+
     
+
     let html = "";
+
     rows.forEach(row => {
+
         html += `
+
         <tr>
+
             <td style="color:#94a3b8">${row.date}</td>
+
             <td style="white-space:pre-wrap;">${row.covered}</td>
+
             <td style="white-space:pre-wrap; color:#fca5a5">${row.uncovered}</td>
+
         </tr>`;
+
     });
+
     
+
     tbody.innerHTML = html;
+
 };
 
+
+
 window.switchAdminTab = function(tabName) {
+
     const tabLogs = document.getElementById("tabLogs");
+
     const tabHist = document.getElementById("tabHistory");
+
     const tabMocks = document.getElementById("tabMocks");
+
     const tabSub = document.getElementById("tabSubjects"); // NEW
+
     const btns = document.querySelectorAll(".tab-btn");
+
     
+
     // Reset all
+
     btns.forEach(b => b.classList.remove("active"));
+
     tabLogs.classList.add("hidden");
+
     tabHist.classList.add("hidden");
+
     tabMocks.classList.add("hidden");
+
     tabSub.classList.add("hidden"); // NEW
+
     
+
     if (tabName === 'logs') {
+
         tabLogs.classList.remove("hidden");
+
         btns[0].classList.add("active");
+
     } else if (tabName === 'history') {
+
         tabHist.classList.remove("hidden");
+
         btns[1].classList.add("active");
+
     } else if (tabName === 'mocks') {
+
         tabMocks.classList.remove("hidden");
+
         btns[2].classList.add("active");
+
     } else if (tabName === 'subjects') { // NEW
+
         tabSub.classList.remove("hidden");
+
         btns[3].classList.add("active");
+
     }
+
 }
 
+
+
 window.renderMockLogs = function(uid, mocks) {
+
     const body = document.getElementById("modalBodyMocks");
+
     if (!mocks || mocks.length === 0) {
+
         body.innerHTML = "<tr><td colspan='5'>No Mock Tests recorded yet.</td></tr>";
+
         return;
+
     }
+
     
+
     // Display last 4 (reverse order)
+
     let displayMocks = mocks.slice().reverse();
+
     let html = "";
+
     
+
     displayMocks.forEach(m => {
+
         let color = "#e5e7eb";
+
         const score = parseFloat(m.score);
+
         const total = parseFloat(m.total);
+
         if(total > 0) {
+
             const p = (score / total) * 100;
+
             if(p < 40) color = "#f87171"; // Red
+
             else if(p >= 80) color = "#4ade80"; // Green
+
             else color = "#facc15"; // Yellow
+
         }
+
     html += `
+
 <tr>
+
   <td>${m.date}</td>
+
   <td>${m.name}</td>
 
+
+
   <td style="font-weight:bold">
+
     ${m.score} / ${m.total}
+
   </td>
+
+
 
   <td>${m.cutoff}</td>
 
+
+
   <td style="font-weight:bold;
+
       color:${m.status === "CLEAR" ? "#4ade80" : "#f87171"}">
+
     ${m.status}
+
   </td>
 
+
+
   <td>${m.acc}%</td>
+
 </tr>
+
 `;
+
     });
+
     body.innerHTML = html;
+
 };
+
+
 
 window.renderAdminLogs = function(uid, logs) {
+
     const body = document.getElementById("modalBodyLogs");
+
     // FILTER DELETED LOGS FROM VIEW
+
     const visibleLogs = logs.filter(l => !l.deleted);
+
     
+
     if(!visibleLogs || visibleLogs.length === 0) {
+
         body.innerHTML = "Log history is empty.";
+
         return;
+
     }
+
     
+
     let displayLogs = visibleLogs.slice(Math.max(0, visibleLogs.length - 20));
 
+
+
     let html = ``;
+
     displayLogs.forEach((log) => {
+
         let workHtml = "-";
+
         if(log.completed && log.completed.length > 0) {
+
              workHtml = log.completed.map(item => {
+
                 if(typeof item === 'string') return `<div style="font-size:10px">${item}</div>`;
+
                 return `<div style="font-size:10px; color:#86efac">${item.name}</div>`;
+
              }).join("");
+
         }
+
         
+
         // Find true index in original array for deletion
+
         const trueIndex = logs.indexOf(log);
 
+
+
         html += `
+
         <div class="log-row">
+
             <div>${log.login}</div>
+
             <div>${log.logout}</div>
+
             <div>${log.reason}</div>
+
             <div>${workHtml}</div>
+
             <button onclick="deleteLogEntry('${uid}', ${trueIndex})" style="width:auto; background:#7f1d1d; font-size:10px; padding:4px;">Delete</button>
+
         </div>`;
+
     });
+
     body.innerHTML = html;
+
 };
 
+
+
 window.renderAdminHistory = function(uid, history) {
+
     const body = document.getElementById("modalBodyHistory");
 
+
+
     if (!history || history.length === 0) {
+
         body.innerHTML = "<tr><td colspan='6'>No Daily Reports yet.</td></tr>";
+
         return;
+
     }
+
+
 
     let html = "";
 
+
+
     history.forEach((entry, index) => {
+
         html += `
+
         <tr>
+
             <td>${entry.date}</td>
+
             <td style="color:#facc15;font-weight:bold">${entry.score}%</td>
+
             <td>${entry.time}</td>
+
             <td>${entry.rating}</td>
+
             <td style="font-size:12px">
+
               ${entry.adminReview || 
+
                 `<button onclick="addAdminReview('${uid}', ${index})"
+
                   style="background:#a855f7;font-size:10px;padding:4px 6px">
+
                   Add Review
+
                 </button>`}
+
             </td>
+
             <td>
+
               <button
+
                 onclick="deletePerformanceEntry('${uid}', ${index})"
+
                 style="background:#7f1d1d;color:white;font-size:10px;padding:4px 6px">
+
                 Delete
+
               </button>
+
             </td>
+
         </tr>`;
+
     });
 
+
+
     body.innerHTML = html;
+
 };
+
+
+
 
 
 window.addAdminReview = async function(uid, index) {
+
     let history = [];
+
     try {
+
         const snapshot = await get(child(ref(db), `users/${uid}/HISTORY`));
+
         history = JSON.parse(snapshot.val() || "[]");
+
     } catch(e) { alert("Error loading history"); return; }
 
+
+
     if (!history[index]) { alert("History entry not found."); return; }
+
     const targetDate = history[index].date;
+
     const comment = prompt(`Enter Review for ${targetDate}:`, "Good progress.");
+
     if (!comment) return;
+
+
 
     if(!confirm(`CONFIRM REVIEW:\n\nDate: ${targetDate}\nComment: "${comment}"\n\nPublish?`)) return;
 
-    try {
-        history[index].adminReview = comment;
-        const feedbackMsg = `[${targetDate}]: ${comment}`;
-        await update(ref(db, `users/${uid}`), { 
-            HISTORY: JSON.stringify(history),
-            newFeedback: feedbackMsg 
-        });
-        alert("Review published.");
-        openAdminModal(uid, "");
-    } catch(e) { alert("Error: " + e.message); }
-};
-window.deletePerformanceEntry = async function(uid, index) {
-    if (!confirm(
-        "CONFIRM DELETE\n\n" +
-        "This performance record will be permanently deleted.\n" +
-        "This action cannot be undone."
-    )) return;
+
 
     try {
+
+        history[index].adminReview = comment;
+
+        const feedbackMsg = `[${targetDate}]: ${comment}`;
+
+        await update(ref(db, `users/${uid}`), { 
+
+            HISTORY: JSON.stringify(history),
+
+            newFeedback: feedbackMsg 
+
+        });
+
+        alert("Review published.");
+
+        openAdminModal(uid, "");
+
+    } catch(e) { alert("Error: " + e.message); }
+
+};
+
+window.deletePerformanceEntry = async function(uid, index) {
+
+    if (!confirm(
+
+        "CONFIRM DELETE\n\n" +
+
+        "This performance record will be permanently deleted.\n" +
+
+        "This action cannot be undone."
+
+    )) return;
+
+
+
+    try {
+
         const snap = await get(ref(db, `users/${uid}/HISTORY`));
+
         if (!snap.exists()) return;
+
+
 
         let history = JSON.parse(snap.val() || "[]");
 
+
+
         if (!history[index]) {
+
             alert("Record not found.");
+
             return;
+
         }
+
+
 
         history.splice(index, 1); // HARD DELETE
 
+
+
         await update(ref(db, `users/${uid}`), {
+
             HISTORY: JSON.stringify(history)
+
         });
 
+
+
         alert("Performance record deleted.");
+
         openAdminModal(uid, ""); // refresh modal
 
+
+
     } catch (e) {
+
         alert("Delete failed: " + e.message);
+
     }
+
 };
+
+
 
 window.deleteLogEntry = async function(uid, index) {
+
     if(!confirm("CONFIRM DELETION:\n\nAre you sure you want to delete this log entry? It will vanish from the student view immediately.")) return;
+
     try {
+
         const snapshot = await get(child(ref(db), `users/${uid}/LOGS`));
+
         let logs = JSON.parse(snapshot.val() || "[]");
+
         
+
         // SOFT DELETE LOGIC
+
         if(logs[index]) {
+
             logs[index].deleted = true;
+
             logs[index].deletedTs = Date.now();
+
         }
+
         
+
         await update(ref(db, `users/${uid}`), { LOGS: JSON.stringify(logs) });
+
         openAdminModal(uid, "");
+
     } catch(e) { alert("Error deleting log: " + e.message); }
+
 };
+
+
 
 window.closeAdminModal = function() {
+
     document.getElementById("adminModal").classList.add("hidden");
+
 };
 
+
+
 // --- ADMIN ACTIONS (STRICT CONFIRM) ---
+
 window.resetLeaveBalance = async function(uid) {
+
     if(!confirm(`RESET BALANCE:\n\nSet leave balance back to 6 days for student ${uid}?`)) return;
+
     try {
+
         await update(ref(db, `users/${uid}`), { leaveBalance: 6 });
+
         alert("Balance reset to 6.");
+
     } catch(e) { alert("Error: " + e.message); }
+
 }
+
+
 
 window.handleLeave = async function(uid, decision, currentBalance) {
 
+
+
     const snap = await get(ref(db, `users/${uid}/leaveRequest`));
+
     if (!snap.exists()) return;
 
+
+
     const req = snap.val();
+
     const isMedical = req.medical === true;
 
+
+
     let fromDate = null;
+
     let toDate = null;
+
     let days = 0;
+
+
 
     if (decision !== "Rejected") {
 
+
+
         fromDate = prompt("Approve FROM date (YYYY-MM-DD):");
+
         if (!fromDate) return;
 
+
+
         toDate = prompt("Approve TO date (YYYY-MM-DD):");
+
         if (!toDate) return;
 
+
+
         // ADMIN decides approved days (supports 0.5)
+
 const daysInput = prompt(
+
   "Enter approved leave days (e.g. 1, 2, 0.5 for half-day):",
+
   "1"
+
 );
+
+
 
 if (!daysInput) return;
 
+
+
 days = parseFloat(daysInput);
 
+
+
 if (isNaN(days) || days <= 0) {
+
     alert("Invalid leave days value.");
+
     return;
+
 }
+
+
 
 if (!isMedical && days > currentBalance) {
+
     alert(`Cannot approve ${days} days. Balance = ${currentBalance}`);
+
     return;
+
 }
 
+
+
     }
+
+
 
     const comment = prompt("Admin comment:");
+
     if (!comment) return;
 
+
+
     const updates = {
+
         "leaveRequest/status": decision,
+
         "leaveRequest/adminComment": comment,
+
         "leaveRequest/approvedFrom": fromDate,
+
         "leaveRequest/approvedTo": toDate,
+
         "leaveRequest/approvedDays": days,
+
         "leaveRequest/decisionTime": Date.now()
+
     };
 
+
+
     if (decision !== "Rejected") {
+
         if (isMedical) {
+
             updates["medicalCarry"] = (req.medicalCarry || 0) + days;
+
         } else {
+
             updates["leaveBalance"] = currentBalance - days;
+
         }
+
     }
+
+
 
     await update(ref(db, `users/${uid}`), updates);
+
     alert(`Leave ${decision}: ${days} day(s) approved.`);
+
 };
+
   
+
 window.clearLeave = async function(uid) {
+
     if(!confirm("CONFIRM RESET:\n\nClear this leave status and reset to 'Active Student'?")) return;
+
     try {
+
         await remove(ref(db, `users/${uid}/leaveRequest`));
+
         alert("Leave status cleared.");
+
     } catch(e) { alert("Error: " + e.message); }
+
 }
 
+
+
 window.terminateStudent = async function(uid) {
+
     const hours = prompt("TERMINATE SESSION:\nEnter Lockout Duration in Hours:");
+
     if(!hours || isNaN(hours)) return;
+
     const reason = prompt("Enter Reason for Termination:");
+
     if(!reason) return;
+
     
+
     const lockTime = Date.now() + (parseFloat(hours) * 60 * 60 * 1000);
+
     try {
+
         await update(ref(db, `users/${uid}`), { 
+
             lockout: lockTime,
+
             lockoutReason: reason 
+
         });
+
         alert("Student Terminated/Locked.");
+
     } catch(e) { alert("Error: " + e.message); }
+
 };
+
+
 
 window.unlockStudent = async function(uid) {
+
     if(confirm(`Unlock Student ${uid} and restore access?`)) {
+
         try {
+
             await remove(ref(db, `users/${uid}/lockout`));
+
             await remove(ref(db, `users/${uid}/lockoutReason`));
+
             alert("Unlocked.");
+
         } catch(e) { alert("Error: " + e.message); }
+
     }
+
 };
 
+
+
 // ==========================================
+
 // STUDENT LOGIC
+
 // ==========================================
+
 async function loadNotices() {
+
     if (!currentUser) return;
 
+
+
     const list = document.getElementById("noticeList");
+
     if (!list) return;
+
+
 
     list.innerHTML = "Loading notices...";
 
+
+
     try {
+
         const snap = await get(ref(db, `users/${currentUser.uid}/NOTICES`));
 
+
+
         if (!snap.exists()) {
+
             list.innerHTML = "No notices available.";
+
             return;
+
         }
+
+
 
         const now = Date.now();
+
         const notices = snap.val();
+
         let active = [];
 
+
+
         // Filter expired + collect valid
+
         Object.keys(notices).forEach(id => {
+
             const n = notices[id];
+
             if (!n.expiry || n.expiry > now) {
+
                 active.push(n);
+
             } else {
+
                 // auto delete expired notice
+
                 remove(ref(db, `users/${currentUser.uid}/NOTICES/${id}`));
+
             }
+
         });
 
+
+
         if (active.length === 0) {
+
             list.innerHTML = "No active notices.";
+
             return;
+
         }
+
+
 
         // Newest first
+
         active.sort((a, b) => b.time - a.time);
 
+
+
         list.innerHTML = active.map(n => `
+
             <div style="border:1px solid #334155;padding:12px;border-radius:8px;margin-bottom:10px;background:#0f172a">
+
                 <div style="font-weight:bold;color:#facc15">${n.title}</div>
+
                 <div style="margin:6px 0;font-size:14px">${n.message}</div>
 
+
+
                 ${n.fileUrl ? `
+
                     ${n.fileType === "pdf"
+
                         ? `<a href="${n.fileUrl}" target="_blank"
+
                              style="color:#38bdf8;font-size:12px">
+
                              📄 View PDF
+
                            </a>`
+
                         : `<img src="${n.fileUrl}"
+
                              style="max-width:100%;margin-top:8px;border-radius:6px" />`
+
                     }
+
                 ` : ``}
 
+
+
                 <div style="font-size:11px;color:#94a3b8;margin-top:6px">
+
                     Posted: ${new Date(n.time).toLocaleString()}
+
                 </div>
+
             </div>
+
         `).join("");
 
+
+
     } catch (e) {
+
         list.innerHTML = "Failed to load notices.";
+
         console.error("Notice load error:", e);
+
     }
+
 }
 
+
+
 async function initStudentDashboard() {
+
     document.getElementById("studentView").classList.remove("hidden");
+
     document.getElementById("adminBox").classList.add("hidden");
+
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
+
     document.getElementById("loginBtn").classList.add("hidden");
+
     document.getElementById("studentControls").classList.remove("hidden");
 
+
+
     // --- SETUP LIVE LISTENER FOR WARNINGS ---
+
     onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
+
         const msg = snapshot.val();
+
         const popup = document.getElementById("rejectedPopup");
+
         const popupTxt = document.getElementById("rejectedMsg");
+
         
+
         if (msg) {
+
             popupTxt.innerText = `Admin: "${msg}"`;
+
             popup.classList.remove("hidden");
+
         } else {
+
             popup.classList.add("hidden");
+
         }
+
     });
+
   // --- UPCOMING EXAMS LISTENER ---
+
 onValue(ref(db, `users/${currentUser.uid}/UPCOMING_EXAMS`), (snap) => {
 
+
+
   const box = document.getElementById("examBox");
+
   const list = document.getElementById("examList");
 
+
+
   if (!snap.exists()) {
+
     box.style.display = "none";
+
     return;
+
   }
+
+
 
   const exams = snap.val().slice(0, 8);
 
+
+
   const today = new Date();
+
   today.setHours(0, 0, 0, 0);
 
+
+
   const active = exams
+
     .map(e => {
+
       const daysLeft = Math.ceil(
+
         (e.date - today.getTime()) / (24 * 60 * 60 * 1000)
+
       );
+
       return { ...e, daysLeft };
+
     })
+
     .filter(e => e.daysLeft >= 0)
+
     .sort((a, b) => a.daysLeft - b.daysLeft)
+
     .slice(0, 4);
 
+
+
   if (active.length === 0) {
+
     box.style.display = "none";
+
     return;
+
   }
+
+
 
   box.style.display = "block";
 
+
+
   list.innerHTML = active.map(e => `
+
     <div style="
+
       display:flex;
+
       justify-content:space-between;
+
       padding:6px 0;
+
       border-bottom:1px dashed #334155
+
     ">
+
       <span>${e.name}</span>
+
       <span style="color:#facc15;font-weight:bold">
+
         ${e.daysLeft} day${e.daysLeft !== 1 ? "s" : ""} left
+
       </span>
+
     </div>
+
   `).join("");
+
 });
 
+
+
     // --- REALTIME NOTICE POPUP (LIKE WARNING, BUT INFO) ---
+
 onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
+
     if (!snapshot.exists()) return;
+
+
 
     const notices = snapshot.val();
 
+
+
     // Get last seen notice time
+
     const seenSnap = await get(
+
         ref(db, `users/${currentUser.uid}/lastSeenNoticeTime`)
+
     );
+
     const lastSeen = seenSnap.exists() ? seenSnap.val() : 0;
 
+
+
     // Find newest notice
+
     let latestNotice = null;
+
     Object.values(notices).forEach(n => {
+
         if (!latestNotice || n.time > latestNotice.time) {
+
             latestNotice = n;
+
         }
+
     });
 
+
+
     // Show popup only for NEW notice
+
     if (latestNotice && latestNotice.time > lastSeen) {
+
         document.getElementById("noticePopupMsg").innerText =
+
             `${latestNotice.title}: ${
+
                 latestNotice.message.length > 80
+
                 ? latestNotice.message.slice(0, 80) + "..."
+
                 : latestNotice.message
+
             }`;
+
+
 
         document.getElementById("noticePopup").classList.remove("hidden");
 
+
+
         // Mark as seen (prevents repeat popup)
+
         await update(ref(db, `users/${currentUser.uid}`), {
+
             lastSeenNoticeTime: latestNotice.time
+
         });
+
     }
+
 });
+
+
 
     const serverData = await downloadData(currentUser.uid);
+
     
+
     // Check Lockout
+
     if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
+
         const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
+
         document.body.innerHTML = `
+
   <div style="
+
     display:flex;
+
     justify-content:center;
+
     align-items:center;
+
     height:100vh;
+
     flex-direction:column;
+
     text-align:center;
+
     background:#020617;
+
     color:#e5e7eb;
+
   ">
+
     <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">
+
       TERMINATED
+
     </h1>
 
+
+
     <h2 style="color:#f87171;margin-top:10px">
+
       ${serverData.lockoutReason || "Admin Action"}
+
     </h2>
 
+
+
     <p style="margin-top:10px">
+
       Time remaining: ${minLeft} minutes
+
     </p>
 
+
+
     <div style="display:flex; gap:12px; margin-top:20px">
-      <button
-        onclick="location.reload()"
-        style="padding:10px 24px;border-radius:8px;background:#1e293b;color:white;border:1px solid #334155">
-        Try Again
-      </button>
 
       <button
-        onclick="logoutFromTermination()"
-        style="padding:10px 24px;border-radius:8px;background:#7f1d1d;color:white;border:1px solid #ef4444">
-        Logout
+
+        onclick="location.reload()"
+
+        style="padding:10px 24px;border-radius:8px;background:#1e293b;color:white;border:1px solid #334155">
+
+        Try Again
+
       </button>
+
+
+
+      <button
+
+        onclick="logoutFromTermination()"
+
+        style="padding:10px 24px;border-radius:8px;background:#7f1d1d;color:white;border:1px solid #ef4444">
+
+        Logout
+
+      </button>
+
     </div>
+
   </div>
+
 `;
 
+
+
         return; 
+
     }
+
+
 
     // --- CHECK LEAVE ACCRUAL (MONTHLY 6 DAYS + CARRYFORWARD) ---
+
     const date = new Date();
+
     const currentMonthKey = `${date.getFullYear()}-${date.getMonth()}`;
+
     
+
     let leaveBalance = serverData.leaveBalance !== undefined ? serverData.leaveBalance : 6;
+
     let lastAccrual = serverData.lastAccrual || "";
 
+
+
     if (lastAccrual !== currentMonthKey) {
+
         // New Month detected! Add 6 days to existing balance
+
         let carry = serverData.medicalCarry || 0;
+
 leaveBalance = leaveBalance + 6 - carry;
 
+
+
 await update(ref(db, `users/${currentUser.uid}`), {
+
     leaveBalance: leaveBalance,
+
     medicalCarry: 0,
+
     lastAccrual: currentMonthKey
+
 });
 
+
+
         serverData.leaveBalance = leaveBalance; // update local ref
+
     }
+
     
+
     // Update UI for Balance
+
     const balDisplay = document.getElementById("leaveBalanceDisplay");
+
     if(balDisplay) balDisplay.innerText = `Leave Bal: ${leaveBalance}`;
 
 
+
+
+
     // Check New Admin Feedback
+
     if (serverData.newFeedback) {
+
         document.getElementById("adminFeedbackBox").classList.remove("hidden");
+
         document.getElementById("adminFeedbackText").innerText = `${serverData.newFeedback}`;
+
     }
+
+
 
     checkLeaveStatus(serverData);
 
+
+
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+
     dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
+
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
 
+
+
     // Init Timeout UI
+
     document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
 
+
+
     if (logs.length) {
+
   const lastLog = logs[logs.length - 1];
 
+
+
   if (lastLog.reason === "Pending") {
+
     const userReason = prompt(
+
       "Reason for previous break?",
+
       "Washroom / Water / Phone Call"
+
     );
 
+
+
     lastLog.reason =
+
       userReason && userReason.trim()
+
         ? userReason.trim()
+
         : "Bio Break";
 
+
+
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+
     uploadData(); // 🔒 persist to Firebase
+
   }
+
 }
+
+
+
 
 
    const hasActiveSession = logs.length && logs[logs.length - 1].logoutTS === null;
 
+
+
 if (!hasActiveSession) {
+
     logs.push({
+
         login: now(),
+
         loginTS: Date.now(),
+
         logout: "-",
+
         logoutTS: null,
+
         reason: "-",
+
         completed: []
+
     });
 
+
+
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+
 }
+
+
+
+
 
 
 
     document.getElementById("bioBtn").disabled = false;
+
     document.getElementById("histBtn").disabled = false;
+
     document.getElementById("dayBtn").disabled = false;
+
     document.querySelector("button[onclick='toggleSubjectProgress()']").disabled = false;
+
     
+
     // Load subjects into selector
+
     loadSubjectList();
+
+
 
     uploadData(); 
 
+
+
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+
     if (activeTest) {
+
         if (activeTest.status === "EXPIRED") {
+
            alert("Mock Test Time Ended! Please enter marks.");
+
            finishTestSequence(activeTest, true);
+
            return;
+
         }
+
         if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
+
             restoreTestUI(activeTest);
+
             const elapsed = (Date.now() - activeTest.startTime) / 1000;
+
             const remaining = (activeTest.durationMins * 60) - elapsed;
+
             startIdle(remaining > 0 ? remaining : 1);
+
             loadTasks();
+
             renderLogs();
+
             updateProgress();
+
             return;
+
         } else {
+
             finishTestSequence(activeTest, true);
+
             return;
+
         }
+
     }
+
+
 
     startIdle(1800);
+
     setupTasks();
+
     loadTasks();
+
     renderLogs();
+
     updateProgress();
+
 }
+
+
 
 window.dismissFeedback = async function() {
+
     document.getElementById("adminFeedbackBox").classList.add("hidden");
+
     if(currentUser) {
+
         await remove(ref(db, `users/${currentUser.uid}/newFeedback`));
+
     }
+
 }
 
+
+
 // --- ALERT DISMISS ---
+
 window.dismissRejected = async function() {
+
     if(!currentUser) return;
+
     await remove(ref(db, `users/${currentUser.uid}/activeAlert`));
+
 }
+
 // --- NOTICE POPUP DISMISS ---
+
 window.dismissNoticePopup = function () {
+
     const popup = document.getElementById("noticePopup");
+
     if (popup) popup.classList.add("hidden");
+
 };
 
 
+
+
+
 // --- STUDENT LEAVE FUNCTIONS ---
+
 async function requestLeave() {
 
+
+
     const data = await downloadData(currentUser.uid);
+
     const balance = data.leaveBalance ?? 0;
 
+
+
     // Explicit leave type
+
     const leaveType = prompt(
+
         "Select Leave Type:\n\n1 = Normal Leave\n2 = Medical Emergency",
+
         balance > 0 ? "1" : "2"
+
     );
+
     if (!leaveType) return;
+
+
 
     const isMedical = leaveType === "2";
 
+
+
     if (!isMedical && balance <= 0) {
+
         alert("Leave balance is ZERO.\nOnly MEDICAL EMERGENCY is allowed.");
+
         return;
+
     }
+
+
 
     const dates = prompt("Enter Dates (e.g., Dec 31 - Jan 2):");
+
     if (!dates) return;
 
+
+
     const reason = prompt(
+
         isMedical
+
             ? "Enter MEDICAL reason (mandatory):"
+
             : "Enter reason:"
+
     );
+
     if (!reason) return;
 
+
+
     if (!confirm(
+
         `CONFIRM REQUEST:\n\n` +
+
         `Type: ${isMedical ? "MEDICAL EMERGENCY" : "NORMAL"}\n` +
+
         `Dates: ${dates}\n` +
+
         `Reason: ${reason}`
+
     )) return;
 
+
+
     const payload = {
+
         dates,
+
         reason,
+
         medical: isMedical,
+
         status: "Pending",
+
         timestamp: Date.now()
+
     };
 
+
+
     try {
+
         await update(ref(db, `users/${currentUser.uid}/leaveRequest`), payload);
+
         checkLeaveStatus(await downloadData(currentUser.uid));
+
     } catch (e) {
+
         alert("Failed to send leave request.");
+
     }
+
 }
+
+
+
 
 
 function checkLeaveStatus(data) {
+
     // We check data directly from DB or passed object
+
     const req = data.leaveRequest;
+
     const dashboardBox = document.getElementById("leaveDashboardBox");
+
     
+
     if(req) {
+
         dashboardBox.classList.remove("hidden");
+
         dashboardBox.className = "leave-status-box"; // reset class
+
         
+
         let statusTitle = "LEAVE REQUEST STATUS";
+
         let statusColorClass = "";
+
         let showDismiss = false;
+
         
+
         if (req.status === "Pending") {
+
              statusTitle = "⚠ LEAVE PENDING";
+
              statusColorClass = "leave-status-half"; // reusing half style for pending/warn
+
         } else if (req.status === "Approved") {
+
              statusTitle = "✔ LEAVE APPROVED";
+
              statusColorClass = "leave-status-approved";
+
              showDismiss = true;
+
              
+
              // Trigger popup only once per session if approved
+
              if (!lastApprovedState) {
+
                  showApprovedPopup(req.dates, req.adminComment);
+
                  lastApprovedState = true;
+
              }
+
         } else if (req.status === "Half Approved") {
+
              statusTitle = "⚠ HALF APPROVED";
+
              statusColorClass = "leave-status-half";
+
              showDismiss = true;
+
         } else if (req.status === "Rejected") {
+
              statusTitle = "✖ LEAVE REJECTED";
+
              statusColorClass = "leave-status-rejected";
+
              showDismiss = true;
+
         }
+
         
+
         dashboardBox.classList.add(statusColorClass);
+
         
+
         let html = `<h3 style="margin:0 0 5px 0;">${statusTitle}</h3>`;
+
         html += `<div style="font-size:14px; font-weight:bold;">Requested: ${req.dates}</div>`;
 
+
+
 if (req.approvedFrom && req.approvedTo) {
+
     html += `
+
       <div style="margin-top:6px; font-size:13px; color:#93c5fd;">
+
         Approved: ${req.approvedFrom} → ${req.approvedTo}
+
         (${req.approvedDays} day${req.approvedDays > 1 ? "s" : ""})
+
       </div>`;
+
 }
 
+
+
         if(req.adminComment) {
+
             html += `<div style="margin-top:5px; padding-top:5px; border-top:1px solid rgba(255,255,255,0.2); font-style:italic">Admin: "${req.adminComment}"</div>`;
+
         }
+
         
+
         // Add Dismiss Button for Student
+
         if(showDismiss) {
+
             html += `<button onclick="dismissLeaveStatus()" style="width:auto; margin-top:10px; background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.4); font-size:11px;">Dismiss Status</button>`;
+
         }
+
+
 
         dashboardBox.innerHTML = html;
 
+
+
     } else {
+
         dashboardBox.classList.add("hidden");
+
         lastApprovedState = false; 
+
     }
+
 }
+
+
 
 window.dismissLeaveStatus = async function() {
+
     // Effectively clears the request so the student is 'Clean' again
+
     if(!currentUser) return;
+
     try {
+
         await remove(ref(db, `users/${currentUser.uid}/leaveRequest`));
+
         document.getElementById("leaveDashboardBox").classList.add("hidden");
+
     } catch(e) { alert("Connection Error"); }
+
 }
+
+
 
 function showApprovedPopup(dates, comment) {
+
     const p = document.getElementById("approvedPopup");
+
     const t = document.getElementById("approvedTitle");
+
     const m = document.getElementById("approvedMsg");
+
     
+
     t.innerText = `✔ APPROVED: ${dates}`;
+
     m.innerText = `Admin: "${comment}"`;
+
     
+
     p.classList.remove("hidden");
+
     setTimeout(() => {
+
         p.classList.add("hidden");
+
     }, 5000);
+
 }
+
+
 
 // --- DATA SYNC ---
+
 async function downloadData(uid) {
+
     const syncStatus = document.getElementById("syncStatus");
+
     syncStatus.innerText = "Syncing...";
+
     
+
     try {
+
         const snapshot = await get(child(ref(db), `users/${uid}`));
+
         if (snapshot.exists()) {
+
             const data = snapshot.val();
+
             
+
             if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
+
             if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
+
             if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
+
             
+
             if(data.TEST_STATE) localStorage.setItem(key("TEST_STATE"), data.TEST_STATE);
+
             if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
+
             if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
+
             
+
             // DOWNLOAD MOCK LOGS
+
             if(data.MOCK_LOGS) localStorage.setItem(key("MOCK_LOGS"), data.MOCK_LOGS);
 
+
+
             // DOWNLOAD SUBJECT PROGRESS
+
             if(data.SUBJECT_WISE_TABLE) localStorage.setItem(SUBJECT_TABLE_KEY(), data.SUBJECT_WISE_TABLE);
 
+
+
             localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
+
             localStorage.setItem(key("DAILY_TIMEOUTS"), data.DAILY_TIMEOUTS || "0"); 
+
             localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
+
             
+
             syncStatus.innerText = "Online";
+
             return data;
+
         }
+
         syncStatus.innerText = "Online (New)";
+
         return {};
+
     } catch (error) {
+
         console.error("Access Denied:", error);
+
         syncStatus.innerText = "Auth Error";
+
         return null;
+
     }
+
 }
+
+
 
 function uploadData() {
+
     if(!currentUser) return;
+
     const syncStatus = document.getElementById("syncStatus");
+
     
+
     const p = calculate();
 
+
+
     const payload = {
+
         profile: { email: currentUser.email }, 
+
         stats: { percent: p.percent, rating: getLabel(p.percent) }, 
+
         TASKS: localStorage.getItem(key("TASKS")),
+
         EXTRA: localStorage.getItem(key("EXTRA")),
+
         LOGS: localStorage.getItem(key("LOGS")),
+
         TEST_STATE: localStorage.getItem(key("TEST_STATE")),
+
         NEXT_TASKS: localStorage.getItem(key("NEXT_TASKS")),
+
         HISTORY: localStorage.getItem(key("HISTORY")), 
+
         MOCK_LOGS: localStorage.getItem(key("MOCK_LOGS")),
+
         SUBJECT_WISE_TABLE: localStorage.getItem(SUBJECT_TABLE_KEY()), // Upload new table
+
         IDLE_STRIKES: localStorage.getItem(key("IDLE_STRIKES")),
+
         DAILY_TIMEOUTS: localStorage.getItem(key("DAILY_TIMEOUTS")),
+
         PENALTY: localStorage.getItem(key("PENALTY"))
+
     };
 
+
+
     update(ref(db, `users/${currentUser.uid}`), payload)
+
     .then(() => {
+
         syncStatus.innerText = "Saved";
+
         setTimeout(() => syncStatus.innerText = "Online", 2000);
+
     })
+
     .catch((error) => {
+
         syncStatus.innerText = "Save Failed";
+
     });
+
 }
+
+
 
 // --- SUBJECT HELPER FUNCTIONS ---
+
 function getSubjectData() {
+
   return JSON.parse(
+
     localStorage.getItem(SUBJECT_TABLE_KEY()) || "{}"
+
   );
+
 }
+
+
 
 function saveSubjectData(data) {
+
   localStorage.setItem(
+
     SUBJECT_TABLE_KEY(),
+
     JSON.stringify(data)
+
   );
+
 }
+
+
 
 // --- NEW SUBJECT UI LOGIC ---
+
 window.toggleSubjectProgress = function() {
+
   const subjectBox = document.getElementById("subjectProgressBox");
+
   const historyBox = document.getElementById("historyBox");
+
   const taskBox = document.getElementById("taskBox");
+
   const logBox = document.getElementById("logBox");
 
+
+
   if (subjectBox.classList.contains("hidden")) {
+
     subjectBox.classList.remove("hidden");
+
     if (historyBox) historyBox.classList.add("hidden");
+
     if (taskBox) taskBox.classList.add("hidden");
+
     if (logBox) logBox.classList.add("hidden");
+
   } else {
+
     subjectBox.classList.add("hidden");
+
     if (taskBox) taskBox.classList.remove("hidden");
+
     if (logBox) logBox.classList.remove("hidden");
+
   }
+
 }
+
+
 
 window.loadSubjectList = function() {
+
   const select = document.getElementById("subjectSelect");
+
   if (!select) return;
 
+
+
   const data = getSubjectData();
+
   
+
   // Keep first option
+
   select.innerHTML = `<option value="">Select Subject</option>`;
 
+
+
   Object.keys(data).forEach(sub => {
+
     const opt = document.createElement("option");
+
     opt.value = sub;
+
     opt.innerText = sub;
+
     select.appendChild(opt);
+
   });
+
 }
 
+
+
 window.renderSubjectTable = function(subject) {
+
   const tbody = document.getElementById("subjectTableBody");
+
   const data = getSubjectData();
 
+
+
   if (!subject || !data[subject] || data[subject].length === 0) {
+
     tbody.innerHTML = `
+
       <tr>
+
         <td colspan="3" style="color:#94a3b8">
+
           No data available for this subject
+
         </td>
+
       </tr>
+
     `;
+
     return;
+
   }
+
+
 
   tbody.innerHTML = "";
 
+
+
   // Reverse so newest is top
+
   const rows = [...data[subject]].reverse();
 
+
+
   rows.forEach(row => {
+
     tbody.innerHTML += `
+
   <tr>
+
     <td>${row.date}</td>
+
     <td style="text-align:left">${row.covered}</td>
+
     <td style="text-align:left;color:#fca5a5">${row.uncovered}</td>
+
     <td>
+
       <button
+
         style="font-size:11px;background:#7f1d1d"
+
         onclick="requestSubjectDelete('${subject.replace(/'/g, "\\'")}', ${row.id || 0})">
+
         Request Delete
+
       </button>
+
     </td>
+
   </tr>
+
 `;
 
+
+
   });
+
 }
+
+
+
 
 
 // --- HISTORY LOGIC ---
+
 function toggleHistory() {
+
     const histBox = document.getElementById("historyBox");
+
     const taskBox = document.getElementById("taskBox");
+
     const logBox = document.getElementById("logBox");
+
     const subjectBox = document.getElementById("subjectProgressBox");
 
+
+
     if (histBox.classList.contains("hidden")) {
+
         histBox.classList.remove("hidden");
+
         taskBox.classList.add("hidden");
+
         logBox.classList.add("hidden");
+
         if(subjectBox) subjectBox.classList.add("hidden");
 
+
+
         let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
+
         // Limit display to 4
+
         history = history.slice(Math.max(0, history.length - 4)).reverse();
 
+
+
         const tbody = document.getElementById("historyTable");
+
         tbody.innerHTML = "";
+
         
+
         history.forEach(entry => {
+
             let color = "#e5e7eb";
+
             if(entry.rating === "Poor") color = "#f87171";
+
             if(entry.rating === "Good") color = "#facc15";
+
             if(entry.rating === "Excellent" || entry.rating === "Fabulous") color = "#4ade80";
+
+
 
             const subjectText = entry.subjects || "No Data";
 
+
+
             tbody.innerHTML += `
+
                 <tr>
+
                     <td>${entry.date}</td>
+
                     <td style="color:${color}; font-weight:bold">${entry.score}%</td>
+
                     <td>${entry.time}</td>
+
                     <td style="color:${color}">${entry.rating}</td>
+
                     <td style="text-align:left; font-size:12px; color:#cbd5e1">${subjectText}</td>
+
                 </tr>
+
             `;
+
         });
+
         
+
         if(history.length === 0) {
+
             tbody.innerHTML = `<tr><td colspan="5">No history records yet.</td></tr>`;
+
         }
+
     } else {
+
         histBox.classList.add("hidden");
+
         if(document.getElementById("reportBox").classList.contains("hidden")) {
+
             taskBox.classList.remove("hidden");
+
             logBox.classList.remove("hidden");
+
         }
+
     }
+
 }
 
+
+
 // --- IDLE TIMER & WATCHDOG LOGIC ---
+
 function startIdle(customSeconds = 1800) {
+
   if(idleTimer) clearInterval(idleTimer);
+
   
+
   totalDuration = customSeconds;
+
   targetTime = Date.now() + (customSeconds * 1000);
+
   
+
   const idleBox = document.getElementById("idleBox");
+
   if(idleBox) {
+
       idleBox.classList.remove("hidden");
+
       idleBox.classList.remove("critical");
+
   }
+
+
 
   updateIdle(customSeconds);
 
+
+
   idleTimer = setInterval(() => {
+
     const current = Date.now();
+
     const remainingSeconds = Math.ceil((targetTime - current) / 1000);
+
     updateIdle(remainingSeconds);
+
     if (remainingSeconds <= 0) {
+
       autoLogout();
+
     }
+
   }, 1000);
+
 }
+
+
 
 function resetWatchdog() {
+
     if(!currentUser) return;
+
     const btn = document.querySelector('.watchdog-btn');
+
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+
     
+
     if(activeTest && activeTest.status === "RUNNING") {
+
         const originalText = btn.innerText;
+
         btn.innerText = "NO RESET IN EXAM";
+
         btn.style.background = "#ef4444"; 
+
         setTimeout(() => {
+
             btn.innerText = originalText;
+
             btn.style.background = "";
+
         }, 1500);
+
         return;
+
     }
+
     startIdle(1800); 
+
     const originalText = "I AM STUDYING";
+
     btn.innerText = "WATCHDOG RESET";
+
     btn.style.background = "#22c55e"; 
+
     setTimeout(() => {
+
         btn.innerText = originalText;
+
         btn.style.background = "";
+
     }, 1000);
+
 }
+
+
 
 function updateIdle(seconds) {
+
   if (seconds === undefined && targetTime) {
+
       seconds = Math.ceil((targetTime - Date.now()) / 1000);
+
   }
+
   let displaySeconds = seconds > 0 ? seconds : 0;
+
   
+
   const h = Math.floor(displaySeconds / 3600);
+
   const m = Math.floor((displaySeconds % 3600) / 60);
+
   const s = displaySeconds % 60;
+
   
+
   const text = `${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+
   const timeDisplay = document.getElementById("idleTime");
+
   if(timeDisplay) {
+
     timeDisplay.innerText = h > 0 ? `${h}:${text}` : text;
+
   }
+
   const ring = document.getElementById("timerRing");
+
   if(ring) {
+
       const maxDash = 339;
+
       const pct = displaySeconds / totalDuration;
+
       const offset = maxDash * (1 - pct);
+
       ring.style.strokeDashoffset = offset;
+
       const idleBox = document.getElementById("idleBox");
+
       if (pct > 0.5) {
+
           ring.style.stroke = "#3b82f6";
+
           idleBox.classList.remove("critical");
+
       } else if (pct > 0.15) {
+
           ring.style.stroke = "#f59e0b";
+
           idleBox.classList.remove("critical");
+
       } else {
+
           ring.style.stroke = "#ef4444";
+
           idleBox.classList.add("critical");
+
       }
+
   }
+
 }
+
+
 
 function autoLogout() {
+
   if (MOCK_POPUP_ACTIVE) return;
+
   clearInterval(idleTimer);
+
   const idleBox = document.getElementById("idleBox");
+
   if(idleBox) idleBox.classList.add("hidden");
 
+
+
   let currentStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+
   currentStrikes++;
+
   
+
   // --- NEW: INCREMENT DAILY TIMEOUT COUNTER ---
+
   let dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0");
+
   dailyTimeouts++;
+
   localStorage.setItem(key("DAILY_TIMEOUTS"), dailyTimeouts);
+
   document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
+
   
+
   if(currentStrikes >= 2) {
+
     let currentPenalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+
     currentPenalty += 10;
+
     localStorage.setItem(key("PENALTY"), currentPenalty);
+
     currentStrikes = 0;
+
     alert("Watchdog bit you! 2 Timeouts = -10% Penalty.");
+
   }
+
   localStorage.setItem(key("IDLE_STRIKES"), currentStrikes);
 
+
+
   const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+
   if(activeTest) {
+
       activeTest.status = "EXPIRED";
+
       localStorage.setItem(key("TEST_STATE"), JSON.stringify(activeTest));
+
   }
+
+
 
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+
   if (logs.length) {
+
     const last = logs[logs.length - 1];
+
     last.logout = now();
+
     last.logoutTS = Date.now();
+
     last.reason = "Timeout";
+
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+
   }
+
   uploadData(); 
+
   setTimeout(() => location.reload(), 500);
+
 }
 
+
+
 function bioBreak() {
+
   clearInterval(idleTimer);
 
+
+
   const idleBox = document.getElementById("idleBox");
+
   if (idleBox) idleBox.classList.add("hidden");
+
+
 
   localStorage.setItem(key("IDLE_STRIKES"), "0");
 
+
+
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+
   if (logs.length) {
+
     const last = logs[logs.length - 1];
+
     last.logout = now();
+
     last.logoutTS = Date.now();
+
     last.reason = "Pending";
+
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+
   }
+
+
 
   uploadData();
 
+
+
   signOut(auth).then(() => location.reload());
+
 }
+
+
+
+
 
 
 
 // --- MOCK TEST LOGIC ---
+
 function startMockTestSetup() {
+
   const name = prompt("Enter Test Name:");
+
   if(!name) return;
+
   const fullMarks = prompt("Enter Full Marks:");
+
   if(!fullMarks) return;
+
   
+
   const durationInput = prompt("Enter Duration in MINUTES (e.g. 120):");
+
   const durationMins = parseInt(durationInput);
+
   
+
   if(!durationMins || isNaN(durationMins)) {
+
     alert("Invalid Time. Test Cancelled.");
+
     return;
+
   }
+
+
 
   if(!confirm(`CONFIRM MOCK TEST:\n\nName: ${name}\nMarks: ${fullMarks}\nDuration: ${durationMins} mins\n\nStart now?`)) return;
 
+
+
   const testState = {
+
     name: name,
+
     fullMarks: fullMarks,
+
     durationMins: durationMins,
+
     startTime: Date.now(),
+
     status: "RUNNING"
+
   };
+
   localStorage.setItem(key("TEST_STATE"), JSON.stringify(testState));
+
   uploadData();
 
+
+
   const btn = document.querySelector(".watchdog-btn");
+
   if(btn) btn.innerText = "EXAM MODE (NO RESET)";
 
+
+
   startIdle(durationMins * 60);
+
   restoreTestUI(testState);
+
 }
+
+
 
 function restoreTestUI(testState) {
+
   const container = document.getElementById("taskBox");
+
   container.classList.remove("hidden");
+
   
+
   const hrs = Math.floor(testState.durationMins / 60);
+
   const mins = testState.durationMins % 60;
+
   
+
   container.innerHTML = `
+
     <div style="text-align:center; padding: 20px; border: 1px solid #facc15; border-radius: 10px;">
+
       <h2 style="color:#facc15">MOCK TEST RUNNING</h2>
+
       <h3 style="color:white">${testState.name}</h3>
+
       <p>Full Marks: ${testState.fullMarks} | Duration: ${hrs}h ${mins}m</p>
+
       <div style="margin-top:10px; color:#cbd5e1; font-size:14px;">
+
           Watchdog locked to Exam Time. Good Luck.
+
       </div>
+
       <hr style="border-color:#334155; margin: 20px 0;">
+
       <button onclick="triggerEndTest()" style="background:#dc2626; border:none; padding:15px; font-size:18px; font-weight:bold;">EXAM DONE</button>
+
     </div>
+
   `;
+
 }
+
+
 
 function triggerEndTest() {
+
   const testState = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+
   if (!testState) return;
 
+
+
   finishTestSequence(testState, false);
+
 }
+
+
+
 
 
 function finishTestSequence(testState, loadDashboard = false) {
+
   let obtained = prompt(`Exam Done: ${testState.name}\nEnter Marks Obtained (out of ${testState.fullMarks}):`);
+
   
+
   // Handle Expired Timer (Must Enter Marks)
+
   if (obtained === null) {
+
       if (testState.status === "EXPIRED") {
+
           alert("Time is UP! You MUST enter your score.");
+
           finishTestSequence(testState, loadDashboard);
+
           return;
+
       }
+
       return; 
+
   }
+
+
 
   if (obtained.trim() === "") obtained = "0";
 
+
+
   let accuracy = prompt("Enter Accuracy %:");
+
   if (accuracy === null || accuracy.trim() === "") accuracy = "0";
+
   
+
   let cutoff = prompt("Enter Cutoff Marks:", "0");
+
   if (cutoff === null) cutoff = "0";
 
+
+
   // Calculate Logic
+
   const cutStatus = Number(obtained) >= Number(cutoff) ? "CLEAR" : "NOT CLEAR";
+
   const remark = getAccuracyRemark(accuracy); // Uses your existing helper function
 
+
+
   // Confirmation Msg
+
   const msg = `Confirm Details:\n\nTest: ${testState.name}\nScore: ${obtained} / ${testState.fullMarks}\nCutoff: ${cutoff}\nAccuracy: ${accuracy}%\nStatus: ${cutStatus}\nRemark: ${remark}`;
+
   
+
   if (!confirm(msg)) {
+
       if (testState.status === "EXPIRED") {
+
           finishTestSequence(testState, loadDashboard); 
+
           return;
+
       }
+
       return;
+
   }
+
+
 
   // 1. CREATE THE DETAILED DATA STRING
+
   // This matches exactly what you asked for:
+
   const fullDetails = `Score: ${obtained}/${testState.fullMarks} | Cutoff: ${cutoff} | Status: ${cutStatus} | Acc: ${accuracy}% | Remark: ${remark}`;
 
+
+
   // 2. SAVE TO MOCK LOGS (History Tab)
+
   let mockLogs = JSON.parse(localStorage.getItem(key("MOCK_LOGS")) || "[]");
+
   mockLogs.push({
+
     date: new Date().toLocaleDateString(),
+
     name: testState.name,
+
     score: obtained,
+
     total: testState.fullMarks,
+
     cutoff: cutoff,
+
     status: cutStatus,
+
     acc: accuracy,
+
     remark: remark
+
   });
+
   if (mockLogs.length > 20) mockLogs = mockLogs.slice(mockLogs.length - 20);
+
   localStorage.setItem(key("MOCK_LOGS"), JSON.stringify(mockLogs));
 
+
+
   // 3. 🔥 SAVE TO SUBJECT WISE VIEW (Key: "Mock Test")
+
   // Admin will see the Test Name in "Covered" and ALL details in "Uncovered"
+
   const subjectData = getSubjectData(); 
+
   if(!subjectData["Mock Test"]) subjectData["Mock Test"] = []; 
 
+
+
   subjectData["Mock Test"].push({
+
     id: Date.now(),
+
     date: new Date().toLocaleDateString(),
+
     covered: `${testState.name}`, 
+
     uncovered: fullDetails // <--- SAVES ALL DATA HERE
+
   });
+
   saveSubjectData(subjectData);
 
+
+
   // 4. CREATE LOCKED EXTRA WORK ENTRY (Dashboard View)
+
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+
   extras.push({
+
     name: `MOCK TEST: ${testState.name}`,
+
     done: true,
+
     comment: fullDetails,
+
     due: "None"
+
   });
+
   localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
 
+
+
   // 5. ADD TO CURRENT SESSION LOG (Log View)
+
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+
   if (logs.length) {
+
     const active = logs[logs.length - 1];
+
     if (!active.completed) active.completed = [];
+
     active.completed.push({
+
       name: `MOCK TEST: ${testState.name}`,
+
       comment: fullDetails,
+
       due: "None"
+
     });
+
     
+
     // Close session log
+
     active.logout = now();
+
     active.logoutTS = Date.now();
+
     active.reason = "Mock Test Completed";
+
     localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+
   }
+
+
 
   // 6. CLEANUP & SYNC
+
   localStorage.removeItem(key("TEST_STATE"));
+
   uploadData(); 
 
+
+
   // Reset Button
+
   const btn = document.querySelector(".watchdog-btn");
+
   if (btn) btn.innerText = "I AM STUDYING";
 
+
+
   if (loadDashboard) {
+
     location.reload();
+
   } else {
+
     showMockResultPopup(fullDetails);
+
     setTimeout(() => location.reload(), 5000);
+
   }
+
 }
+
 // --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
+
 function setupTasks() {
+
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+
   const nextData = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
 
+
+
   // Convert NEXT_TASKS (objects) into Task format
+
   // If nextData contains strings (old format), handle that too
+
   const newTasks = nextData.map(item => {
-  if (typeof item === 'object' && item !== null) {
-    return {
-      name: item.subject + " | " + (item.topic || "General"),
-      target: item.topic || "",
-      done: false,
-      comment: "",
-      due: ""
-    };
-  }
- else {
+
+    if (typeof item === 'object' && item !== null) {
+
+      return { 
+
+        name: item.subject,      // Main identifier
+
+        target: item.topic,      // The target topic to display
+
+        done: false, 
+
+        comment: "", 
+
+        due: "" 
+
+      };
+
+    } else {
+
       // Old string format fallback
+
       return { name: item, target: "", done: false, comment: "", due: "" };
+
     }
+
   });
 
+
+
   // Merge carried tasks (ensure they have 'target' property if missing)
+
   const cleanCarried = carried.map(t => ({...t, target: t.target || ""}));
 
+
+
   let merged = [...cleanCarried, ...newTasks];
+
   
+
   // Default tasks if empty
+
   if (!merged.length) {
-  localStorage.setItem(key("TASKS"), "[]");
-  uploadData();
-  return;
-}
+
+    merged = [
+
+      { name: "Study", target: "General", done: false, comment: "", due: "" },
+
+      { name: "Revise", target: "Notes", done: false, comment: "", due: "" }
+
+    ];
+
+  }
+
 
 
   localStorage.setItem(key("TASKS"), JSON.stringify(merged));
+
   localStorage.removeItem(key("NEXT_TASKS"));
+
   uploadData();
+
   
+
   const taskBox = document.getElementById("taskBox");
+
   // Reload structure if mock test wiped it
+
   if (!document.getElementById("taskList")) {
+
       location.reload(); // Simple reload to restore grid structure
+
       return;
+
   }
+
+
 
   taskBox.classList.remove("hidden");
+
   document.getElementById("logBox").classList.remove("hidden");
+
   document.getElementById("reportBox").classList.add("hidden");
+
 }
+
+
 
 function loadTasks() {
+
   const tList = document.getElementById("taskList");
+
   const eList = document.getElementById("extraList");
+
   if(!tList || !eList) return;
+
   tList.innerHTML = "";
+
   eList.innerHTML = "";
+
   
+
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+
   
+
   // Helper to update main logs
+
   const updateLogTask = (name, isChecked, comment, due) => {
+
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+
     if(logs.length){
+
       const active = logs[logs.length-1];
+
       if(!active.completed) active.completed = [];
+
       if(isChecked){
+
         active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
+
         active.completed.push({ name: name, comment: comment, due: due });
+
       } else {
+
         active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
+
       }
+
       localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+
       renderLogs();
+
     }
+
   };
+
+
 
   // Helper to save to Subject Table (For Admin View)
+
   // This adds the unique ID needed for deletion
+
   const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
+
       const subjectData = getSubjectData(); 
+
       if(!subjectData[subject]) subjectData[subject] = [];
+
       
+
       subjectData[subject].push({
+
         id: Date.now(), // Unique ID for Admin deletion
+
         date: new Date().toLocaleDateString(),
+
         covered: covered || "-",
+
         uncovered: uncovered || "-"
+
       });
+
       
+
       saveSubjectData(subjectData); 
+
       uploadData(); 
+
   };
+
+
 
   // --- RENDER STANDARD TASKS ---
+
   tasks.forEach(t => {
+
     const container = document.createElement("div");
+
     container.style.marginBottom = "4px";
+
     const cb = document.createElement("input");
+
     cb.type = "checkbox";
+
     cb.checked = t.done;
+
     const label = document.createElement("span");
+
     
+
     const updateLabel = () => {
+
        let display = t.name;
+
        if(t.target) display += ` <span style='font-size:11px;color:#38bdf8'>(${t.target})</span>`;
+
        if(t.done){
+
            label.innerHTML = ` ${display} <span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>`;
+
        } else {
+
            label.innerHTML = " " + display;
+
        }
+
     };
+
     updateLabel();
+
     
+
     cb.onchange = () => {
+
       if (!confirm(`CONFIRM TASK:\n\nMark '${t.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) { 
+
           cb.checked = !cb.checked; 
+
           return; 
+
       }
+
       
+
       if(cb.checked){
+
         const remark = prompt(`What did you cover in ${t.name}?`, "Done");
+
         const dueVal = prompt(`Any pending work left?`, "None");
+
         t.comment = remark || "-";
+
         t.due = dueVal || "-";
+
         
+
         saveAutomatedSubjectProgress(t.name, t.comment, t.due);
+
         
+
       } else { 
+
           t.comment = ""; 
+
           t.due = ""; 
+
       }
+
       t.done = cb.checked;
+
       updateLabel();
+
       updateLogTask(t.name, t.done, t.comment, t.due);
+
       save(tasks, extras);
+
     };
+
     container.append(cb, label);
+
     tList.append(container);
+
   });
+
   
+
   // --- RENDER EXTRA WORK (UPDATED LOGIC) ---
+
   extras.forEach(e => {
+
     const container = document.createElement("div");
+
     container.style.marginBottom = "4px";
+
     
+
     const cb = document.createElement("input");
+
     cb.type = "checkbox";
+
     cb.checked = e.done;
+
     
+
     if(e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
+
     
+
     const label = document.createElement("span");
+
     
+
     const updateLabel = () => {
+
        if(e.done){
+
            // Display: Subject Name [Topic Name]
+
            label.innerHTML = ` <span style='color:#facc15'>${e.name}</span> <span style="font-size:12px;color:#e5e7eb">[${e.comment}]</span>`;
+
        } else {
+
            // Display: Subject Name
+
            label.innerHTML = " " + e.name;
+
        }
+
     };
+
     updateLabel();
+
     
+
     cb.onchange = () => {
+
       if (!confirm(`CONFIRM WORK:\n\nSubject: ${e.name}\nMark as DONE?`)) { 
+
           cb.checked = !cb.checked; 
+
           return; 
+
       }
+
       
+
       if(cb.checked){
+
         // LOGIC CHANGE: When ticked, ask for Topic Name
+
         const topicName = prompt(`Enter TOPIC NAME (or Test Name) for ${e.name}:`, "");
+
         
+
         if (!topicName) {
+
             // If user cancels topic entry, uncheck the box
+
             cb.checked = false;
+
             return; 
+
         }
 
+
+
         const dueVal = prompt(`Any pending work/marks?`, "None");
+
         
+
         e.comment = topicName; // We save Topic Name in the 'comment' field for display
+
         e.due = dueVal || "-";
 
+
+
         // 🔥 SAVE TO SUBJECT WISE VIEW
+
         // e.name = "Physics" (or Mock Test)
+
         // topicName = "Thermodynamics" (or Full Syllabus Test)
+
         saveAutomatedSubjectProgress(e.name, topicName, e.due);
 
+
+
       } else { 
+
           e.comment = ""; 
+
           e.due = ""; 
+
       }
+
       
+
       e.done = cb.checked;
+
       updateLabel();
+
       updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
+
       save(tasks, extras);
+
     };
+
     container.append(cb, label);
+
     eList.append(container);
+
   });
+
 }
+
+
 
 function addExtra() {
+
   const subjectName = prompt("Enter SUBJECT Name for this work:\n(e.g. Physics, Chemistry, Maths)");
+
   
+
   if (!subjectName) return; 
 
+
+
   // 🔒 SECURITY BLOCK: Prevent user from manually adding Mock Tests here
+
   if (subjectName.toLowerCase().includes("mock")) {
+
       alert("⚠️ ACCESS DENIED\n\nTo add a Mock Test, you MUST use the orange 'Start Mock Test' button on the dashboard.\n\nThis ensures accurate timer and scoring logs.");
+
       return;
+
   }
 
+
+
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+
   extras.push({ name: subjectName, done: false, comment: "", due: "" });
+
   
+
   localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+
   loadTasks();
+
   uploadData();
+
 }
+
+
 
 function save(tasks, extras) {
+
   localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
+
   localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+
   updateProgress();
+
   uploadData();
+
 }
+
+
 
 // --- PROGRESS ---
+
 function calculate() {
+
   const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+
   const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+
   const done = tasks.filter(t => t.done).length +
+
     extras.filter(e => e.done).length;
+
   const percent = tasks.length ?
+
     Math.max(0, Math.round((done / tasks.length) * 100 - penalty)) : 0;
+
   return { percent, assigned: tasks.length, extra: extras.length };
+
 }
+
+
 
 function updateProgress() {
+
   const needle = document.getElementById("needle");
+
   if(!needle) return;
+
   const p = calculate();
+
   needle.style.transform = `rotate(${(Math.min(p.percent, 300) / 300) * 180 - 90}deg)`;
+
   document.getElementById("livePercent").innerText = p.percent + "%";
+
   document.getElementById("liveRating").innerText = getLabel(p.percent);
+
   document.getElementById("liveDetails").innerText = `Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${penalty}%`;
+
 }
+
+
 
 function getLabel(p) {
+
   if (p < 40) return "Poor";
+
   if (p < 60) return "Average";
+
   if (p < 80) return "Good";
+
   if (p <= 100) return "Excellent";
+
   return "Fabulous";
+
 }
+
 function getAccuracyRemark(acc) {
+
   acc = Number(acc);
 
+
+
   if (acc >= 95) return "Outstanding";
+
   if (acc >= 90) return "Excellent";
+
   if (acc >= 87) return "Very Good";
+
   if (acc >= 85) return "Good";
+
   if (acc >= 80) return "Fair";
+
   if (acc >= 75) return "Need Improvement";
+
   return "Take care of your study";
+
 }
-async function openDayEnd() {
-  const box = document.getElementById("nextDayBox");
+
+
+
+
+
+// --- DAY END ---
+
+function openDayEnd() {
+
+  clearInterval(idleTimer);
+
+  const idleBox = document.getElementById("idleBox");
+
+  if(idleBox) idleBox.classList.add("hidden");
+
+  
+
   const nextInputs = document.getElementById("nextInputs");
 
-  if (!box || !nextInputs) {
-    alert("Day End container missing");
-    return;
-  }
+  nextInputs.innerHTML = `
 
-  nextInputs.innerHTML = "";
-  box.classList.remove("hidden");
+    <div style="margin-bottom:15px; color:#cbd5e1; font-size:13px; text-align:center">
 
-  try {
-    const snap = await get(ref(db, "SUBJECT_MASTER"));
-    const subjects = snap.exists() ? snap.val() : [];
+      Enter your plan for tomorrow. <br>
 
-    if (subjects.length === 0) {
-      nextInputs.innerHTML =
-        "<div style='color:#f87171'>Admin has not added any subjects yet.</div>";
-      return;
-    }
-
-    const options = subjects
-      .map(s => `<option value="${s}">${s}</option>`)
-      .join("");
-
-    for (let i = 0; i < 7; i++) {
-      nextInputs.innerHTML += `
-        <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:10px;margin-bottom:8px">
-          <select class="nextInput" id="nd_sub_${i}">
-            <option value="">Select Subject</option>
-            ${options}
-          </select>
-
-          <input
-            class="nextInput"
-            id="nd_top_${i}"
-            placeholder="Target Topic"
-          />
-        </div>
-      `;
-    }
-  } catch (e) {
-    console.error("Day End load error:", e);
-    nextInputs.innerHTML =
-      "<div style='color:#f87171'>Failed to load subject list</div>";
-  }
-}
-
-function finalDayEnd() {
-  if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
-
-  // 1. Save Next Day Tasks (As Objects: {subject, topic})
-  const next = [];
-  for (let i = 0; i < 7; i++) {
-    const sub = document.getElementById("nd_sub_" + i).value.trim();
-    const top = document.getElementById("nd_top_" + i).value.trim();
-    
-    if(sub) {
-      next.push({ subject: sub, topic: top });
-    }
-  }
-  localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
-
-  // 2. Calculate Stats
-  const p = calculate();
-  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  
-  // 3. Time Calculation
-  let totalMillis = 0;
-  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-  const todayStr = new Date().toLocaleDateString();
-  logs.forEach(l => {
-    if (!l.loginTS || !l.logoutTS) return;
-    if (new Date(l.loginTS).toLocaleDateString() !== todayStr) return;
-    const d = l.logoutTS - l.loginTS;
-    if (d > 30000) totalMillis += d;
-  });
-  const hrs = Math.floor(Math.floor(totalMillis / 60000) / 60);
-  const mins = Math.floor(totalMillis / 60000) % 60;
- const timeStr = hrs + " hr " + mins + " min";
-
-  // 4. Update History (Backend Sync)
-  const historyEntry = {
-    date: new Date().toLocaleDateString(),
-    score: p.percent,
-    rating: getLabel(p.percent),
-    time: timeStr,
-    subjects: [...tasks.filter(t=>t.done).map(t=>t.name), ...extras.filter(e=>e.done).map(e=>e.name)].join(", "),
-    adminReview: null
-  };
-  let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
-  history.push(historyEntry);
-  if (history.length > 4) history.shift();
-  localStorage.setItem(key("HISTORY"), JSON.stringify(history));
-  
-  // 5. Clean up current session data
-  const carried = tasks.filter(t => !t.done);
-  localStorage.setItem(key("TASKS"), JSON.stringify(carried)); 
-  localStorage.setItem(key("EXTRA"), "[]");
-  localStorage.removeItem(key("LOGS"));
-  localStorage.setItem(key("IDLE_STRIKES"), "0");
-  localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
-  
-  // 6. Push to Firebase BEFORE logging out
-  uploadData(); 
-
-  // --- 7. GENERATE THE PERMANENT REPORT HTML ---
-  const doneTasks = tasks.filter(t => t.done).length;
-const doneExtras = extras.filter(e => e.done).length;
-const totalDone = doneTasks + doneExtras;
-
-const reportHTML = `
-  <div style="padding:20px; max-width:500px; margin:0 auto;">
-    <div class="card" style="background:#1e1b4b;border-color:#6366f1; text-align:center; padding:30px;">
-
-      <h2 style="color:#a5b4fc; margin-bottom:10px;">SESSION COMPLETED</h2>
-
-      <div style="font-size:14px; color:#c7d2fe; margin-bottom:20px;">
-        Safe to close browser
-      </div>
-
-      <div style="font-size:60px;font-weight:800;color:#38bdf8; line-height:1">
-        ${p.percent}%
-      </div>
-
-      <div style="font-size:24px; font-weight:bold; color:#e0e7ff">
-        ${getLabel(p.percent)}
-      </div>
-
-      <div style="margin:20px 0; padding:15px; background:#312e81; border-radius:10px;">
-        <div style="color:#facc15;font-size:18px;">⏱ ${timeStr}</div>
-
-        <div style="font-size:13px; margin-top:5px; line-height:1.6">
-          Assigned Completed: ${doneTasks}<br>
-          Extra Completed: ${doneExtras}<br>
-          <b>Total Completed: ${totalDone}</b>
-        </div>
-      </div>
-
-      <div style="font-size:12px;color:#94a3b8; margin-bottom:20px;">
-        (Waiting for Admin Review...)
-      </div>
-
-      <button onclick="dismissReportLock()"
-        style="width:100%; background:#22c55e; padding:15px; font-size:16px; font-weight:bold; color:white;">
-        START NEW DAY (LOGIN)
-      </button>
+      <span style="color:#facc15">Subject</span> is mandatory. <span style="color:#38bdf8">Topic</span> is your target.
 
     </div>
-  </div>
-`;
 
-  // 8. LOCK THE SCREEN
-  localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
+  `;
 
-  // 9. LOGOUT (User goes offline)
-  signOut(auth).then(() => {
-     location.reload(); 
-  });
+  
+
+  // Standard Next Day Tasks (Split into Subject + Topic inputs)
+
+  for (let i = 0; i < 7; i++) {
+
+    nextInputs.innerHTML += `
+
+      <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:10px; margin-bottom:8px;">
+
+        <input class="nextInput" id="nd_sub_${i}" placeholder="Subject (e.g. Physics)" style="margin:0">
+
+        <input class="nextInput" id="nd_top_${i}" placeholder="Target Topic (e.g. Optics)" style="margin:0">
+
+      </div>
+
+    `;
+
+  }
+
+
+
+  document.getElementById("nextDayBox").classList.remove("hidden");
+
 }
 
+
+
+function finalDayEnd() {
+
+  if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
+
+
+
+  // 1. Save Next Day Tasks (As Objects: {subject, topic})
+
+  const next = [];
+
+  for (let i = 0; i < 7; i++) {
+
+    const sub = document.getElementById("nd_sub_" + i).value.trim();
+
+    const top = document.getElementById("nd_top_" + i).value.trim();
+
+    
+
+    if(sub) {
+
+      next.push({ subject: sub, topic: top });
+
+    }
+
+  }
+
+  localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
+
+
+
+  // 2. Calculate Stats
+
+  const p = calculate();
+
+  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+
+  
+
+  // 3. Time Calculation
+
+  let totalMillis = 0;
+
+  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+
+  const todayStr = new Date().toLocaleDateString();
+
+  logs.forEach(l => {
+
+    if (!l.loginTS || !l.logoutTS) return;
+
+    if (new Date(l.loginTS).toLocaleDateString() !== todayStr) return;
+
+    const d = l.logoutTS - l.loginTS;
+
+    if (d > 30000) totalMillis += d;
+
+  });
+
+  const hrs = Math.floor(Math.floor(totalMillis / 60000) / 60);
+
+  const mins = Math.floor(totalMillis / 60000) % 60;
+
+  const timeStr = `${hrs} hr ${mins} min`;
+
+
+
+  // 4. Update History (Backend Sync)
+
+  const historyEntry = {
+
+    date: new Date().toLocaleDateString(),
+
+    score: p.percent,
+
+    rating: getLabel(p.percent),
+
+    time: timeStr,
+
+    subjects: [...tasks.filter(t=>t.done).map(t=>t.name), ...extras.filter(e=>e.done).map(e=>e.name)].join(", "),
+
+    adminReview: null
+
+  };
+
+  let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
+
+  history.push(historyEntry);
+
+  if (history.length > 4) history.shift();
+
+  localStorage.setItem(key("HISTORY"), JSON.stringify(history));
+
+  
+
+  // 5. Clean up current session data
+
+  const carried = tasks.filter(t => !t.done);
+
+  localStorage.setItem(key("TASKS"), JSON.stringify(carried)); 
+
+  localStorage.setItem(key("EXTRA"), "[]");
+
+  localStorage.removeItem(key("LOGS"));
+
+  localStorage.setItem(key("IDLE_STRIKES"), "0");
+
+  localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
+
+  
+
+  // 6. Push to Firebase BEFORE logging out
+
+  uploadData(); 
+
+
+
+  // --- 7. GENERATE THE PERMANENT REPORT HTML ---
+
+  const doneTasks = tasks.filter(t => t.done).length;
+
+const doneExtras = extras.filter(e => e.done).length;
+
+const totalDone = doneTasks + doneExtras;
+
+
+
+  const reportHTML = `
+
+    <div style="padding:20px; max-width:500px; margin:0 auto;">
+
+        <div class="card" style="background:#1e1b4b;border-color:#6366f1; text-align:center; padding:30px;">
+
+          <h2 style="color:#a5b4fc; margin-bottom:10px;">SESSION COMPLETED</h2>
+
+          <div style="font-size:14px; color:#c7d2fe; margin-bottom:20px;">Safe to close browser</div>
+
+          
+
+          <div style="font-size:60px;font-weight:800;color:#38bdf8; line-height:1">${p.percent}%</div>
+
+          <div style="font-size:24px; font-weight:bold; color:#e0e7ff">${getLabel(p.percent)}</div>
+
+          
+
+          <div style="margin:20px 0; padding:15px; background:#312e81; border-radius:10px;">
+
+             <div style="color:#facc15;font-size:18px;">⏱ ${timeStr}</div>
+
+             <div style="font-size:13px; margin-top:5px; line-height:1.6">
+
+  Assigned Completed: ${doneTasks}<br>
+
+  Extra Completed: ${doneExtras}<br>
+
+  <b>Total Completed: ${totalDone}</b>
+
+</div>
+
+
+
+          </div>
+
+
+
+          <div style="font-size:12px;color:#94a3b8; margin-bottom:20px;">
+
+            (Waiting for Admin Review...)
+
+          </div>
+
+
+
+          <button onclick="dismissReportLock()" 
+
+            style="width:100%; background:#22c55e; padding:15px; font-size:16px; font-weight:bold; color:white;">
+
+            START NEW DAY (LOGIN)
+
+          </button>
+
+        </div>
+
+    </div>
+
+  `;
+
+
+
+  // 8. LOCK THE SCREEN
+
+  localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
+
+
+
+  // 9. LOGOUT (User goes offline)
+
+  signOut(auth).then(() => {
+
+     location.reload(); 
+
+  });
+
+}
+
+
+
 // --- NEW UNLOCK FUNCTION ---
+
 window.dismissReportLock = function () {
+
     localStorage.removeItem("LOCKED_REPORT_VIEW");
+
     signOut(auth).finally(() => {
+
         location.reload();
+
     });
+
 };
+
+
+
+
 
 
 
 function renderLogs() {
+
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+
   const tbody = document.getElementById("logTable");
+
   if(!tbody) return;
+
   tbody.innerHTML = "";
+
   
+
   logs.forEach(l => {
+
     // HIDE DELETED LOGS FROM STUDENT VIEW
+
     if(l.deleted) return;
 
+
+
     let workHtml = "-";
+
     if (l.completed && l.completed.length) {
+
       workHtml = l.completed.map(item => {
+
         if(typeof item === 'string'){ return `<div>${item}</div>`; }
+
         return `
+
         <div style="border-bottom:1px dashed #334155; padding:4px 0;">
+
             <div style="color:#86efac;font-weight:bold">${item.name}</div>
+
             <div style="font-size:12px;color:#cbd5e1">
+
                ${item.comment} | Due: <span style="color:#fca5a5">${item.due}</span>
+
             </div>
+
         </div>`;
+
       }).join("");
+
     }
+
     tbody.innerHTML += `
+
       <tr>
+
         <td style="vertical-align:top">${l.login}</td>
+
         <td style="vertical-align:top">${l.logout}</td>
+
         <td style="vertical-align:top">${l.reason}</td>
+
         <td style="text-align:left;vertical-align:top">${workHtml}</td>
+
       </tr>`;
+
   });
+
 }
+
 window.toggleNoticeBoard = function () {
+
     const noticeBox = document.getElementById("noticeBoardBox");
+
     const taskBox = document.getElementById("taskBox");
+
     const logBox = document.getElementById("logBox");
+
     const historyBox = document.getElementById("historyBox");
+
     const subjectBox = document.getElementById("subjectProgressBox");
 
 
+
+
+
     if (!noticeBox) {
+
         alert("Notice Board container not found");
+
         return;
+
     }
+
+
 
     const isHidden = noticeBox.classList.contains("hidden");
 
+
+
     // Hide other sections
+
     if (taskBox) taskBox.classList.add("hidden");
+
     if (logBox) logBox.classList.add("hidden");
+
     if (historyBox) historyBox.classList.add("hidden");
+
     if (subjectBox) subjectBox.classList.add("hidden");
 
 
+
+
+
     if (isHidden) {
+
         noticeBox.classList.remove("hidden");
+
         loadNotices();
+
     } else {
+
         noticeBox.classList.add("hidden");
+
         if (taskBox) taskBox.classList.remove("hidden");
+
         if (logBox) logBox.classList.remove("hidden");
+
     }
+
 };
+
 window.softRefresh = function () {
+
     location.reload();
+
 };
+
+
 
 window.requestSubjectDelete = async function(subject, rowId) {
+
   if (!currentUser) return;
 
+
+
   // FIX 1: Check if rowId is valid. Old data might have undefined IDs.
+
   if (!rowId) {
+
     alert("System Error: This entry is from an old version and has no ID. It cannot be requested for deletion. Ask Admin to clear it manually.");
+
     return;
+
   }
 
+
+
   const reason = prompt(
+
     "Why do you want to delete this entry?",
+
     "Wrong entry by mistake"
+
   );
+
   if (!reason) return;
+
+
 
   if (!confirm("Send delete request to admin?")) return;
 
+
+
   const payload = {
+
     subject: subject,
+
     rowId: rowId,       // Firebase throws error if this is undefined
+
     reason: reason,
+
     time: Date.now(),
+
     status: "Pending"
+
   };
 
+
+
   try {
+
     // FIX 2: Ensure path uses string version of ID
+
     const path = `users/${currentUser.uid}/SUBJECT_DELETE_REQUESTS/${String(rowId)}`;
+
     
+
     await set(ref(db, path), payload);
 
+
+
     alert("Delete request sent to admin.");
+
   } catch (e) {
+
     // FIX 3: Log the ACTUAL error to console and alert message
+
     console.error("DELETE REQUEST ERROR:", e);
+
     alert("Failed to send delete request: " + e.message);
+
   }
+
 };
+
+
+
+
 
 
 
 // --- ATTACH TO WINDOW ---
+
     window.handleLoginFlow = handleLoginFlow;
+
     window.resetWatchdog = resetWatchdog;
+
     window.bioBreak = bioBreak;
+
     window.openDayEnd = openDayEnd;
+
     window.finalDayEnd = finalDayEnd;
+
     window.startMockTestSetup = startMockTestSetup;
+
     window.triggerEndTest = triggerEndTest;
+
     window.addExtra = addExtra;
+
     window.clearSingleSubject = window.clearSingleSubject;
+
     window.toggleHistory = toggleHistory;
+
     window.requestLeave = requestLeave;
+
     window.forceLogout = forceLogout;
+
     window.handleLeave = window.handleLeave;
+
     window.openAdminModal = window.openAdminModal;
+
     window.deleteLogEntry = window.deleteLogEntry;
+
     window.closeAdminModal = window.closeAdminModal;
+
     window.unlockStudent = window.unlockStudent;
+
     window.switchAdminTab = window.switchAdminTab;
+
     window.addAdminReview = window.addAdminReview;
+
     window.terminateStudent = window.terminateStudent;
+
     window.dismissFeedback = window.dismissFeedback;
+
     window.sendWarning = window.sendWarning;
+
     window.dismissRejected = window.dismissRejected;
+
     window.clearLeave = window.clearLeave;
+
     window.dismissLeaveStatus = window.dismissLeaveStatus;
+
     window.resetLeaveBalance = window.resetLeaveBalance;
+
     window.toggleNoticeBoard = window.toggleNoticeBoard;
+
     window.dismissRejected = window.dismissRejected;
+
     window.sendNotice = window.sendNotice;
+
     window.dismissNoticePopup = window.dismissNoticePopup;
+
     window.softRefresh = window.softRefresh;
+
     window.dismissReportLock = window.dismissReportLock;
+
     window.toggleSubjectProgress = window.toggleSubjectProgress;
+
     window.renderSubjectTable = window.renderSubjectTable;
+
     window.clearSubjectProgress = window.clearSubjectProgress;
+
     window.requestSubjectDelete = window.requestSubjectDelete;
-    window.openAdminSubjectManager = openAdminSubjectManager;
-    window.closeAdminSubjectManager = closeAdminSubjectManager;
-    window.openDayEnd = openDayEnd;
-    window.addAdminSubject = addAdminSubject;
-    window.removeAdminSubject = removeAdminSubject;
+
+
+
   </script>
 
+
+
 </body>
+
 </html>
+
+
+
+
+
