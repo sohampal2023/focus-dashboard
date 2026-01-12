@@ -1381,45 +1381,61 @@ window.setExamSchedule = async function (uid) {
 
 
 // --- ADMIN MODAL & HISTORY INSPECTOR ---
-window.currentAdminUid = null;
+ // Global variable to hold the live connection
+let adminUnsubscribe = null; 
 
-window.openAdminModal = async function(uid, email) {
+window.openAdminModal = function(uid, email) {
     window.currentAdminUid = uid;
     const modal = document.getElementById("adminModal");
     
-    // Reset Views
-    document.getElementById("modalBodyLogs").innerHTML = "Loading...";
-    document.getElementById("modalBodyHistory").innerHTML = "Loading...";
-    document.getElementById("modalBodyMocks").innerHTML = "Loading...";
-    document.getElementById("modalBodySubjects").innerHTML = ""; // Clear table
-    
-    // Open Modal & Default Tab
+    // Show Modal
     modal.classList.remove("hidden");
-    window.switchAdminTab('logs');
 
-    try {
-        const snapshot = await get(child(ref(db), `users/${uid}`));
-        const user = snapshot.val() || {};
-        
-        // 1. Logs
-        let logs = JSON.parse(user.LOGS || "[]");
-        renderAdminLogs(uid, logs);
+    // Show "Loading" state while connecting
+    document.getElementById("modalBodyLogs").innerHTML = "<div style='padding:20px; text-align:center;'>🔌 Connecting to Live Data...</div>";
 
-        // 2. History
-        let history = JSON.parse(user.HISTORY || "[]");
-        renderAdminHistory(uid, history);
-
-        // 3. Mock Tests
-        let mocks = JSON.parse(user.MOCK_LOGS || "[]");
-        renderMockLogs(uid, mocks);
-
-        // 4. NEW: Subjects
-        window.currentAdminSubjectData = JSON.parse(user.SUBJECT_WISE_TABLE || "{}");
-        initAdminSubjectDropdown(); // Call helper to fill dropdown
-
-    } catch(e) {
-        document.getElementById("modalBodyLogs").innerHTML = "Error loading data: " + e.message;
+    // 1. SAFETY: Disconnect any previous live connections
+    if (adminUnsubscribe) {
+        adminUnsubscribe(); // This stops the previous listener
+        adminUnsubscribe = null;
     }
+
+    // 2. START NEW LIVE LISTENER (Using onValue instead of get)
+    const userRef = ref(db, `users/${uid}`);
+    
+    adminUnsubscribe = onValue(userRef, (snapshot) => {
+        if (snapshot.exists()) {
+            const user = snapshot.val();
+
+            // --- A. Render Logs ---
+            let logs = JSON.parse(user.LOGS || "[]");
+            renderAdminLogs(uid, logs);
+
+            // --- B. Render History (Reviews) ---
+            let history = JSON.parse(user.HISTORY || "[]");
+            renderAdminHistory(uid, history);
+
+            // --- C. Render Mock Tests ---
+            let mocks = JSON.parse(user.MOCK_LOGS || "[]");
+            renderMockLogs(uid, mocks);
+
+            // --- D. Render Subjects ---
+            window.currentAdminSubjectData = JSON.parse(user.SUBJECT_WISE_TABLE || "{}");
+            // If a subject is currently selected in the dropdown, refresh the table immediately
+            const subSelect = document.getElementById("adminSubjectSelect");
+            if (subSelect && subSelect.value) {
+                renderAdminSelectedSubject(); 
+            } else {
+                initAdminSubjectDropdown(); // Refresh dropdown list
+            }
+
+        } else {
+            document.getElementById("modalBodyLogs").innerHTML = "User data not found.";
+        }
+    });
+
+    // Default to Logs tab
+    window.switchAdminTab('logs');
 };
   // Populate the dropdown with subjects found in the student's data
 window.initAdminSubjectDropdown = function() {
@@ -1731,8 +1747,13 @@ window.deleteLogEntry = async function(uid, index) {
 
 window.closeAdminModal = function() {
     document.getElementById("adminModal").classList.add("hidden");
+    
+    // STOP THE LIVE LISTENER (Saves data/bandwidth)
+    if (adminUnsubscribe) {
+        adminUnsubscribe();
+        adminUnsubscribe = null;
+    }
 };
-
 // --- ADMIN ACTIONS (STRICT CONFIRM) ---
 window.resetLeaveBalance = async function(uid) {
     if(!confirm(`RESET BALANCE:\n\nSet leave balance back to 6 days for student ${uid}?`)) return;
@@ -1932,6 +1953,40 @@ async function initStudentDashboard() {
             popup.classList.add("hidden");
         }
     });
+  // --- PASTE INSIDE initStudentDashboard() ---
+
+// 1. Live Listener for LEAVE REQUESTS
+onValue(ref(db, `users/${currentUser.uid}/leaveRequest`), (snap) => {
+    // If Admin approves/rejects, this runs immediately
+    const reqData = snap.val();
+    
+    // Update the Dashboard Box
+    checkLeaveStatus({ leaveRequest: reqData });
+
+    // Update the "Leave Balance" display if it changed
+    if (reqData && reqData.status === "Approved") {
+        // Optional: Trigger a balance refresh if needed
+        // For now, simply showing the Green Box is enough
+    }
+});
+
+// 2. Live Listener for NEW REVIEWS (History)
+onValue(ref(db, `users/${currentUser.uid}/newFeedback`), (snap) => {
+    const msg = snap.val();
+    const feedbackBox = document.getElementById("adminFeedbackBox");
+    const feedbackText = document.getElementById("adminFeedbackText");
+
+    if (msg) {
+        // Show the Purple Feedback Box instantly
+        feedbackBox.classList.remove("hidden");
+        feedbackText.innerText = msg;
+        
+        // Also update local storage so History tab is fresh
+        downloadData(currentUser.uid).then(data => {
+            if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
+        });
+    }
+});
   // --- UPCOMING EXAMS LISTENER ---
 onValue(ref(db, `users/${currentUser.uid}/UPCOMING_EXAMS`), (snap) => {
 
