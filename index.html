@@ -341,6 +341,11 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 <div id="adminBox" class="card hidden" style="border-color: #a855f7;">
     <h2 style="color:#a855f7; border-bottom:1px solid #334155; padding-bottom:10px;">ADMINISTRATOR DASHBOARD</h2>
+    <button
+    style="background:#0ea5e9;margin-bottom:10px;width:auto"
+    onclick="openAdminSubjectManager()">
+    📘 Subject List (Global)
+  </button>
     <div style="text-align:right; margin-bottom:10px; font-size:12px; color:#4ade80">
         ● Live System Active
     </div>
@@ -353,11 +358,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     </div>
     <div id="studentList">Loading...</div>
 </div>
-<button
-  style="background:#0ea5e9;margin-bottom:10px"
-  onclick="openAdminSubjectManager()">
-  📘 Subject List (Global)
-</button>
+
 <div id="adminSubjectPopup" class="modal-overlay hidden">
   <div class="modal-content" style="max-width:420px">
     <h3 style="color:#38bdf8">📘 Common Subject List</h3>
@@ -3060,30 +3061,45 @@ function getAccuracyRemark(acc) {
   if (acc >= 75) return "Need Improvement";
   return "Take care of your study";
 }
+async function openDayEnd() {
+  const box = document.getElementById("nextDayBox");
+  const nextInputs = document.getElementById("nextInputs");
 
+  if (!box || !nextInputs) {
+    alert("Day End container missing");
+    return;
+  }
 
-// --- DAY END ---
-const snap = await get(ref(db, "SUBJECT_MASTER"));
-const subjects = snap.exists() ? snap.val() : [];
-const options = subjects.map(s => `<option value="${s}">${s}</option>`).join("");
+  nextInputs.innerHTML = "";
+  box.classList.remove("hidden");
 
-for (let i = 0; i < 7; i++) {
-  nextInputs.innerHTML += `
-    <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:10px;margin-bottom:8px">
-      <select class="nextInput" id="nd_sub_${i}">
-        <option value="">Select Subject</option>
-        ${options}
-      </select>
+  try {
+    const snap = await get(ref(db, "SUBJECT_MASTER"));
+    const subjects = snap.exists() ? snap.val() : [];
 
-      <input
-        class="nextInput"
-        id="nd_top_${i}"
-        placeholder="Target Topic"
-      />
-    </div>
-  `;
-}
+    if (subjects.length === 0) {
+      nextInputs.innerHTML =
+        "<div style='color:#f87171'>Admin has not added any subjects yet.</div>";
+      return;
+    }
 
+    const options = subjects
+      .map(s => `<option value="${s}">${s}</option>`)
+      .join("");
+
+    for (let i = 0; i < 7; i++) {
+      nextInputs.innerHTML += `
+        <div style="display:grid;grid-template-columns:1fr 1.5fr;gap:10px;margin-bottom:8px">
+          <select class="nextInput" id="nd_sub_${i}">
+            <option value="">Select Subject</option>
+            ${options}
+          </select>
+
+          <input
+            class="nextInput"
+            id="nd_top_${i}"
+            placeholder="Target Topic"
+          />
 
 function finalDayEnd() {
   if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
@@ -3344,7 +3360,9 @@ window.requestSubjectDelete = async function(subject, rowId) {
     window.renderSubjectTable = window.renderSubjectTable;
     window.clearSubjectProgress = window.clearSubjectProgress;
     window.requestSubjectDelete = window.requestSubjectDelete;
-
+    window.openAdminSubjectManager = openAdminSubjectManager;
+    window.closeAdminSubjectManager = closeAdminSubjectManager;
+    window.openDayEnd = openDayEnd;
   </script>
 
 </body>
