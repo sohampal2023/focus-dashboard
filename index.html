@@ -3177,7 +3177,9 @@ const totalDone = doneTasks + doneExtras;
 const reportHTML = `
   <div style="padding:20px; max-width:500px; margin:0 auto;">
     <div class="card" style="background:#1e1b4b;border-color:#6366f1; text-align:center; padding:30px;">
+
       <h2 style="color:#a5b4fc; margin-bottom:10px;">SESSION COMPLETED</h2>
+
       <div style="font-size:14px; color:#c7d2fe; margin-bottom:20px;">
         Safe to close browser
       </div>
@@ -3199,24 +3201,19 @@ const reportHTML = `
           <b>Total Completed: ${totalDone}</b>
         </div>
       </div>
+
+      <div style="font-size:12px;color:#94a3b8; margin-bottom:20px;">
+        (Waiting for Admin Review...)
+      </div>
+
+      <button onclick="dismissReportLock()"
+        style="width:100%; background:#22c55e; padding:15px; font-size:16px; font-weight:bold; color:white;">
+        START NEW DAY (LOGIN)
+      </button>
+
     </div>
   </div>
 `;
-
-
-          </div>
-
-          <div style="font-size:12px;color:#94a3b8; margin-bottom:20px;">
-            (Waiting for Admin Review...)
-          </div>
-
-          <button onclick="dismissReportLock()" 
-            style="width:100%; background:#22c55e; padding:15px; font-size:16px; font-weight:bold; color:white;">
-            START NEW DAY (LOGIN)
-          </button>
-        </div>
-    </div>
-  `;
 
   // 8. LOCK THE SCREEN
   localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
