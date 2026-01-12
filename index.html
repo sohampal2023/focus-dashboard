@@ -866,6 +866,12 @@ async function addAdminSubject() {
   const snap = await get(refPath);
   const subjects = snap.exists() ? snap.val() : [];
 
+  // ✅ HARD LIMIT: ADMIN MAX 70 SUBJECTS
+  if (subjects.length >= 70) {
+    alert("Maximum 70 subjects allowed.");
+    return;
+  }
+
   if (subjects.includes(val)) {
     alert("Subject already exists");
     return;
@@ -873,9 +879,11 @@ async function addAdminSubject() {
 
   subjects.push(val);
   await set(refPath, subjects);
+
   input.value = "";
   loadAdminSubjects();
 }
+
 
 async function removeAdminSubject(index) {
   const refPath = ref(db, "SUBJECT_MASTER");
