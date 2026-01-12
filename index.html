@@ -3133,7 +3133,7 @@ function finalDayEnd() {
   });
   const hrs = Math.floor(Math.floor(totalMillis / 60000) / 60);
   const mins = Math.floor(totalMillis / 60000) % 60;
-  const timeStr = `${hrs} hr ${mins} min`;
+ const timeStr = hrs + " hr " + mins + " min";
 
   // 4. Update History (Backend Sync)
   const historyEntry = {
