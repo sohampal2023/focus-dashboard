@@ -268,13 +268,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 .leave-status-approved { border-color: #22c55e; background: #064e3b; color: #dcfce7; }
 .leave-status-half { border-color: #eab308; background: #422006; color: #fef08a; }
 .leave-status-rejected { border-color: #ef4444; background: #450a0a; color: #fee2e2; }
-/* Dropdown Styling */
-.nextInput { 
-  width:100%; padding:10px; margin:6px 0; 
-  border-radius:8px; border:1px solid #334155; 
-  background:#020617; color:#e5e7eb; 
-  cursor: pointer;
-}
+
 </style>
 </head>
 
@@ -347,12 +341,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
 <div id="adminBox" class="card hidden" style="border-color: #a855f7;">
     <h2 style="color:#a855f7; border-bottom:1px solid #334155; padding-bottom:10px;">ADMINISTRATOR DASHBOARD</h2>
-
-    <div style="margin-bottom:15px;">
-        <button onclick="configureMasterSubjects()" style="width:auto; background:#4ade80; color:#064e3b; font-weight:bold; padding:8px 15px;">
-            ⚙ Configure Global Subject List
-        </button>
-    </div>
     <div style="text-align:right; margin-bottom:10px; font-size:12px; color:#4ade80">
         ● Live System Active
     </div>
@@ -808,7 +796,150 @@ async function initAdminDashboard() {
 // BULK UPLOAD LOGIC
 // ==========================================
 
+let parsedExamData = []; // Stores the questions temporarily
 
+// 1. LOCK & PREVIEW FUNCTION
+function lockAndPreview() {
+    const rawQ = document.getElementById('rawQuestions').value;
+    const rawA = document.getElementById('rawAnswers').value;
+    
+    if(!rawQ || !rawA) {
+        alert("Please fill in both Questions and Answer Key!");
+        return;
+    }
+
+    parsedExamData = []; // Reset storage
+    
+    // Split text by blank lines (Detects separate question blocks)
+    const questionsBlock = rawQ.split(/\n\s*\n/); 
+    
+    questionsBlock.forEach((block) => {
+        block = block.trim();
+        if(!block) return;
+
+        // Extract Question Number & Text
+        const qMatch = block.match(/^(\d+)\.\s*([\s\S]*?)(?=\n?[a-d]\))/i);
+        
+        // Extract Options a,b,c,d
+        const optionsMatch = {
+            a: block.match(/a\)\s*(.*)/i),
+            b: block.match(/b\)\s*(.*)/i),
+            c: block.match(/c\)\s*(.*)/i),
+            d: block.match(/d\)\s*(.*)/i)
+        };
+
+        if (qMatch) {
+            let qObj = {
+                id: qMatch[1], // e.g. "1"
+                text: qMatch[2].trim().replace(/\n/g, "<br>"),
+                options: {
+                    a: optionsMatch.a ? optionsMatch.a[1].trim() : "Missing",
+                    b: optionsMatch.b ? optionsMatch.b[1].trim() : "Missing",
+                    c: optionsMatch.c ? optionsMatch.c[1].trim() : "Missing",
+                    d: optionsMatch.d ? optionsMatch.d[1].trim() : "Missing"
+                },
+                correct: null // Answer key fills this later
+            };
+            parsedExamData.push(qObj);
+        }
+    });
+
+    // Parse Answer Key (e.g., "1-b, 2-c" or "1.b 2.c")
+    const answers = rawA.split(/[\n,]\s*/); 
+    
+    answers.forEach(ans => {
+        const match = ans.match(/(\d+)[\s\.\-]*([a-d])/i);
+        if(match) {
+            const qNum = match[1];
+            const correctOpt = match[2].toLowerCase();
+            
+            // Find matching question and update answer
+            const targetQ = parsedExamData.find(q => q.id == qNum);
+            if(targetQ) {
+                targetQ.correct = correctOpt;
+            }
+        }
+    });
+
+    renderPreviewTable();
+}
+
+// 2. RENDER TABLE
+function renderPreviewTable() {
+    const tbody = document.getElementById('previewBody');
+    tbody.innerHTML = "";
+    let invalidCount = 0;
+
+    parsedExamData.forEach(q => {
+        let row = `<tr>
+            <td>${q.id}</td>
+            <td>${q.text.substring(0, 50)}...</td>
+            <td>
+                A: ${q.options.a.substring(0, 15)}... <br>
+                B: ${q.options.b.substring(0, 15)}...
+            </td>
+            <td style="font-weight:bold; color:${q.correct ? 'green' : 'red'}">
+                ${q.correct ? q.correct.toUpperCase() : 'MISSING!'}
+            </td>
+        </tr>`;
+        tbody.innerHTML += row;
+        
+        if(!q.correct) invalidCount++;
+    });
+
+    document.getElementById('previewStats').innerHTML = `
+        <strong>Total Questions:</strong> ${parsedExamData.length} | 
+        <strong>Errors:</strong> ${invalidCount} (If > 0, check your answer key)
+    `;
+
+    // Swap Views
+    document.querySelector('.bulk-container').classList.add('hidden');
+    document.getElementById('previewArea').classList.remove('hidden');
+}
+
+// 3. EDIT AGAIN
+function editAgain() {
+    document.querySelector('.bulk-container').classList.remove('hidden');
+    document.getElementById('previewArea').classList.add('hidden');
+}
+
+function clearBulkForm() {
+    document.getElementById('rawQuestions').value = "";
+    document.getElementById('rawAnswers').value = "";
+}
+
+// 4. PUBLISH TO FIREBASE
+function finalPublish() {
+    const title = document.getElementById('bulkExamTitle').value;
+    const duration = document.getElementById('bulkDuration').value;
+    const marks = document.getElementById('bulkMarks').value;
+
+    if(!title || !duration) {
+        alert("Please enter Exam Title and Duration!");
+        return;
+    }
+
+    // Create Final Object
+    const examPayload = {
+        title: title,
+        duration: parseInt(duration),
+        marksPerQ: parseInt(marks),
+        questions: parsedExamData,
+        createdAt: firebase.database.ServerValue.TIMESTAMP,
+        active: true
+    };
+
+    // Upload
+    const examRef = firebase.database().ref('exams').push();
+    examRef.set(examPayload)
+    .then(() => {
+        alert("✅ Exam Published Successfully!");
+        location.reload(); 
+    })
+    .catch((error) => {
+        alert("Error: " + error.message);
+    });
+}
 async function cleanupDeletedData() {
     // 🔒 HARD GUARD: do not run unless admin
     if (!currentUser || currentUser.email !== ADMIN_EMAIL) return;
@@ -1083,53 +1214,7 @@ window.clearSubjectProgress = async function(uid) {
     alert("Subject delete failed.");
   }
 };
-// 1. Admin Function: Saves list GLOBALLY
-window.configureMasterSubjects = async function() {
-    if(!isAdmin()) return;
 
-    let currentList = "Physics, Chemistry, Maths"; 
-    try {
-        // Fetch from Root Database (Global)
-        const snap = await get(ref(db, 'MASTER_SUBJECT_LIST'));
-        if(snap.exists()) currentList = snap.val();
-    } catch(e) {}
-
-    const input = prompt(
-        "PASTE GLOBAL SUBJECT LIST (Separated by comma):\nChanges apply to ALL students immediately.", 
-        currentList
-    );
-
-    if(!input) return;
-
-    // Clean up list
-    const cleanList = input.split(',').map(s => s.trim()).filter(s => s.length > 0).join(', ');
-
-    try {
-        // Save to Root Database
-        await set(ref(db, 'MASTER_SUBJECT_LIST'), cleanList);
-        alert("✅ Global list updated! All students will see these subjects.");
-    } catch(e) {
-        alert("Error saving: " + e.message);
-    }
-};
-
-// 2. Helper: Fetches Global List for Dropdown
-async function getSubjectOptionsHTML() {
-    let subjects = ["Physics", "Chemistry", "Maths"]; // Default fallback
-    
-    try {
-        const snap = await get(ref(db, 'MASTER_SUBJECT_LIST'));
-        if(snap.exists()) {
-            subjects = snap.val().split(',').map(s => s.trim());
-        }
-    } catch(e) { console.log("Using defaults"); }
-
-    let options = `<option value="">-- Select Subject --</option>`;
-    subjects.sort().forEach(sub => {
-        options += `<option value="${sub}">${sub}</option>`;
-    });
-    return options;
-}
 window.approveSubjectDelete = async function(uid, subject, rowId) {
   try {
     // 1. Get current table
