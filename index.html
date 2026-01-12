@@ -2805,15 +2805,16 @@ function setupTasks() {
   // Convert NEXT_TASKS (objects) into Task format
   // If nextData contains strings (old format), handle that too
   const newTasks = nextData.map(item => {
-    if (typeof item === 'object' && item !== null) {
-      return { 
-        name: item.subject,      // Main identifier
-        target: item.topic,      // The target topic to display
-        done: false, 
-        comment: "", 
-        due: "" 
-      };
-    } else {
+  if (typeof item === 'object' && item !== null) {
+    return {
+      name: item.subject + " | " + (item.topic || "General"),
+      target: item.topic || "",
+      done: false,
+      comment: "",
+      due: ""
+    };
+  }
+ else {
       // Old string format fallback
       return { name: item, target: "", done: false, comment: "", due: "" };
     }
