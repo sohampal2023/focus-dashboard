@@ -2827,11 +2827,11 @@ function setupTasks() {
   
   // Default tasks if empty
   if (!merged.length) {
-    merged = [
-      { name: "Study", target: "General", done: false, comment: "", due: "" },
-      { name: "Revise", target: "Notes", done: false, comment: "", due: "" }
-    ];
-  }
+  localStorage.setItem(key("TASKS"), "[]");
+  uploadData();
+  return;
+}
+
 
   localStorage.setItem(key("TASKS"), JSON.stringify(merged));
   localStorage.removeItem(key("NEXT_TASKS"));
