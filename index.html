@@ -1115,7 +1115,9 @@ function startAdminListener() {
                 </div>`;
             });
             
-            listDiv.innerHTML = html || "No students found.";
+          listDiv.innerHTML = html || "No students found.";
+listDiv.offsetHeight; // force repaint
+
         } else {
             listDiv.innerHTML = "No user data available.";
         }
@@ -1585,6 +1587,8 @@ window.renderAdminHistory = function(uid, history) {
     let html = "";
 
     history.forEach((entry, index) => {
+    entry.__index = index;
+
         html += `
         <tr>
             <td>${entry.date}</td>
@@ -1593,23 +1597,17 @@ window.renderAdminHistory = function(uid, history) {
             <td>${entry.rating}</td>
             <td style="font-size:12px">
               ${entry.adminReview || 
-                `<button onclick="addAdminReview('${uid}', ${index})"
-                  style="background:#a855f7;font-size:10px;padding:4px 6px">
-                  Add Review
-                </button>`}
+                `<button onclick="addAdminReview('${uid}', ${entry.__index})">Add Review</button>`}
             </td>
             <td>
-              <button
-                onclick="deletePerformanceEntry('${uid}', ${index})"
-                style="background:#7f1d1d;color:white;font-size:10px;padding:4px 6px">
-                Delete
-              </button>
+              <button onclick="deletePerformanceEntry('${uid}', ${entry.__index})">Delete</button>
             </td>
         </tr>`;
     });
 
     body.innerHTML = html;
 };
+
 
 
 window.addAdminReview = async function(uid, index) {
@@ -2050,10 +2048,12 @@ await update(ref(db, `users/${currentUser.uid}`), {
 
 
     // Check New Admin Feedback
-    if (serverData.newFeedback) {
-        document.getElementById("adminFeedbackBox").classList.remove("hidden");
-        document.getElementById("adminFeedbackText").innerText = `${serverData.newFeedback}`;
-    }
+  if (serverData.newFeedback && !sessionStorage.getItem("FEEDBACK_SEEN")) {
+    document.getElementById("adminFeedbackBox").classList.remove("hidden");
+    document.getElementById("adminFeedbackText").innerText = serverData.newFeedback;
+    sessionStorage.setItem("FEEDBACK_SEEN", "1");
+}
+
 
     checkLeaveStatus(serverData);
 
@@ -2142,11 +2142,14 @@ if (!hasActiveSession) {
 }
 
 window.dismissFeedback = async function() {
+    sessionStorage.removeItem("FEEDBACK_SEEN");
     document.getElementById("adminFeedbackBox").classList.add("hidden");
-    if(currentUser) {
+
+    if (currentUser) {
         await remove(ref(db, `users/${currentUser.uid}/newFeedback`));
     }
-}
+};
+
 
 // --- ALERT DISMISS ---
 window.dismissRejected = async function() {
@@ -2351,7 +2354,7 @@ function uploadData() {
 
     const payload = {
         profile: { email: currentUser.email }, 
-        stats: { percent: p.percent, rating: getLabel(p.percent) }, 
+       
         TASKS: localStorage.getItem(key("TASKS")),
         EXTRA: localStorage.getItem(key("EXTRA")),
         LOGS: localStorage.getItem(key("LOGS")),
@@ -2367,13 +2370,16 @@ function uploadData() {
 
     update(ref(db, `users/${currentUser.uid}`), payload)
     .then(() => {
-        syncStatus.innerText = "Saved";
-        setTimeout(() => syncStatus.innerText = "Online", 2000);
-    })
-    .catch((error) => {
-        syncStatus.innerText = "Save Failed";
+    // ✅ LIVE STATS UPDATE (ADMIN SEES THIS)
+    update(ref(db, `users/${currentUser.uid}/stats`), {
+        percent: p.percent,
+        rating: getLabel(p.percent),
+        updatedAt: Date.now()
     });
-}
+
+    syncStatus.innerText = "Saved";
+    setTimeout(() => syncStatus.innerText = "Online", 2000);
+})
 
 // --- SUBJECT HELPER FUNCTIONS ---
 function getSubjectData() {
