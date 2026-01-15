@@ -3069,8 +3069,8 @@ function loadTasks() {
       }
       
       if(cb.checked){
-        const remark = prompt(`What did you cover in ${t.name}?`, "Done");
-        const dueVal = prompt(`Any pending work left?`, "None");
+        const remark = prompt(`What did you cover in ${t.name}?`, " ");
+        const dueVal = prompt(`Any pending work left?`, " ");
         t.comment = remark || "-";
         t.due = dueVal || "-";
         
