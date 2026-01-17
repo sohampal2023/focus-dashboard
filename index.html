@@ -595,6 +595,7 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
   // --- CONFIGURATION: FIXED SUBJECT LIST ---
+// --- CONFIGURATION: FIXED SUBJECT LIST ---
 const FIXED_SUBJECTS = [
   // --- ENGINEERING ---
   "Power Systems - II",
@@ -3254,8 +3255,8 @@ function getAccuracyRemark(acc) {
 
 
 // --- DAY END ---
-function openDayEnd() {
-  window.openDayEnd = function() {
+
+window.openDayEnd = function() {
   clearInterval(idleTimer);
   const idleBox = document.getElementById("idleBox");
   if(idleBox) idleBox.classList.add("hidden");
