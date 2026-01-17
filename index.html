@@ -594,6 +594,24 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
+  // --- CONFIGURATION: FIXED SUBJECT LIST ---
+const FIXED_SUBJECTS = [
+  // --- ENGINEERING ---
+  "Power Systems - II",
+  "Microprocessors and Microcontrollers",
+  "Wind and Solar Power Energy System",
+  "Measurement and Instrumentation",
+  "IoT",
+  "Principles of Management",
+  
+  // --- GOVT PREP ---
+  "GOVT_MATH",
+  "GOVT_REASONING",
+  "GOVT_GK_GS",
+  "GOVT_CA",
+  "GOVT_SCIENCE",
+  "GOVT_ENGLISH"
+];
 
 onAuthStateChanged(auth, async (user) => {
     // -------------------------------------------------------------------
@@ -3155,13 +3173,27 @@ function loadTasks() {
 }
 
 function addExtra() {
-  const subjectName = prompt("Enter SUBJECT Name for this work:\n(e.g. Physics, Chemistry, Maths)");
+  // 1. Build a numbered menu string
+  let menu = "Select Subject for Extra Work (Enter Number):\n\n";
+  FIXED_SUBJECTS.forEach((sub, index) => {
+      menu += `${index + 1}. ${sub}\n`;
+  });
   
-  if (!subjectName) return; 
+  const choice = prompt(menu);
+  if (!choice) return; // User cancelled
+
+  // 2. Validate Input
+  const index = parseInt(choice) - 1;
+  if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
+      alert("Invalid selection. Please enter a number from the list.");
+      return;
+  }
+
+  const subjectName = FIXED_SUBJECTS[index];
 
   // 🔒 SECURITY BLOCK: Prevent user from manually adding Mock Tests here
   if (subjectName.toLowerCase().includes("mock")) {
-      alert("⚠️ ACCESS DENIED\n\nTo add a Mock Test, you MUST use the orange 'Start Mock Test' button on the dashboard.\n\nThis ensures accurate timer and scoring logs.");
+      alert("⚠️ ACCESS DENIED\n\nTo add a Mock Test, you MUST use the orange 'Start Mock Test' button.");
       return;
   }
 
@@ -3223,11 +3255,19 @@ function getAccuracyRemark(acc) {
 
 // --- DAY END ---
 function openDayEnd() {
+  window.openDayEnd = function() {
   clearInterval(idleTimer);
   const idleBox = document.getElementById("idleBox");
   if(idleBox) idleBox.classList.add("hidden");
   
   const nextInputs = document.getElementById("nextInputs");
+  
+  // 1. Generate Options for the Dropdown
+  let optionsHtml = `<option value="">Select Subject</option>`;
+  FIXED_SUBJECTS.forEach(sub => {
+    optionsHtml += `<option value="${sub}">${sub}</option>`;
+  });
+
   nextInputs.innerHTML = `
     <div style="margin-bottom:15px; color:#cbd5e1; font-size:13px; text-align:center">
       Enter your plan for tomorrow. <br>
@@ -3235,12 +3275,16 @@ function openDayEnd() {
     </div>
   `;
   
-  // Standard Next Day Tasks (Split into Subject + Topic inputs)
+  // 2. Render Dropdowns instead of Text Inputs
   for (let i = 0; i < 7; i++) {
     nextInputs.innerHTML += `
       <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:10px; margin-bottom:8px;">
-        <input class="nextInput" id="nd_sub_${i}" placeholder="Subject (e.g. Physics)" style="margin:0">
-        <input class="nextInput" id="nd_top_${i}" placeholder="Target Topic (e.g. Optics)" style="margin:0">
+        
+        <select class="nextInput" id="nd_sub_${i}" style="margin:0; cursor:pointer; background:#0f172a; border:1px solid #334155; color:#e5e7eb;">
+           ${optionsHtml}
+        </select>
+
+        <input class="nextInput" id="nd_top_${i}" placeholder="Target Topic (e.g. Unit 1)" style="margin:0">
       </div>
     `;
   }
