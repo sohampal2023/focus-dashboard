@@ -3044,25 +3044,27 @@ function loadTasks() {
   };
 
   // --- UPDATED SAVE FUNCTION ---
-  const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
-      
-      // 1. ROBUST NAME FIXING (Catches "Power System II", "Power System-II", etc.)
-      // If it contains "Power" and "System", force it to the correct name
-      if (subject.includes("Power") && subject.includes("System")) {
-          subject = "Power Systems - II"; 
+const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
+      let targetFolder = subject;
+
+      // 1. IMPROVED POWER SYSTEMS MATCHING
+      // This regex catches "Power System", "Power Systems", "PS", "PS2", "PS-II" etc.
+      const powerRegex = /\b(power\s*sys|ps\s*[-_ ]*ii)\b/i;
+      if (powerRegex.test(subject)) {
+          targetFolder = "Power Systems - II"; 
       }
       
-      // Fix Microprocessors mismatch if needed
-      if (subject.includes("Microprocessor")) {
-          subject = "Microprocessors and Microcontrollers";
+      // 2. IMPROVED MICROPROCESSOR MATCHING
+      if (subject.toLowerCase().includes("micro") || subject.toLowerCase().includes("mpmc")) {
+          targetFolder = "Microprocessors and Microcontrollers";
       }
 
-      console.log("Saving to Subject Folder:", subject); // Check Console to verify
+      console.log(`Auto-routing ${subject} to folder: ${targetFolder}`);
 
       const subjectData = getSubjectData(); 
-      if(!subjectData[subject]) subjectData[subject] = [];
+      if(!subjectData[targetFolder]) subjectData[targetFolder] = [];
       
-      subjectData[subject].push({
+      subjectData[targetFolder].push({
         id: Date.now(), 
         date: new Date().toLocaleDateString(),
         covered: covered || "-",
@@ -3072,7 +3074,6 @@ function loadTasks() {
       saveSubjectData(subjectData); 
       uploadData(); 
   };
-
   // --- RENDER STANDARD TASKS ---
   tasks.forEach(t => {
     const container = document.createElement("div");
