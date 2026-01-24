@@ -3016,7 +3016,6 @@ function setupTasks() {
   document.getElementById("logBox").classList.remove("hidden");
   document.getElementById("reportBox").classList.add("hidden");
 }
-
 function loadTasks() {
   const tList = document.getElementById("taskList");
   const eList = document.getElementById("extraList");
@@ -3043,19 +3042,22 @@ function loadTasks() {
       renderLogs();
     }
   };
-// Helper to save to Subject Table (For Admin View)
+
+  // --- UPDATED SAVE FUNCTION ---
   const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
       
-      // --- 1. NAME NORMALIZATION FIX ---
-      // This forces "Power System II" to become "Power Systems - II"
-      if (subject.trim() === "Power System II" || subject.trim() === "Power Systems II") {
-          subject = "Power Systems - II";
+      // 1. ROBUST NAME FIXING (Catches "Power System II", "Power System-II", etc.)
+      // If it contains "Power" and "System", force it to the correct name
+      if (subject.includes("Power") && subject.includes("System")) {
+          subject = "Power Systems - II"; 
       }
       
-      // You can add other mappings here if needed
-      if (subject.trim() === "Microprocessors") subject = "Microprocessors and Microcontrollers";
+      // Fix Microprocessors mismatch if needed
+      if (subject.includes("Microprocessor")) {
+          subject = "Microprocessors and Microcontrollers";
+      }
 
-      // --- END FIX ---
+      console.log("Saving to Subject Folder:", subject); // Check Console to verify
 
       const subjectData = getSubjectData(); 
       if(!subjectData[subject]) subjectData[subject] = [];
@@ -3070,6 +3072,7 @@ function loadTasks() {
       saveSubjectData(subjectData); 
       uploadData(); 
   };
+
   // --- RENDER STANDARD TASKS ---
   tasks.forEach(t => {
     const container = document.createElement("div");
@@ -3102,6 +3105,7 @@ function loadTasks() {
         t.comment = remark || "-";
         t.due = dueVal || "-";
         
+        // CALL THE UPDATED SAVE FUNCTION
         saveAutomatedSubjectProgress(t.name, t.comment, t.due);
         
       } else { 
@@ -3117,7 +3121,7 @@ function loadTasks() {
     tList.append(container);
   });
   
-  // --- RENDER EXTRA WORK (UPDATED LOGIC) ---
+  // --- RENDER EXTRA WORK ---
   extras.forEach(e => {
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
@@ -3132,10 +3136,8 @@ function loadTasks() {
     
     const updateLabel = () => {
        if(e.done){
-           // Display: Subject Name [Topic Name]
            label.innerHTML = ` <span style='color:#facc15'>${e.name}</span> <span style="font-size:12px;color:#e5e7eb">[${e.comment}]</span>`;
        } else {
-           // Display: Subject Name
            label.innerHTML = " " + e.name;
        }
     };
@@ -3148,23 +3150,18 @@ function loadTasks() {
       }
       
       if(cb.checked){
-        // LOGIC CHANGE: When ticked, ask for Topic Name
         const topicName = prompt(`Enter TOPIC NAME (or Test Name) for ${e.name}:`, "");
         
         if (!topicName) {
-            // If user cancels topic entry, uncheck the box
             cb.checked = false;
             return; 
         }
 
         const dueVal = prompt(`Any pending work/marks?`, "None");
-        
-        e.comment = topicName; // We save Topic Name in the 'comment' field for display
+        e.comment = topicName; 
         e.due = dueVal || "-";
 
-        // 🔥 SAVE TO SUBJECT WISE VIEW
-        // e.name = "Physics" (or Mock Test)
-        // topicName = "Thermodynamics" (or Full Syllabus Test)
+        // CALL THE UPDATED SAVE FUNCTION
         saveAutomatedSubjectProgress(e.name, topicName, e.due);
 
       } else { 
@@ -3181,7 +3178,6 @@ function loadTasks() {
     eList.append(container);
   });
 }
-
 function addExtra() {
   // 1. Build a numbered menu string
   let menu = "Select Subject for Extra Work (Enter Number):\n\n";
