@@ -598,7 +598,7 @@ const auth = getAuth(app);
 // --- CONFIGURATION: FIXED SUBJECT LIST ---
 const FIXED_SUBJECTS = [
   // --- ENGINEERING ---
-  "Power Systems - II",
+  "Power System - II",
   "Microprocessors and Microcontrollers",
   "Wind and Solar Power Energy System",
   "Measurement and Instrumentation",
@@ -3042,29 +3042,26 @@ function loadTasks() {
       renderLogs();
     }
   };
-
-  // --- UPDATED SAVE FUNCTION ---
 const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
-      let targetFolder = subject;
-
-      // 1. IMPROVED POWER SYSTEMS MATCHING
-      // This regex catches "Power System", "Power Systems", "PS", "PS2", "PS-II" etc.
-      const powerRegex = /\b(power\s*sys|ps\s*[-_ ]*ii)\b/i;
-      if (powerRegex.test(subject)) {
-          targetFolder = "Power Systems - II"; 
+      
+      // 1. FORCE EXACT NAME: "POWER SYSTEM II"
+      // This logic catches "Power Systems", "Power System - II", etc.
+      // and rewrites it to exactly "POWER SYSTEM II"
+      if (subject.toUpperCase().includes("POWER") && subject.toUpperCase().includes("SYSTEM")) {
+          subject = "POWER SYSTEM II"; 
       }
       
-      // 2. IMPROVED MICROPROCESSOR MATCHING
-      if (subject.toLowerCase().includes("micro") || subject.toLowerCase().includes("mpmc")) {
-          targetFolder = "Microprocessors and Microcontrollers";
+      // Fix Microprocessors mismatch if needed
+      if (subject.includes("Microprocessor")) {
+          subject = "Microprocessors and Microcontrollers";
       }
 
-      console.log(`Auto-routing ${subject} to folder: ${targetFolder}`);
+      console.log("Saving to Subject Folder:", subject); 
 
       const subjectData = getSubjectData(); 
-      if(!subjectData[targetFolder]) subjectData[targetFolder] = [];
+      if(!subjectData[subject]) subjectData[subject] = [];
       
-      subjectData[targetFolder].push({
+      subjectData[subject].push({
         id: Date.now(), 
         date: new Date().toLocaleDateString(),
         covered: covered || "-",
