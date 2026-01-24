@@ -3043,15 +3043,25 @@ function loadTasks() {
       renderLogs();
     }
   };
-
-  // Helper to save to Subject Table (For Admin View)
-  // This adds the unique ID needed for deletion
+// Helper to save to Subject Table (For Admin View)
   const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
+      
+      // --- 1. NAME NORMALIZATION FIX ---
+      // This forces "Power System II" to become "Power Systems - II"
+      if (subject.trim() === "Power System II" || subject.trim() === "Power Systems II") {
+          subject = "Power Systems - II";
+      }
+      
+      // You can add other mappings here if needed
+      if (subject.trim() === "Microprocessors") subject = "Microprocessors and Microcontrollers";
+
+      // --- END FIX ---
+
       const subjectData = getSubjectData(); 
       if(!subjectData[subject]) subjectData[subject] = [];
       
       subjectData[subject].push({
-        id: Date.now(), // Unique ID for Admin deletion
+        id: Date.now(), 
         date: new Date().toLocaleDateString(),
         covered: covered || "-",
         uncovered: uncovered || "-"
@@ -3060,7 +3070,6 @@ function loadTasks() {
       saveSubjectData(subjectData); 
       uploadData(); 
   };
-
   // --- RENDER STANDARD TASKS ---
   tasks.forEach(t => {
     const container = document.createElement("div");
