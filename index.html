@@ -3042,23 +3042,13 @@ function loadTasks() {
       renderLogs();
     }
   };
+// FIND THIS FUNCTION IN YOUR CODE AND REPLACE IT ENTIRELY
 const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
-      
-      // 1. FORCE EXACT NAME: "POWER SYSTEM II"
-      // This logic catches "Power Systems", "Power System - II", etc.
-      // and rewrites it to exactly "POWER SYSTEM II"
-      if (subject.toUpperCase().includes("POWER") && subject.toUpperCase().includes("SYSTEM")) {
-          subject = "POWER SYSTEM II"; 
-      }
-      
-      // Fix Microprocessors mismatch if needed
-      if (subject.includes("Microprocessor")) {
-          subject = "Microprocessors and Microcontrollers";
-      }
-
-      console.log("Saving to Subject Folder:", subject); 
+      console.log("Saving Exact Subject:", subject); 
 
       const subjectData = getSubjectData(); 
+      
+      // If the folder doesn't exist yet, create it using the EXACT name
       if(!subjectData[subject]) subjectData[subject] = [];
       
       subjectData[subject].push({
