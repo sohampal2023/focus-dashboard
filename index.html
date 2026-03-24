@@ -814,77 +814,6 @@ async function initAdminDashboard() {
     cleanupDeletedData(); // Run soft-delete cleanup
     startAdminListener();
 }
-// ==========================================
-// BULK UPLOAD LOGIC
-// ==========================================
-
-let parsedExamData = []; // Stores the questions temporarily
-
-// 1. LOCK & PREVIEW FUNCTION
-function lockAndPreview() {
-    const rawQ = document.getElementById('rawQuestions').value;
-    const rawA = document.getElementById('rawAnswers').value;
-    
-    if(!rawQ || !rawA) {
-        alert("Please fill in both Questions and Answer Key!");
-        return;
-    }
-
-    parsedExamData = []; // Reset storage
-    
-    // Split text by blank lines (Detects separate question blocks)
-    const questionsBlock = rawQ.split(/\n\s*\n/); 
-    
-    questionsBlock.forEach((block) => {
-        block = block.trim();
-        if(!block) return;
-
-        // Extract Question Number & Text
-        const qMatch = block.match(/^(\d+)\.\s*([\s\S]*?)(?=\n?[a-d]\))/i);
-        
-        // Extract Options a,b,c,d
-        const optionsMatch = {
-            a: block.match(/a\)\s*(.*)/i),
-            b: block.match(/b\)\s*(.*)/i),
-            c: block.match(/c\)\s*(.*)/i),
-            d: block.match(/d\)\s*(.*)/i)
-        };
-
-        if (qMatch) {
-            let qObj = {
-                id: qMatch[1], // e.g. "1"
-                text: qMatch[2].trim().replace(/\n/g, "<br>"),
-                options: {
-                    a: optionsMatch.a ? optionsMatch.a[1].trim() : "Missing",
-                    b: optionsMatch.b ? optionsMatch.b[1].trim() : "Missing",
-                    c: optionsMatch.c ? optionsMatch.c[1].trim() : "Missing",
-                    d: optionsMatch.d ? optionsMatch.d[1].trim() : "Missing"
-                },
-                correct: null // Answer key fills this later
-            };
-            parsedExamData.push(qObj);
-        }
-    });
-
-    // Parse Answer Key (e.g., "1-b, 2-c" or "1.b 2.c")
-    const answers = rawA.split(/[\n,]\s*/); 
-    
-    answers.forEach(ans => {
-        const match = ans.match(/(\d+)[\s\.\-]*([a-d])/i);
-        if(match) {
-            const qNum = match[1];
-            const correctOpt = match[2].toLowerCase();
-            
-            // Find matching question and update answer
-            const targetQ = parsedExamData.find(q => q.id == qNum);
-            if(targetQ) {
-                targetQ.correct = correctOpt;
-            }
-        }
-    });
-
-    renderPreviewTable();
-}
 
 // 2. RENDER TABLE
 function renderPreviewTable() {
@@ -1344,7 +1273,7 @@ window.setExamSchedule = async function (uid) {
   // ===== OPTION 1: ADD =====
   if (choice === "1") {
 
-    if (exams.length >= 8) {
+    if (exams.length >= 18) {
       alert("Maximum 8 exams allowed.");
       return;
     }
