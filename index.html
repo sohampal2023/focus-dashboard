@@ -1949,7 +1949,7 @@ onValue(ref(db, `users/${currentUser.uid}/UPCOMING_EXAMS`), (snap) => {
     return;
   }
 
-  const exams = snap.val().slice(0, 8);
+  const exams = snap.val().slice(0, 20);
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
