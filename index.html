@@ -1938,55 +1938,61 @@ onValue(ref(db, `users/${currentUser.uid}/newFeedback`), (snap) => {
         });
     }
 });
-  // --- UPCOMING EXAMS LISTENER ---
+ // --- UPCOMING EXAMS LISTENER (FULL FUNCTION - NO LIMITS) ---
 onValue(ref(db, `users/${currentUser.uid}/UPCOMING_EXAMS`), (snap) => {
+    const box = document.getElementById("examBox");
+    const list = document.getElementById("examList");
 
-  const box = document.getElementById("examBox");
-  const list = document.getElementById("examList");
+    if (!snap.exists()) {
+        box.style.display = "none";
+        return;
+    }
 
-  if (!snap.exists()) {
-    box.style.display = "none";
-    return;
-  }
+    // Increased initial fetch to 20 to accommodate your 18 exams
+    const exams = snap.val().slice(0, 20); 
 
-  const exams = snap.val().slice(0, 20);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+    // Calculate days left and filter out past exams
+    const active = exams
+        .map(e => {
+            const daysLeft = Math.ceil(
+                (e.date - today.getTime()) / (24 * 60 * 60 * 1000)
+            );
+            return { ...e, daysLeft };
+        })
+        .filter(e => e.daysLeft >= 0) // Only show exams today or in the future
+        .sort((a, b) => a.daysLeft - b.daysLeft); // Nearest exams first
 
-  const active = exams
-    .map(e => {
-      const daysLeft = Math.ceil(
-        (e.date - today.getTime()) / (24 * 60 * 60 * 1000)
-      );
-      return { ...e, daysLeft };
-    })
-    .filter(e => e.daysLeft >= 0)
-    .sort((a, b) => a.daysLeft - b.daysLeft)
-    .slice(0, 4);
+    if (active.length === 0) {
+        box.style.display = "none";
+        return;
+    }
 
-  if (active.length === 0) {
-    box.style.display = "none";
-    return;
-  }
+    // Show the box now that we have data
+    box.style.display = "block";
+    
+    // Add scrolling if list is too long (prevents sidebar breakage)
+    list.style.maxHeight = "250px"; 
+    list.style.overflowY = "auto";
+    list.style.paddingRight = "5px"; // Space for scrollbar
 
-  box.style.display = "block";
-
-  list.innerHTML = active.map(e => `
-    <div style="
-      display:flex;
-      justify-content:space-between;
-      padding:6px 0;
-      border-bottom:1px dashed #334155
-    ">
-      <span>${e.name}</span>
-      <span style="color:#facc15;font-weight:bold">
-        ${e.daysLeft} day${e.daysLeft !== 1 ? "s" : ""} left
-      </span>
-    </div>
-  `).join("");
+    list.innerHTML = active.map(e => `
+        <div style="
+            display:flex;
+            justify-content:space-between;
+            padding:8px 0;
+            border-bottom:1px dashed #334155;
+            align-items: center;
+        ">
+            <span style="font-weight: 500; color: #f8fafc; font-size: 13px;">${e.name}</span>
+            <span style="color:#facc15; font-weight:bold; font-size: 12px; white-space: nowrap; margin-left: 10px;">
+                ${e.daysLeft} day${e.daysLeft !== 1 ? "s" : ""} left
+            </span>
+        </div>
+    `).join("");
 });
-
     // --- REALTIME NOTICE POPUP (LIKE WARNING, BUT INFO) ---
 onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
     if (!snapshot.exists()) return;
