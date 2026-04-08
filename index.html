@@ -734,7 +734,7 @@ const ADMIN_EMAIL = "admin@study.com";
 let currentAdminSubjectData = {}; 
 
 // Helper for unique keys (Must be defined before USER_XP)
-const key = k => (currentUser ? currentUser.uid : "GUEST") + "_" + k;
+
 
 // Initialize XP after key function is available
 let USER_XP = parseInt(localStorage.getItem(key("USER_XP")) || "0");
