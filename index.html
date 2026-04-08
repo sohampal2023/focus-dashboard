@@ -2709,7 +2709,7 @@ function autoLogout() {
     if (MOCK_POPUP_ACTIVE) return;
     clearInterval(idleTimer);
     
-    // XP Punishment
+    // RPG PUNISHMENT
     USER_XP = Math.max(0, USER_XP + XP_MAP.TIMEOUT_PENALTY);
     localStorage.setItem(key("USER_XP"), USER_XP);
     alert(`💀 WATCHDOG BITE: You went idle. Penalty: -100 XP. Rank falling!`);
@@ -2718,7 +2718,7 @@ function autoLogout() {
     if (logs.length) {
         const last = logs[logs.length - 1];
         last.logout = now(); last.logoutTS = Date.now();
-        last.reason = "Focus Lost (Timeout)";
+        last.reason = "Timeout";
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
     uploadData();
@@ -2976,144 +2976,35 @@ function setupTasks() {
   document.getElementById("reportBox").classList.add("hidden");
 }
 function loadTasks() {
-  const tList = document.getElementById("taskList");
-  const eList = document.getElementById("extraList");
-  if(!tList || !eList) return;
-  tList.innerHTML = "";
-  eList.innerHTML = "";
-  
-  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  
-  // Helper to update main logs
-  const updateLogTask = (name, isChecked, comment, due) => {
-    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    if(logs.length){
-      const active = logs[logs.length-1];
-      if(!active.completed) active.completed = [];
-      if(isChecked){
-        active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
-        active.completed.push({ name: name, comment: comment, due: due });
-      } else {
-        active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
-      }
-      localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-      renderLogs();
-    }
-  };
-// FIND THIS FUNCTION IN YOUR CODE AND REPLACE IT ENTIRELY
-const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
-      console.log("Saving Exact Subject:", subject); 
-
-      const subjectData = getSubjectData(); 
-      
-      // If the folder doesn't exist yet, create it using the EXACT name
-      if(!subjectData[subject]) subjectData[subject] = [];
-      
-      subjectData[subject].push({
-        id: Date.now(), 
-        date: new Date().toLocaleDateString(),
-        covered: covered || "-",
-        uncovered: uncovered || "-"
-      });
-      
-      saveSubjectData(subjectData); 
-      uploadData(); 
-  };
-  // --- RENDER STANDARD TASKS ---
-  tasks.forEach(t => {
-    const container = document.createElement("div");
-    container.style.marginBottom = "4px";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = t.done;
-    const label = document.createElement("span");
+    const tList = document.getElementById("taskList");
+    const eList = document.getElementById("extraList");
+    if(!tList || !eList) return;
+    tList.innerHTML = ""; eList.innerHTML = "";
     
-    const updateLabel = () => {
-       let display = t.name;
-       if(t.target) display += ` <span style='font-size:11px;color:#38bdf8'>(${t.target})</span>`;
-       if(t.done){
-           label.innerHTML = ` ${display} <span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>`;
-       } else {
-           label.innerHTML = " " + display;
-       }
-    };
-    updateLabel();
+    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     
-    // Inside the tasks.forEach loop in loadTasks()
-cb.onchange = () => {
-    if(cb.checked) {
-        if(!confirm(`MISSION: Complete ${t.name}?\nReward: +${XP_MAP.TASK} XP`)) {
-            cb.checked = false; return;
-        }
-        t.comment = prompt(`What did you master in ${t.name}?`) || "-";
-        t.due = prompt(`Any pending work?`) || "-";
-        triggerDopamine(XP_MAP.TASK); 
-        saveAutomatedSubjectProgress(t.name, t.comment, t.due);
-    }
-    t.done = cb.checked;
-    save(tasks, extras);
-};
-    container.append(cb, label);
-    tList.append(container);
-  });
-  
-  // --- RENDER EXTRA WORK ---
-  extras.forEach(e => {
-    const container = document.createElement("div");
-    container.style.marginBottom = "4px";
-    
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = e.done;
-    
-    if(e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
-    
-    const label = document.createElement("span");
-    
-    const updateLabel = () => {
-       if(e.done){
-           label.innerHTML = ` <span style='color:#facc15'>${e.name}</span> <span style="font-size:12px;color:#e5e7eb">[${e.comment}]</span>`;
-       } else {
-           label.innerHTML = " " + e.name;
-       }
-    };
-    updateLabel();
-    
-    cb.onchange = () => {
-      if (!confirm(`CONFIRM WORK:\n\nSubject: ${e.name}\nMark as DONE?`)) { 
-          cb.checked = !cb.checked; 
-          return; 
-      }
-      
-      if(cb.checked){
-        const topicName = prompt(`Enter TOPIC NAME (or Test Name) for ${e.name}:`, "");
+    tasks.forEach(t => {
+        const container = document.createElement("div");
+        const cb = document.createElement("input");
+        cb.type = "checkbox"; cb.checked = t.done;
         
-        if (!topicName) {
-            cb.checked = false;
-            return; 
-        }
-
-        const dueVal = prompt(`Any pending work/marks?`, "None");
-        e.comment = topicName; 
-        e.due = dueVal || "-";
-
-        // CALL THE UPDATED SAVE FUNCTION
-        saveAutomatedSubjectProgress(e.name, topicName, e.due);
-
-      } else { 
-          e.comment = ""; 
-          e.due = ""; 
-      }
-      
-      e.done = cb.checked;
-      updateLabel();
-      updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
-      save(tasks, extras);
-    };
-    container.append(cb, label);
-    eList.append(container);
-  });
+        cb.onchange = () => {
+            if(cb.checked) {
+                if(!confirm(`MISSION: Complete ${t.name}?\nReward: +${XP_MAP.TASK} XP`)) {
+                    cb.checked = false; return;
+                }
+                t.comment = prompt(`What did you master in ${t.name}?`) || "-";
+                t.due = prompt(`Any pending work?`) || "-";
+                triggerDopamine(XP_MAP.TASK); 
+                saveAutomatedSubjectProgress(t.name, t.comment, t.due);
+            }
+            t.done = cb.checked;
+            save(tasks, extras);
+        };
+        container.append(cb, ` ${t.name}`);
+        tList.append(container);
+    });
 }
 function addExtra() {
   // 1. Build a numbered menu string
@@ -3460,45 +3351,28 @@ window.requestSubjectDelete = async function(subject, rowId) {
 
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
-    window.openDuesTab = openDuesTab;
+window.openDuesTab = openDuesTab;
 window.triggerDopamine = triggerDopamine;
 window.updateRankUI = updateRankUI;
-    window.resetWatchdog = resetWatchdog;
-    window.bioBreak = bioBreak;
-    window.openDayEnd = openDayEnd;
-    window.finalDayEnd = finalDayEnd;
-    window.startMockTestSetup = startMockTestSetup;
-    window.triggerEndTest = triggerEndTest;
-    window.addExtra = addExtra;
-    window.clearSingleSubject = window.clearSingleSubject;
-    window.toggleHistory = toggleHistory;
-    window.requestLeave = requestLeave;
-    window.forceLogout = forceLogout;
-    window.handleLeave = window.handleLeave;
-    window.openAdminModal = window.openAdminModal;
-    window.deleteLogEntry = window.deleteLogEntry;
-    window.closeAdminModal = window.closeAdminModal;
-    window.unlockStudent = window.unlockStudent;
-    window.switchAdminTab = window.switchAdminTab;
-    window.addAdminReview = window.addAdminReview;
-    window.terminateStudent = window.terminateStudent;
-    window.dismissFeedback = window.dismissFeedback;
-    window.sendWarning = window.sendWarning;
-    window.dismissRejected = window.dismissRejected;
-    window.clearLeave = window.clearLeave;
-    window.dismissLeaveStatus = window.dismissLeaveStatus;
-    window.resetLeaveBalance = window.resetLeaveBalance;
-    window.toggleNoticeBoard = window.toggleNoticeBoard;
-    window.dismissRejected = window.dismissRejected;
-    window.sendNotice = window.sendNotice;
-    window.dismissNoticePopup = window.dismissNoticePopup;
-    window.softRefresh = window.softRefresh;
-    window.dismissReportLock = window.dismissReportLock;
-    window.toggleSubjectProgress = window.toggleSubjectProgress;
-    window.renderSubjectTable = window.renderSubjectTable;
-    window.clearSubjectProgress = window.clearSubjectProgress;
-    window.requestSubjectDelete = window.requestSubjectDelete;
-
+window.resetWatchdog = resetWatchdog;
+window.bioBreak = bioBreak;
+window.openDayEnd = openDayEnd;
+window.finalDayEnd = finalDayEnd;
+window.startMockTestSetup = startMockTestSetup;
+window.triggerEndTest = triggerEndTest;
+window.addExtra = addExtra;
+window.toggleHistory = toggleHistory;
+window.requestLeave = requestLeave;
+window.forceLogout = forceLogout;
+window.softRefresh = softRefresh;
+window.dismissReportLock = dismissReportLock;
+window.toggleNoticeBoard = toggleNoticeBoard;
+window.toggleSubjectProgress = toggleSubjectProgress;
+window.renderSubjectTable = renderSubjectTable;
+window.requestSubjectDelete = requestSubjectDelete;
+window.openAdminModal = openAdminModal;
+window.closeAdminModal = closeAdminModal;
+window.switchAdminTab = switchAdminTab;
   </script>
 
 </body>
