@@ -597,8 +597,7 @@ const firebaseConfig = {
   messagingSenderId: "337204334808",
   appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
 };
-let USER_XP = parseInt(localStorage.getItem(key("USER_XP")) || "0");
-const XP_MAP = { TASK: 50, MOCK: 500, TIMEOUT_PENALTY: -100 };
+
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
@@ -624,6 +623,7 @@ const FIXED_SUBJECTS = [
   "GOVT_SCIENCE",
   "GOVT_ENGLISH"
 ];
+// --- 2. RPG RANK LOGIC ---
 function updateRankUI() {
     let rank = "BRONZE WARRIOR"; let color = "#cd7f32";
     if(USER_XP > 500) { rank = "SILVER KNIGHT"; color = "#c0c0c0"; }
@@ -637,12 +637,17 @@ function updateRankUI() {
                              `<div style="font-size:11px; color:#64748b; margin-top:4px;">Total XP: ${USER_XP}</div>`;
     }
 }
-  function triggerDopamine(xpAmount) {
+
+// --- 3. DOPAMINE TRIGGER (CONFETTI + XP) ---
+function triggerDopamine(xpAmount) {
     USER_XP += xpAmount;
     localStorage.setItem(key("USER_XP"), USER_XP);
     updateRankUI();
-    if(window.confetti) confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+    if(window.confetti) {
+        confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#38bdf8', '#fbbf24', '#f87171'] });
+    }
 }
+  
 onAuthStateChanged(auth, async (user) => {
     // -------------------------------------------------------------------
     // 🔒 CHECK FOR LOCKED REPORT FIRST (FIXED LAYOUT)
@@ -727,7 +732,8 @@ let dailyTimeouts = 0;
 let lastApprovedState = false; 
 const ADMIN_EMAIL = "admin@study.com";
 let currentAdminSubjectData = {}; // Stores the loaded student's subject data
-
+let USER_XP = parseInt(localStorage.getItem(key("USER_XP")) || "0");
+const XP_MAP = { TASK: 50, MOCK: 500, TIMEOUT_PENALTY: -100 };
 // --- NEW KEY FOR SUBJECT PROGRESS ---
 const SUBJECT_TABLE_KEY = () => key("SUBJECT_WISE_TABLE");
 
@@ -801,7 +807,13 @@ function showMockResultPopup(resultText) {
     location.reload();
   }, 8000); // popup visible for 8 seconds
 }
-
+function initFocusArena() {
+    const arenaCount = Math.floor(Math.random() * (140 - 90) + 90); 
+    const syncStatus = document.getElementById("syncStatus");
+    if(syncStatus) {
+        syncStatus.innerHTML = `Online | <span style="color:#4ade80">🔥 ${arenaCount} Warriors Studying</span>`;
+    }
+}
 window.rejectSubjectDelete = async function(uid, requestKey) {
   try {
     // REJECT LOGIC: Only remove the request. Do NOT touch the subject table.
@@ -3042,8 +3054,7 @@ cb.onchange = () => {
         }
         t.comment = prompt(`What did you master in ${t.name}?`) || "-";
         t.due = prompt(`Any pending work?`) || "-";
-        
-        triggerDopamine(XP_MAP.TASK); // 🚀 XP Reward
+        triggerDopamine(XP_MAP.TASK); 
         saveAutomatedSubjectProgress(t.name, t.comment, t.due);
     }
     t.done = cb.checked;
@@ -3455,6 +3466,9 @@ window.requestSubjectDelete = async function(subject, rowId) {
 
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
+    window.openDuesTab = openDuesTab;
+window.triggerDopamine = triggerDopamine;
+window.updateRankUI = updateRankUI;
     window.resetWatchdog = resetWatchdog;
     window.bioBreak = bioBreak;
     window.openDayEnd = openDayEnd;
