@@ -2154,37 +2154,26 @@ function showApprovedPopup(dates, comment) {
 async function downloadData(uid) {
     const syncStatus = document.getElementById("syncStatus");
     syncStatus.innerText = "Syncing...";
-    
     try {
         const snapshot = await get(child(ref(db), `users/${uid}`));
         if (snapshot.exists()) {
             const data = snapshot.val();
-            
             if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
             if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
             if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
-            
-            if(data.TEST_STATE) localStorage.setItem(key("TEST_STATE"), data.TEST_STATE);
-            if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
             if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
-            
-            // DOWNLOAD MOCK LOGS
-            if(data.MOCK_LOGS) localStorage.setItem(key("MOCK_LOGS"), data.MOCK_LOGS);
-
-            // DOWNLOAD SUBJECT PROGRESS
             if(data.SUBJECT_WISE_TABLE) localStorage.setItem(SUBJECT_TABLE_KEY(), data.SUBJECT_WISE_TABLE);
-
-            localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
-            localStorage.setItem(key("DAILY_TIMEOUTS"), data.DAILY_TIMEOUTS || "0"); 
-            localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
             
+            // Sync Gamification Data
+            localStorage.setItem(key("XP"), data.XP || "0");
+            localStorage.setItem(key("LEVEL"), data.LEVEL || "1");
+            localStorage.setItem(key("STREAK"), data.STREAK || "0");
+
             syncStatus.innerText = "Online";
             return data;
         }
-        syncStatus.innerText = "Online (New)";
         return {};
     } catch (error) {
-        console.error("Access Denied:", error);
         syncStatus.innerText = "Auth Error";
         return null;
     }
@@ -2192,38 +2181,28 @@ async function downloadData(uid) {
 
 function uploadData() {
     if(!currentUser) return;
-    const syncStatus = document.getElementById("syncStatus");
-    
     const p = calculate();
-
     const payload = {
-        profile: { email: currentUser.email }, 
-       
+        profile: { email: currentUser.email },
         TASKS: localStorage.getItem(key("TASKS")),
         EXTRA: localStorage.getItem(key("EXTRA")),
         LOGS: localStorage.getItem(key("LOGS")),
-        TEST_STATE: localStorage.getItem(key("TEST_STATE")),
-        NEXT_TASKS: localStorage.getItem(key("NEXT_TASKS")),
-        HISTORY: localStorage.getItem(key("HISTORY")), 
-        MOCK_LOGS: localStorage.getItem(key("MOCK_LOGS")),
-        SUBJECT_WISE_TABLE: localStorage.getItem(SUBJECT_TABLE_KEY()), // Upload new table
-        IDLE_STRIKES: localStorage.getItem(key("IDLE_STRIKES")),
-        DAILY_TIMEOUTS: localStorage.getItem(key("DAILY_TIMEOUTS")),
-        PENALTY: localStorage.getItem(key("PENALTY"))
+        HISTORY: localStorage.getItem(key("HISTORY")),
+        SUBJECT_WISE_TABLE: localStorage.getItem(SUBJECT_TABLE_KEY()),
+        
+        // Push Gamification to Firebase
+        XP: localStorage.getItem(key("XP")) || "0",
+        LEVEL: localStorage.getItem(key("LEVEL")) || "1",
+        STREAK: localStorage.getItem(key("STREAK")) || "0"
     };
 
-    update(ref(db, `users/${currentUser.uid}`), payload)
-    .then(() => {
-    // ✅ LIVE STATS UPDATE (ADMIN SEES THIS)
-    update(ref(db, `users/${currentUser.uid}/stats`), {
-        percent: p.percent,
-        rating: getLabel(p.percent),
-        updatedAt: Date.now()
+    update(ref(db, `users/${currentUser.uid}`), payload).then(() => {
+        update(ref(db, `users/${currentUser.uid}/stats`), {
+            percent: p.percent,
+            rating: getLabel(p.percent),
+            updatedAt: Date.now()
+        });
     });
-
-    syncStatus.innerText = "Saved";
-    setTimeout(() => syncStatus.innerText = "Online", 2000);
-})
 }
 // --- SUBJECT HELPER FUNCTIONS ---
 function getSubjectData() {
@@ -3242,17 +3221,25 @@ function updateAITeacher(items) {
 function handleXP() {
     let xp = parseInt(localStorage.getItem(key("XP")) || "0");
     let level = parseInt(localStorage.getItem(key("LEVEL")) || "1");
-    
-    xp += 25; // 4 tasks = 1 level up
+    let streak = parseInt(localStorage.getItem(key("STREAK")) || "0");
+
+    // XP Logic
+    xp += 25; 
     if (xp >= 100) {
         xp = 0;
         level++;
         alert("LEVEL UP 🎉 Now Level " + level);
     }
 
-    localStorage.setItem(key("XP"), xp);
-    localStorage.setItem(key("LEVEL"), level);
+    // Streak Logic (Basic)
+    if (streak === 0) streak = 1;
+
+    localStorage.setItem(key("XP"), xp.toString());
+    localStorage.setItem(key("LEVEL"), level.toString());
+    localStorage.setItem(key("STREAK"), streak.toString());
+    
     updateGamificationUI();
+    uploadData(); // Save to Firebase instantly
 }
 
 function updateGamificationUI() {
