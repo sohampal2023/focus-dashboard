@@ -1969,6 +1969,8 @@ async function initStudentDashboard() {
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
+   const subProgBtn = document.querySelector("button[onclick='toggleSubjectProgress()']");
+    if (subProgBtn) subProgBtn.disabled = false;
     
     loadSubjectList();
     uploadData(); 
