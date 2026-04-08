@@ -268,7 +268,14 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 .leave-status-approved { border-color: #22c55e; background: #064e3b; color: #dcfce7; }
 .leave-status-half { border-color: #eab308; background: #422006; color: #fef08a; }
 .leave-status-rejected { border-color: #ef4444; background: #450a0a; color: #fee2e2; }
-
+.watchdog-btn {
+    box-shadow: 0 0 10px rgba(14, 165, 233, 0.5);
+    animation: glow 2s infinite alternate;
+}
+@keyframes glow {
+    from { box-shadow: 0 0 5px #0ea5e9; }
+    to { box-shadow: 0 0 20px #0ea5e9; }
+}
 </style>
 </head>
 
@@ -590,7 +597,8 @@ const firebaseConfig = {
   messagingSenderId: "337204334808",
   appId: "1:337204334808:web:9d0d36bed2fbae9b8147ad"
 };
-
+let USER_XP = parseInt(localStorage.getItem(key("USER_XP")) || "0");
+const XP_MAP = { TASK: 50, MOCK: 500, TIMEOUT_PENALTY: -100 };
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 const auth = getAuth(app);
@@ -616,7 +624,25 @@ const FIXED_SUBJECTS = [
   "GOVT_SCIENCE",
   "GOVT_ENGLISH"
 ];
-
+function updateRankUI() {
+    let rank = "BRONZE WARRIOR"; let color = "#cd7f32";
+    if(USER_XP > 500) { rank = "SILVER KNIGHT"; color = "#c0c0c0"; }
+    if(USER_XP > 1500) { rank = "GOLDEN SCHOLAR"; color = "#ffd700"; }
+    if(USER_XP > 5000) { rank = "LEGEND MASTER"; color = "#38bdf8"; }
+    
+    const statusBox = document.getElementById("statusBox");
+    if(statusBox) {
+        statusBox.innerHTML = `<span style="font-size:10px; display:block; color:#94a3b8">RANK</span>` + 
+                             `<span style="color:${color}; font-weight:800; letter-spacing:1px;">${rank}</span>` +
+                             `<div style="font-size:11px; color:#64748b; margin-top:4px;">Total XP: ${USER_XP}</div>`;
+    }
+}
+  function triggerDopamine(xpAmount) {
+    USER_XP += xpAmount;
+    localStorage.setItem(key("USER_XP"), USER_XP);
+    updateRankUI();
+    if(window.confetti) confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 } });
+}
 onAuthStateChanged(auth, async (user) => {
     // -------------------------------------------------------------------
     // 🔒 CHECK FOR LOCKED REPORT FIRST (FIXED LAYOUT)
@@ -2190,6 +2216,9 @@ if (!hasActiveSession) {
             return;
         }
     }
+  // At the bottom of initStudentDashboard()
+updateRankUI();
+initFocusArena();
 
     startIdle(1800);
     setupTasks();
@@ -2411,7 +2440,7 @@ function uploadData() {
 
     const payload = {
         profile: { email: currentUser.email }, 
-       
+         USER_XP: USER_XP, 
         TASKS: localStorage.getItem(key("TASKS")),
         EXTRA: localStorage.getItem(key("EXTRA")),
         LOGS: localStorage.getItem(key("LOGS")),
@@ -2663,47 +2692,31 @@ function updateIdle(seconds) {
       }
   }
 }
-
+function initFocusArena() {
+    const arenaCount = Math.floor(Math.random() * (140 - 90) + 90); 
+    const syncStatus = document.getElementById("syncStatus");
+    if(syncStatus) {
+        syncStatus.innerHTML = `Online | <span style="color:#4ade80">🔥 ${arenaCount} Warriors Studying</span>`;
+    }
+}
 function autoLogout() {
-  if (MOCK_POPUP_ACTIVE) return;
-  clearInterval(idleTimer);
-  const idleBox = document.getElementById("idleBox");
-  if(idleBox) idleBox.classList.add("hidden");
+    if (MOCK_POPUP_ACTIVE) return;
+    clearInterval(idleTimer);
+    
+    // XP Punishment
+    USER_XP = Math.max(0, USER_XP + XP_MAP.TIMEOUT_PENALTY);
+    localStorage.setItem(key("USER_XP"), USER_XP);
+    alert(`💀 WATCHDOG BITE: You went idle. Penalty: -100 XP. Rank falling!`);
 
-  let currentStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
-  currentStrikes++;
-  
-  // --- NEW: INCREMENT DAILY TIMEOUT COUNTER ---
-  let dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0");
-  dailyTimeouts++;
-  localStorage.setItem(key("DAILY_TIMEOUTS"), dailyTimeouts);
-  document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
-  
-  if(currentStrikes >= 2) {
-    let currentPenalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
-    currentPenalty += 10;
-    localStorage.setItem(key("PENALTY"), currentPenalty);
-    currentStrikes = 0;
-    alert("Watchdog bit you! 2 Timeouts = -10% Penalty.");
-  }
-  localStorage.setItem(key("IDLE_STRIKES"), currentStrikes);
-
-  const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-  if(activeTest) {
-      activeTest.status = "EXPIRED";
-      localStorage.setItem(key("TEST_STATE"), JSON.stringify(activeTest));
-  }
-
-  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-  if (logs.length) {
-    const last = logs[logs.length - 1];
-    last.logout = now();
-    last.logoutTS = Date.now();
-    last.reason = "Timeout";
-    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-  }
-  uploadData(); 
-  setTimeout(() => location.reload(), 500);
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    if (logs.length) {
+        const last = logs[logs.length - 1];
+        last.logout = now(); last.logoutTS = Date.now();
+        last.reason = "Focus Lost (Timeout)";
+        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
+    uploadData();
+    setTimeout(() => location.reload(), 500);
 }
 
 function bioBreak() {
@@ -2903,6 +2916,8 @@ function finishTestSequence(testState, loadDashboard = false) {
     showMockResultPopup(fullDetails);
     setTimeout(() => location.reload(), 5000);
   }
+  const reward = Number(obtained) >= Number(cutoff) ? XP_MAP.MOCK : 100;
+triggerDopamine(reward);
 }
 // --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
 function setupTasks() {
@@ -3019,30 +3034,21 @@ const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
     };
     updateLabel();
     
-    cb.onchange = () => {
-      if (!confirm(`CONFIRM TASK:\n\nMark '${t.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) { 
-          cb.checked = !cb.checked; 
-          return; 
-      }
-      
-      if(cb.checked){
-        const remark = prompt(`What did you cover in ${t.name}?`, " ");
-        const dueVal = prompt(`Any pending work left?`, " ");
-        t.comment = remark || "-";
-        t.due = dueVal || "-";
+    // Inside the tasks.forEach loop in loadTasks()
+cb.onchange = () => {
+    if(cb.checked) {
+        if(!confirm(`MISSION: Complete ${t.name}?\nReward: +${XP_MAP.TASK} XP`)) {
+            cb.checked = false; return;
+        }
+        t.comment = prompt(`What did you master in ${t.name}?`) || "-";
+        t.due = prompt(`Any pending work?`) || "-";
         
-        // CALL THE UPDATED SAVE FUNCTION
+        triggerDopamine(XP_MAP.TASK); // 🚀 XP Reward
         saveAutomatedSubjectProgress(t.name, t.comment, t.due);
-        
-      } else { 
-          t.comment = ""; 
-          t.due = ""; 
-      }
-      t.done = cb.checked;
-      updateLabel();
-      updateLogTask(t.name, t.done, t.comment, t.due);
-      save(tasks, extras);
-    };
+    }
+    t.done = cb.checked;
+    save(tasks, extras);
+};
     container.append(cb, label);
     tList.append(container);
   });
