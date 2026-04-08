@@ -2274,39 +2274,31 @@ function showApprovedPopup(dates, comment) {
 // --- DATA SYNC ---
 async function downloadData(uid) {
     const syncStatus = document.getElementById("syncStatus");
-    syncStatus.innerText = "Syncing...";
+    if(syncStatus) syncStatus.innerText = "Syncing...";
     
     try {
         const snapshot = await get(child(ref(db), `users/${uid}`));
         if (snapshot.exists()) {
             const data = snapshot.val();
             
+            // Note: key(k) works here now because it is defined globally at the top
             if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
             if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
             if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
-            
-            if(data.TEST_STATE) localStorage.setItem(key("TEST_STATE"), data.TEST_STATE);
-            if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
             if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
-            
-            // DOWNLOAD MOCK LOGS
             if(data.MOCK_LOGS) localStorage.setItem(key("MOCK_LOGS"), data.MOCK_LOGS);
-
-            // DOWNLOAD SUBJECT PROGRESS
             if(data.SUBJECT_WISE_TABLE) localStorage.setItem(SUBJECT_TABLE_KEY(), data.SUBJECT_WISE_TABLE);
 
             localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
             localStorage.setItem(key("DAILY_TIMEOUTS"), data.DAILY_TIMEOUTS || "0"); 
             localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
             
-            syncStatus.innerText = "Online";
+            if(syncStatus) syncStatus.innerText = "Online";
             return data;
         }
-        syncStatus.innerText = "Online (New)";
         return {};
     } catch (error) {
-        console.error("Access Denied:", error);
-        syncStatus.innerText = "Auth Error";
+        console.error("Sync Error:", error);
         return null;
     }
 }
