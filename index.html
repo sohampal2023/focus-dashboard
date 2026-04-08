@@ -731,10 +731,14 @@ let idleStrikes = 0;
 let dailyTimeouts = 0;
 let lastApprovedState = false; 
 const ADMIN_EMAIL = "admin@study.com";
-let currentAdminSubjectData = {}; // Stores the loaded student's subject data
+let currentAdminSubjectData = {}; 
+
+// Helper for unique keys (Must be defined before USER_XP)
+const key = k => (currentUser ? currentUser.uid : "GUEST") + "_" + k;
+
+// Initialize XP after key function is available
 let USER_XP = parseInt(localStorage.getItem(key("USER_XP")) || "0");
 const XP_MAP = { TASK: 50, MOCK: 500, TIMEOUT_PENALTY: -100 };
-// --- NEW KEY FOR SUBJECT PROGRESS ---
 const SUBJECT_TABLE_KEY = () => key("SUBJECT_WISE_TABLE");
 
 function isAdmin() {
