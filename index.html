@@ -1926,19 +1926,24 @@ async function loadNotices() {
     }
 }
 
+// --- CRITICAL: Ensure these global helpers are defined before calling the function ---
+// const key = k => (currentUser ? currentUser.uid : "GUEST") + "_" + k;
+
 async function initStudentDashboard() {
+    // 1. UI Initialization
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("adminBox").classList.add("hidden");
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // --- SETUP LIVE LISTENER FOR WARNINGS ---
+    // 2. SETUP LIVE LISTENERS (Immediate Sync)
+    
+    // Warning/Alert Listener
     onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
         const msg = snapshot.val();
         const popup = document.getElementById("rejectedPopup");
         const popupTxt = document.getElementById("rejectedMsg");
-        
         if (msg) {
             popupTxt.innerText = `Admin: "${msg}"`;
             popup.classList.remove("hidden");
@@ -1946,277 +1951,174 @@ async function initStudentDashboard() {
             popup.classList.add("hidden");
         }
     });
-  // --- PASTE INSIDE initStudentDashboard() ---
 
-// 1. Live Listener for LEAVE REQUESTS
-onValue(ref(db, `users/${currentUser.uid}/leaveRequest`), (snap) => {
-    // If Admin approves/rejects, this runs immediately
-    const reqData = snap.val();
-    
-    // Update the Dashboard Box
-    checkLeaveStatus({ leaveRequest: reqData });
+    // Leave Requests Listener
+    onValue(ref(db, `users/${currentUser.uid}/leaveRequest`), (snap) => {
+        const reqData = snap.val();
+        checkLeaveStatus({ leaveRequest: reqData });
+    });
 
-    // Update the "Leave Balance" display if it changed
-    if (reqData && reqData.status === "Approved") {
-        // Optional: Trigger a balance refresh if needed
-        // For now, simply showing the Green Box is enough
-    }
-});
-
-// 2. Live Listener for NEW REVIEWS (History)
-onValue(ref(db, `users/${currentUser.uid}/newFeedback`), (snap) => {
-    const msg = snap.val();
-    const feedbackBox = document.getElementById("adminFeedbackBox");
-    const feedbackText = document.getElementById("adminFeedbackText");
-
-    if (msg) {
-        // Show the Purple Feedback Box instantly
-        feedbackBox.classList.remove("hidden");
-        feedbackText.innerText = msg;
-        
-        // Also update local storage so History tab is fresh
-        downloadData(currentUser.uid).then(data => {
-            if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
-        });
-    }
-});
- // --- UPCOMING EXAMS LISTENER (FULL FUNCTION - NO LIMITS) ---
-onValue(ref(db, `users/${currentUser.uid}/UPCOMING_EXAMS`), (snap) => {
-    const box = document.getElementById("examBox");
-    const list = document.getElementById("examList");
-
-    if (!snap.exists()) {
-        box.style.display = "none";
-        return;
-    }
-
-    // Increased initial fetch to 20 to accommodate your 18 exams
-    const exams = snap.val().slice(0, 20); 
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Calculate days left and filter out past exams
-    const active = exams
-        .map(e => {
-            const daysLeft = Math.ceil(
-                (e.date - today.getTime()) / (24 * 60 * 60 * 1000)
-            );
-            return { ...e, daysLeft };
-        })
-        .filter(e => e.daysLeft >= 0) // Only show exams today or in the future
-        .sort((a, b) => a.daysLeft - b.daysLeft); // Nearest exams first
-
-    if (active.length === 0) {
-        box.style.display = "none";
-        return;
-    }
-
-    // Show the box now that we have data
-    box.style.display = "block";
-    
-    // Add scrolling if list is too long (prevents sidebar breakage)
-    list.style.maxHeight = "250px"; 
-    list.style.overflowY = "auto";
-    list.style.paddingRight = "5px"; // Space for scrollbar
-
-    list.innerHTML = active.map(e => `
-        <div style="
-            display:flex;
-            justify-content:space-between;
-            padding:8px 0;
-            border-bottom:1px dashed #334155;
-            align-items: center;
-        ">
-            <span style="font-weight: 500; color: #f8fafc; font-size: 13px;">${e.name}</span>
-            <span style="color:#facc15; font-weight:bold; font-size: 12px; white-space: nowrap; margin-left: 10px;">
-                ${e.daysLeft} day${e.daysLeft !== 1 ? "s" : ""} left
-            </span>
-        </div>
-    `).join("");
-});
-    // --- REALTIME NOTICE POPUP (LIKE WARNING, BUT INFO) ---
-onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
-    if (!snapshot.exists()) return;
-
-    const notices = snapshot.val();
-
-    // Get last seen notice time
-    const seenSnap = await get(
-        ref(db, `users/${currentUser.uid}/lastSeenNoticeTime`)
-    );
-    const lastSeen = seenSnap.exists() ? seenSnap.val() : 0;
-
-    // Find newest notice
-    let latestNotice = null;
-    Object.values(notices).forEach(n => {
-        if (!latestNotice || n.time > latestNotice.time) {
-            latestNotice = n;
+    // Feedback/Review Listener
+    onValue(ref(db, `users/${currentUser.uid}/newFeedback`), (snap) => {
+        const msg = snap.val();
+        const feedbackBox = document.getElementById("adminFeedbackBox");
+        const feedbackText = document.getElementById("adminFeedbackText");
+        if (msg) {
+            feedbackBox.classList.remove("hidden");
+            feedbackText.innerText = msg;
+            downloadData(currentUser.uid).then(data => {
+                if(data && data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
+            });
         }
     });
 
-    // Show popup only for NEW notice
-    if (latestNotice && latestNotice.time > lastSeen) {
-        document.getElementById("noticePopupMsg").innerText =
-            `${latestNotice.title}: ${
-                latestNotice.message.length > 80
-                ? latestNotice.message.slice(0, 80) + "..."
-                : latestNotice.message
-            }`;
+    // Upcoming Exams Listener
+    onValue(ref(db, `users/${currentUser.uid}/UPCOMING_EXAMS`), (snap) => {
+        const box = document.getElementById("examBox");
+        const list = document.getElementById("examList");
+        if (!snap.exists()) {
+            box.style.display = "none";
+            return;
+        }
+        const exams = snap.val().slice(0, 20); 
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const active = exams.map(e => {
+            const daysLeft = Math.ceil((e.date - today.getTime()) / (24 * 60 * 60 * 1000));
+            return { ...e, daysLeft };
+        }).filter(e => e.daysLeft >= 0).sort((a, b) => a.daysLeft - b.daysLeft);
+        if (active.length === 0) {
+            box.style.display = "none";
+            return;
+        }
+        box.style.display = "block";
+        list.style.maxHeight = "250px"; 
+        list.style.overflowY = "auto";
+        list.style.paddingRight = "5px";
+        list.innerHTML = active.map(e => `
+            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed #334155; align-items: center;">
+                <span style="font-weight: 500; color: #f8fafc; font-size: 13px;">${e.name}</span>
+                <span style="color:#facc15; font-weight:bold; font-size: 12px; white-space: nowrap; margin-left: 10px;">
+                    ${e.daysLeft} day${e.daysLeft !== 1 ? "s" : ""} left
+                </span>
+            </div>
+        `).join("");
+    });
 
-        document.getElementById("noticePopup").classList.remove("hidden");
-
-        // Mark as seen (prevents repeat popup)
-        await update(ref(db, `users/${currentUser.uid}`), {
-            lastSeenNoticeTime: latestNotice.time
+    // Realtime Notice Listener
+    onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
+        if (!snapshot.exists()) return;
+        const notices = snapshot.val();
+        const seenSnap = await get(ref(db, `users/${currentUser.uid}/lastSeenNoticeTime`));
+        const lastSeen = seenSnap.exists() ? seenSnap.val() : 0;
+        let latestNotice = null;
+        Object.values(notices).forEach(n => {
+            if (!latestNotice || n.time > latestNotice.time) { latestNotice = n; }
         });
-    }
-});
+        if (latestNotice && latestNotice.time > lastSeen) {
+            document.getElementById("noticePopupMsg").innerText = `${latestNotice.title}: ${latestNotice.message.length > 80 ? latestNotice.message.slice(0, 80) + "..." : latestNotice.message}`;
+            document.getElementById("noticePopup").classList.remove("hidden");
+            await update(ref(db, `users/${currentUser.uid}`), { lastSeenNoticeTime: latestNotice.time });
+        }
+    });
 
-    const serverData = await downloadData(currentUser.uid);
+    // 3. FETCH AND PROCESS SERVER DATA
+    const serverData = await downloadData(currentUser.uid) || {}; // Safety guard against null
     
-    // Check Lockout
-    if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
+    // Check Lockout Status
+    if(serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
         const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
         document.body.innerHTML = `
-  <div style="
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    height:100vh;
-    flex-direction:column;
-    text-align:center;
-    background:#020617;
-    color:#e5e7eb;
-  ">
-    <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">
-      TERMINATED
-    </h1>
-
-    <h2 style="color:#f87171;margin-top:10px">
-      ${serverData.lockoutReason || "Admin Action"}
-    </h2>
-
-    <p style="margin-top:10px">
-      Time remaining: ${minLeft} minutes
-    </p>
-
-    <div style="display:flex; gap:12px; margin-top:20px">
-      <button
-        onclick="location.reload()"
-        style="padding:10px 24px;border-radius:8px;background:#1e293b;color:white;border:1px solid #334155">
-        Try Again
-      </button>
-
-      <button
-        onclick="logoutFromTermination()"
-        style="padding:10px 24px;border-radius:8px;background:#7f1d1d;color:white;border:1px solid #ef4444">
-        Logout
-      </button>
-    </div>
-  </div>
-`;
-
+            <div style="display:flex; justify-content:center; align-items:center; height:100vh; flex-direction:column; text-align:center; background:#020617; color:#e5e7eb;">
+                <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">TERMINATED</h1>
+                <h2 style="color:#f87171;margin-top:10px">${serverData.lockoutReason || "Admin Action"}</h2>
+                <p style="margin-top:10px">Time remaining: ${minLeft} minutes</p>
+                <div style="display:flex; gap:12px; margin-top:20px">
+                    <button onclick="location.reload()" style="padding:10px 24px;border-radius:8px;background:#1e293b;color:white;border:1px solid #334155">Try Again</button>
+                    <button onclick="logoutFromTermination()" style="padding:10px 24px;border-radius:8px;background:#7f1d1d;color:white;border:1px solid #ef4444">Logout</button>
+                </div>
+            </div>`;
         return; 
     }
 
-    // --- CHECK LEAVE ACCRUAL (MONTHLY 6 DAYS + CARRYFORWARD) ---
+    // 4. LEAVE ACCRUAL LOGIC
     const date = new Date();
     const currentMonthKey = `${date.getFullYear()}-${date.getMonth()}`;
-    
     let leaveBalance = serverData.leaveBalance !== undefined ? serverData.leaveBalance : 6;
     let lastAccrual = serverData.lastAccrual || "";
 
     if (lastAccrual !== currentMonthKey) {
-        // New Month detected! Add 6 days to existing balance
         let carry = serverData.medicalCarry || 0;
-leaveBalance = leaveBalance + 6 - carry;
-
-await update(ref(db, `users/${currentUser.uid}`), {
-    leaveBalance: leaveBalance,
-    medicalCarry: 0,
-    lastAccrual: currentMonthKey
-});
-
-        serverData.leaveBalance = leaveBalance; // update local ref
+        leaveBalance = (leaveBalance + 6) - carry;
+        await update(ref(db, `users/${currentUser.uid}`), {
+            leaveBalance: leaveBalance,
+            medicalCarry: 0,
+            lastAccrual: currentMonthKey
+        });
+        serverData.leaveBalance = leaveBalance; 
     }
     
-    // Update UI for Balance
     const balDisplay = document.getElementById("leaveBalanceDisplay");
     if(balDisplay) balDisplay.innerText = `Leave Bal: ${leaveBalance}`;
 
-
-    // Check New Admin Feedback
-  if (serverData.newFeedback && !sessionStorage.getItem("FEEDBACK_SEEN")) {
-    document.getElementById("adminFeedbackBox").classList.remove("hidden");
-    document.getElementById("adminFeedbackText").innerText = serverData.newFeedback;
-    sessionStorage.setItem("FEEDBACK_SEEN", "1");
-}
-
+    // Admin Feedback Box
+    if (serverData.newFeedback && !sessionStorage.getItem("FEEDBACK_SEEN")) {
+        document.getElementById("adminFeedbackBox").classList.remove("hidden");
+        document.getElementById("adminFeedbackText").innerText = serverData.newFeedback;
+        sessionStorage.setItem("FEEDBACK_SEEN", "1");
+    }
 
     checkLeaveStatus(serverData);
 
+    // 5. LOCAL STORAGE AND SESSION SYNC
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
     dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
 
-    // Init Timeout UI
     document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
 
+    // Handle session interruptions (Bio Breaks)
     if (logs.length) {
-  const lastLog = logs[logs.length - 1];
+        const lastLog = logs[logs.length - 1];
+        if (lastLog.reason === "Pending") {
+            const userReason = prompt("Reason for previous break?", "Washroom / Water / Phone Call");
+            lastLog.reason = userReason && userReason.trim() ? userReason.trim() : "Bio Break";
+            localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+            uploadData(); 
+        }
+    }
 
-  if (lastLog.reason === "Pending") {
-    const userReason = prompt(
-      "Reason for previous break?",
-      "Washroom / Water / Phone Call"
-    );
+    // Start New Session if none active
+    const hasActiveSession = logs.length && logs[logs.length - 1].logoutTS === null;
+    if (!hasActiveSession) {
+        logs.push({
+            login: now(),
+            loginTS: Date.now(),
+            logout: "-",
+            logoutTS: null,
+            reason: "-",
+            completed: []
+        });
+        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
 
-    lastLog.reason =
-      userReason && userReason.trim()
-        ? userReason.trim()
-        : "Bio Break";
-
-    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-    uploadData(); // 🔒 persist to Firebase
-  }
-}
-
-
-   const hasActiveSession = logs.length && logs[logs.length - 1].logoutTS === null;
-
-if (!hasActiveSession) {
-    logs.push({
-        login: now(),
-        loginTS: Date.now(),
-        logout: "-",
-        logoutTS: null,
-        reason: "-",
-        completed: []
-    });
-
-    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-}
-
-
-
+    // 6. INITIALIZE COMPONENTS
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
     document.querySelector("button[onclick='toggleSubjectProgress()']").disabled = false;
     
-    // Load subjects into selector
     loadSubjectList();
-
     uploadData(); 
 
+    // Handle active Mock Tests
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
     if (activeTest) {
         if (activeTest.status === "EXPIRED") {
-           alert("Mock Test Time Ended! Please enter marks.");
-           finishTestSequence(activeTest, true);
-           return;
+            alert("Mock Test Time Ended! Please enter marks.");
+            finishTestSequence(activeTest, true);
+            return;
         }
         if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
             restoreTestUI(activeTest);
@@ -2232,10 +2134,10 @@ if (!hasActiveSession) {
             return;
         }
     }
-  // At the bottom of initStudentDashboard()
-updateRankUI();
-initFocusArena();
 
+    // Standard Dashboard Launch
+    updateRankUI();
+    initFocusArena();
     startIdle(1800);
     setupTasks();
     loadTasks();
