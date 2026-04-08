@@ -3209,18 +3209,16 @@ window.requestSubjectDelete = async function(subject, rowId) {
 
 
 // --- ATTACH TO WINDOW ---
-    window.handleLoginFlow = handleLoginFlow;
-  window.resetWatchdog = resetWatchdog;
-window.openDuesTab = openDuesTab;
+   window.handleLoginFlow = handleLoginFlow;
+window.resetWatchdog = resetWatchdog;
+window.addExtra = addExtra; // <--- ADD THIS LINE
 window.triggerDopamine = triggerDopamine;
 window.updateRankUI = updateRankUI;
-window.resetWatchdog = resetWatchdog;
 window.bioBreak = bioBreak;
 window.openDayEnd = openDayEnd;
 window.finalDayEnd = finalDayEnd;
 window.startMockTestSetup = startMockTestSetup;
 window.triggerEndTest = triggerEndTest;
-window.addExtra = addExtra;
 window.toggleHistory = toggleHistory;
 window.requestLeave = requestLeave;
 window.forceLogout = forceLogout;
@@ -3230,9 +3228,28 @@ window.toggleNoticeBoard = toggleNoticeBoard;
 window.toggleSubjectProgress = toggleSubjectProgress;
 window.renderSubjectTable = renderSubjectTable;
 window.requestSubjectDelete = requestSubjectDelete;
+window.dismissRejected = dismissRejected;
+window.dismissNoticePopup = dismissNoticePopup;
+window.dismissFeedback = dismissFeedback;
+
+// Admin Specific Attachments
 window.openAdminModal = openAdminModal;
 window.closeAdminModal = closeAdminModal;
 window.switchAdminTab = switchAdminTab;
+window.handleLeave = handleLeave;
+window.clearLeave = clearLeave;
+window.terminateStudent = terminateStudent;
+window.unlockStudent = unlockStudent;
+window.sendWarning = sendWarning;
+window.sendNotice = sendNotice;
+window.setExamSchedule = setExamSchedule;
+window.clearSingleSubject = clearSingleSubject;
+window.viewSubjectDeleteRequests = viewSubjectDeleteRequests;
+window.renderAdminSelectedSubject = renderAdminSelectedSubject;
+window.initAdminSubjectDropdown = initAdminSubjectDropdown;
+
+// Ensure Rank UI updates on load
+updateRankUI();
   </script>
 
 </body>
