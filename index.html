@@ -2865,38 +2865,6 @@ function loadTasks() {
         tList.append(container);
     });
 }
-function addExtra() {
-  // 1. Build a numbered menu string
-  let menu = "Select Subject for Extra Work (Enter Number):\n\n";
-  FIXED_SUBJECTS.forEach((sub, index) => {
-      menu += `${index + 1}. ${sub}\n`;
-  });
-  
-  const choice = prompt(menu);
-  if (!choice) return; // User cancelled
-
-  // 2. Validate Input
-  const index = parseInt(choice) - 1;
-  if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
-      alert("Invalid selection. Please enter a number from the list.");
-      return;
-  }
-
-  const subjectName = FIXED_SUBJECTS[index];
-
-  // 🔒 SECURITY BLOCK: Prevent user from manually adding Mock Tests here
-  if (subjectName.toLowerCase().includes("mock")) {
-      alert("⚠️ ACCESS DENIED\n\nTo add a Mock Test, you MUST use the orange 'Start Mock Test' button.");
-      return;
-  }
-
-  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  extras.push({ name: subjectName, done: false, comment: "", due: "" });
-  
-  localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-  loadTasks();
-  uploadData();
-}
 
 function save(tasks, extras) {
   localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
@@ -2945,35 +2913,36 @@ function getAccuracyRemark(acc) {
   return "Take care of your study";
 }
 function addExtra() {
-  // 1. Build a numbered menu string from your FIXED_SUBJECTS
-  let menu = "Select Subject for Extra Work (Enter Number):\n\n";
-  FIXED_SUBJECTS.forEach((sub, index) => {
-      menu += `${index + 1}. ${sub}\n`;
-  });
-  
-  const choice = prompt(menu);
-  if (!choice) return; 
+    // 1. Build a numbered menu string from your FIXED_SUBJECTS
+    let menu = "Select Subject for Extra Work (Enter Number):\n\n";
+    FIXED_SUBJECTS.forEach((sub, index) => {
+        menu += `${index + 1}. ${sub}\n`;
+    });
+    
+    const choice = prompt(menu);
+    if (!choice) return; 
 
-  const index = parseInt(choice) - 1;
-  if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
-      alert("Invalid selection.");
-      return;
-  }
+    const index = parseInt(choice) - 1;
+    if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
+        alert("Invalid selection.");
+        return;
+    }
 
-  const subjectName = FIXED_SUBJECTS[index];
+    const subjectName = FIXED_SUBJECTS[index];
 
-  // Prevent manual Mock Test entry (must use the orange button)
-  if (subjectName.toLowerCase().includes("mock")) {
-      alert("⚠️ ACCESS DENIED\nUse the 'Start Mock Test' button for exams.");
-      return;
-  }
+    // Security Block: Prevent manual Mock Test entry
+    if (subjectName.toLowerCase().includes("mock")) {
+        alert("⚠️ ACCESS DENIED\nUse the 'Start Mock Test' button for exams.");
+        return;
+    }
 
-  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  extras.push({ name: subjectName, done: false, comment: "", due: "" });
-  
-  localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-  loadTasks(); // Refresh the list on screen
-  uploadData(); // Sync to Firebase
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+    extras.push({ name: subjectName, done: false, comment: "", due: "" });
+    
+    localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+    loadTasks(); // Refresh the list on screen
+    updateProgress(); // Update the speedometer
+    uploadData(); // Sync to Firebase
 }
 
 // --- DAY END ---
