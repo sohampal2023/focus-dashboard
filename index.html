@@ -496,28 +496,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     </tbody>
   </table>
 </div>
-  <div id="gamificationBox" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px;">
-    <div class="card" style="margin:0; padding:15px; text-align:center;">
-        <div style="font-size: 12px; color: #94a3b8;">LVL <span id="displayLevel" style="color:#facc15; font-weight:800;">1</span></div>
-        <div style="background:#1e293b; height:8px; border-radius:4px; margin:8px 0; overflow:hidden;">
-            <div id="xpBar" style="height:100%; background:linear-gradient(90deg, #22c55e, #3b82f6); width:0%; transition: width 0.5s;"></div>
-        </div>
-        <div style="font-size: 10px;">XP: <span id="displayXp">0</span>/100</div>
-    </div>
-    <div class="card" style="margin:0; padding:15px; text-align:center;">
-        <div style="font-size: 12px; color: #94a3b8;">STREAK</div>
-        <div style="font-size: 20px; font-weight: 800; color: #ef4444;">🔥 <span id="displayStreak">0</span></div>
-    </div>
-    <div class="card" style="margin:0; padding:15px; text-align:center; display:flex; align-items:center; justify-content:center;">
-        <div id="aiMessage" style="font-size: 13px; font-weight: 600; color: #4ade80;">Ready to study? 🚀</div>
-    </div>
-</div>
-
-<div id="roadmapBox" class="card" style="text-align: left; padding: 20px; margin-bottom: 20px;">
-    <h3 style="margin: 0 0 15px 0; color: #38bdf8; font-size: 16px;">🗺️ MISSION ROADMAP</h3>
-    <div id="roadmapList" style="position: relative; padding-left: 20px; border-left: 2px solid #1e293b;">
-        </div>
-</div>
 <div id="taskBox" class="card hidden">
       <div style="display:grid;grid-template-columns:1fr 320px;gap:20px">
         <div>
@@ -1913,10 +1891,12 @@ async function initStudentDashboard() {
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
+    // --- SETUP LIVE LISTENER FOR WARNINGS ---
     onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
         const msg = snapshot.val();
         const popup = document.getElementById("rejectedPopup");
         const popupTxt = document.getElementById("rejectedMsg");
+        
         if (msg) {
             popupTxt.innerText = `Admin: "${msg}"`;
             popup.classList.remove("hidden");
@@ -1924,67 +1904,300 @@ async function initStudentDashboard() {
             popup.classList.add("hidden");
         }
     });
+  // --- PASTE INSIDE initStudentDashboard() ---
 
-    onValue(ref(db, `users/${currentUser.uid}/leaveRequest`), (snap) => {
-        const reqData = snap.val();
-        checkLeaveStatus({ leaveRequest: reqData });
-    });
+// 1. Live Listener for LEAVE REQUESTS
+onValue(ref(db, `users/${currentUser.uid}/leaveRequest`), (snap) => {
+    // If Admin approves/rejects, this runs immediately
+    const reqData = snap.val();
+    
+    // Update the Dashboard Box
+    checkLeaveStatus({ leaveRequest: reqData });
 
-    onValue(ref(db, `users/${currentUser.uid}/newFeedback`), (snap) => {
-        const msg = snap.val();
-        const feedbackBox = document.getElementById("adminFeedbackBox");
-        const feedbackText = document.getElementById("adminFeedbackText");
-        if (msg) {
-            feedbackBox.classList.remove("hidden");
-            feedbackText.innerText = msg;
-            downloadData(currentUser.uid).then(data => {
-                if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
-            });
+    // Update the "Leave Balance" display if it changed
+    if (reqData && reqData.status === "Approved") {
+        // Optional: Trigger a balance refresh if needed
+        // For now, simply showing the Green Box is enough
+    }
+});
+
+// 2. Live Listener for NEW REVIEWS (History)
+onValue(ref(db, `users/${currentUser.uid}/newFeedback`), (snap) => {
+    const msg = snap.val();
+    const feedbackBox = document.getElementById("adminFeedbackBox");
+    const feedbackText = document.getElementById("adminFeedbackText");
+
+    if (msg) {
+        // Show the Purple Feedback Box instantly
+        feedbackBox.classList.remove("hidden");
+        feedbackText.innerText = msg;
+        
+        // Also update local storage so History tab is fresh
+        downloadData(currentUser.uid).then(data => {
+            if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
+        });
+    }
+});
+ // --- UPCOMING EXAMS LISTENER (FULL FUNCTION - NO LIMITS) ---
+onValue(ref(db, `users/${currentUser.uid}/UPCOMING_EXAMS`), (snap) => {
+    const box = document.getElementById("examBox");
+    const list = document.getElementById("examList");
+
+    if (!snap.exists()) {
+        box.style.display = "none";
+        return;
+    }
+
+    // Increased initial fetch to 20 to accommodate your 18 exams
+    const exams = snap.val().slice(0, 20); 
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    // Calculate days left and filter out past exams
+    const active = exams
+        .map(e => {
+            const daysLeft = Math.ceil(
+                (e.date - today.getTime()) / (24 * 60 * 60 * 1000)
+            );
+            return { ...e, daysLeft };
+        })
+        .filter(e => e.daysLeft >= 0) // Only show exams today or in the future
+        .sort((a, b) => a.daysLeft - b.daysLeft); // Nearest exams first
+
+    if (active.length === 0) {
+        box.style.display = "none";
+        return;
+    }
+
+    // Show the box now that we have data
+    box.style.display = "block";
+    
+    // Add scrolling if list is too long (prevents sidebar breakage)
+    list.style.maxHeight = "250px"; 
+    list.style.overflowY = "auto";
+    list.style.paddingRight = "5px"; // Space for scrollbar
+
+    list.innerHTML = active.map(e => `
+        <div style="
+            display:flex;
+            justify-content:space-between;
+            padding:8px 0;
+            border-bottom:1px dashed #334155;
+            align-items: center;
+        ">
+            <span style="font-weight: 500; color: #f8fafc; font-size: 13px;">${e.name}</span>
+            <span style="color:#facc15; font-weight:bold; font-size: 12px; white-space: nowrap; margin-left: 10px;">
+                ${e.daysLeft} day${e.daysLeft !== 1 ? "s" : ""} left
+            </span>
+        </div>
+    `).join("");
+});
+    // --- REALTIME NOTICE POPUP (LIKE WARNING, BUT INFO) ---
+onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
+    if (!snapshot.exists()) return;
+
+    const notices = snapshot.val();
+
+    // Get last seen notice time
+    const seenSnap = await get(
+        ref(db, `users/${currentUser.uid}/lastSeenNoticeTime`)
+    );
+    const lastSeen = seenSnap.exists() ? seenSnap.val() : 0;
+
+    // Find newest notice
+    let latestNotice = null;
+    Object.values(notices).forEach(n => {
+        if (!latestNotice || n.time > latestNotice.time) {
+            latestNotice = n;
         }
     });
 
+    // Show popup only for NEW notice
+    if (latestNotice && latestNotice.time > lastSeen) {
+        document.getElementById("noticePopupMsg").innerText =
+            `${latestNotice.title}: ${
+                latestNotice.message.length > 80
+                ? latestNotice.message.slice(0, 80) + "..."
+                : latestNotice.message
+            }`;
+
+        document.getElementById("noticePopup").classList.remove("hidden");
+
+        // Mark as seen (prevents repeat popup)
+        await update(ref(db, `users/${currentUser.uid}`), {
+            lastSeenNoticeTime: latestNotice.time
+        });
+    }
+});
+
     const serverData = await downloadData(currentUser.uid);
+    
+    // Check Lockout
     if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
-        location.reload();
+        const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
+        document.body.innerHTML = `
+  <div style="
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    flex-direction:column;
+    text-align:center;
+    background:#020617;
+    color:#e5e7eb;
+  ">
+    <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">
+      TERMINATED
+    </h1>
+
+    <h2 style="color:#f87171;margin-top:10px">
+      ${serverData.lockoutReason || "Admin Action"}
+    </h2>
+
+    <p style="margin-top:10px">
+      Time remaining: ${minLeft} minutes
+    </p>
+
+    <div style="display:flex; gap:12px; margin-top:20px">
+      <button
+        onclick="location.reload()"
+        style="padding:10px 24px;border-radius:8px;background:#1e293b;color:white;border:1px solid #334155">
+        Try Again
+      </button>
+
+      <button
+        onclick="logoutFromTermination()"
+        style="padding:10px 24px;border-radius:8px;background:#7f1d1d;color:white;border:1px solid #ef4444">
+        Logout
+      </button>
+    </div>
+  </div>
+`;
+
         return; 
     }
 
-    checkLeaveStatus(serverData);
+    // --- CHECK LEAVE ACCRUAL (MONTHLY 6 DAYS + CARRYFORWARD) ---
+    const date = new Date();
+    const currentMonthKey = `${date.getFullYear()}-${date.getMonth()}`;
     
-    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    const hasActiveSession = logs.length && logs[logs.length - 1].logoutTS === null;
+    let leaveBalance = serverData.leaveBalance !== undefined ? serverData.leaveBalance : 6;
+    let lastAccrual = serverData.lastAccrual || "";
 
-    if (!hasActiveSession) {
-        logs.push({
-            login: now(),
-            loginTS: Date.now(),
-            logout: "-",
-            logoutTS: null,
-            reason: "-",
-            completed: []
-        });
-        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    if (lastAccrual !== currentMonthKey) {
+        // New Month detected! Add 6 days to existing balance
+        let carry = serverData.medicalCarry || 0;
+leaveBalance = leaveBalance + 6 - carry;
+
+await update(ref(db, `users/${currentUser.uid}`), {
+    leaveBalance: leaveBalance,
+    medicalCarry: 0,
+    lastAccrual: currentMonthKey
+});
+
+        serverData.leaveBalance = leaveBalance; // update local ref
     }
+    
+    // Update UI for Balance
+    const balDisplay = document.getElementById("leaveBalanceDisplay");
+    if(balDisplay) balDisplay.innerText = `Leave Bal: ${leaveBalance}`;
+
+
+    // Check New Admin Feedback
+  if (serverData.newFeedback && !sessionStorage.getItem("FEEDBACK_SEEN")) {
+    document.getElementById("adminFeedbackBox").classList.remove("hidden");
+    document.getElementById("adminFeedbackText").innerText = serverData.newFeedback;
+    sessionStorage.setItem("FEEDBACK_SEEN", "1");
+}
+
+
+    checkLeaveStatus(serverData);
+
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+    dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
+    penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+
+    // Init Timeout UI
+    document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
+
+    if (logs.length) {
+  const lastLog = logs[logs.length - 1];
+
+  if (lastLog.reason === "Pending") {
+    const userReason = prompt(
+      "Reason for previous break?",
+      "Washroom / Water / Phone Call"
+    );
+
+    lastLog.reason =
+      userReason && userReason.trim()
+        ? userReason.trim()
+        : "Bio Break";
+
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    uploadData(); // 🔒 persist to Firebase
+  }
+}
+
+
+   const hasActiveSession = logs.length && logs[logs.length - 1].logoutTS === null;
+
+if (!hasActiveSession) {
+    logs.push({
+        login: now(),
+        loginTS: Date.now(),
+        logout: "-",
+        logoutTS: null,
+        reason: "-",
+        completed: []
+    });
+
+    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+}
+
+
 
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
-   const subProgBtn = document.querySelector("button[onclick='toggleSubjectProgress()']");
-    if (subProgBtn) subProgBtn.disabled = false;
+    document.querySelector("button[onclick='toggleSubjectProgress()']").disabled = false;
     
+    // Load subjects into selector
     loadSubjectList();
+
     uploadData(); 
+
+    const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+    if (activeTest) {
+        if (activeTest.status === "EXPIRED") {
+           alert("Mock Test Time Ended! Please enter marks.");
+           finishTestSequence(activeTest, true);
+           return;
+        }
+        if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
+            restoreTestUI(activeTest);
+            const elapsed = (Date.now() - activeTest.startTime) / 1000;
+            const remaining = (activeTest.durationMins * 60) - elapsed;
+            startIdle(remaining > 0 ? remaining : 1);
+            loadTasks();
+            renderLogs();
+            updateProgress();
+            return;
+        } else {
+            finishTestSequence(activeTest, true);
+            return;
+        }
+    }
 
     startIdle(1800);
     setupTasks();
     loadTasks();
     renderLogs();
     updateProgress();
-    
-    // 🔥 CRITICAL ADDITION: Update Gamification and Roadmap on load
-    updateGamificationUI();
-    loadRoadmap();
 }
+
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
     document.getElementById("adminFeedbackBox").classList.add("hidden");
@@ -2154,26 +2367,37 @@ function showApprovedPopup(dates, comment) {
 async function downloadData(uid) {
     const syncStatus = document.getElementById("syncStatus");
     syncStatus.innerText = "Syncing...";
+    
     try {
         const snapshot = await get(child(ref(db), `users/${uid}`));
         if (snapshot.exists()) {
             const data = snapshot.val();
+            
             if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
             if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
             if(data.LOGS) localStorage.setItem(key("LOGS"), data.LOGS);
-            if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
-            if(data.SUBJECT_WISE_TABLE) localStorage.setItem(SUBJECT_TABLE_KEY(), data.SUBJECT_WISE_TABLE);
             
-            // Sync Gamification Data
-            localStorage.setItem(key("XP"), data.XP || "0");
-            localStorage.setItem(key("LEVEL"), data.LEVEL || "1");
-            localStorage.setItem(key("STREAK"), data.STREAK || "0");
+            if(data.TEST_STATE) localStorage.setItem(key("TEST_STATE"), data.TEST_STATE);
+            if(data.NEXT_TASKS) localStorage.setItem(key("NEXT_TASKS"), data.NEXT_TASKS);
+            if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
+            
+            // DOWNLOAD MOCK LOGS
+            if(data.MOCK_LOGS) localStorage.setItem(key("MOCK_LOGS"), data.MOCK_LOGS);
 
+            // DOWNLOAD SUBJECT PROGRESS
+            if(data.SUBJECT_WISE_TABLE) localStorage.setItem(SUBJECT_TABLE_KEY(), data.SUBJECT_WISE_TABLE);
+
+            localStorage.setItem(key("IDLE_STRIKES"), data.IDLE_STRIKES || "0");
+            localStorage.setItem(key("DAILY_TIMEOUTS"), data.DAILY_TIMEOUTS || "0"); 
+            localStorage.setItem(key("PENALTY"), data.PENALTY || "0");
+            
             syncStatus.innerText = "Online";
             return data;
         }
+        syncStatus.innerText = "Online (New)";
         return {};
     } catch (error) {
+        console.error("Access Denied:", error);
         syncStatus.innerText = "Auth Error";
         return null;
     }
@@ -2181,28 +2405,38 @@ async function downloadData(uid) {
 
 function uploadData() {
     if(!currentUser) return;
+    const syncStatus = document.getElementById("syncStatus");
+    
     const p = calculate();
+
     const payload = {
-        profile: { email: currentUser.email },
+        profile: { email: currentUser.email }, 
+       
         TASKS: localStorage.getItem(key("TASKS")),
         EXTRA: localStorage.getItem(key("EXTRA")),
         LOGS: localStorage.getItem(key("LOGS")),
-        HISTORY: localStorage.getItem(key("HISTORY")),
-        SUBJECT_WISE_TABLE: localStorage.getItem(SUBJECT_TABLE_KEY()),
-        
-        // Push Gamification to Firebase
-        XP: localStorage.getItem(key("XP")) || "0",
-        LEVEL: localStorage.getItem(key("LEVEL")) || "1",
-        STREAK: localStorage.getItem(key("STREAK")) || "0"
+        TEST_STATE: localStorage.getItem(key("TEST_STATE")),
+        NEXT_TASKS: localStorage.getItem(key("NEXT_TASKS")),
+        HISTORY: localStorage.getItem(key("HISTORY")), 
+        MOCK_LOGS: localStorage.getItem(key("MOCK_LOGS")),
+        SUBJECT_WISE_TABLE: localStorage.getItem(SUBJECT_TABLE_KEY()), // Upload new table
+        IDLE_STRIKES: localStorage.getItem(key("IDLE_STRIKES")),
+        DAILY_TIMEOUTS: localStorage.getItem(key("DAILY_TIMEOUTS")),
+        PENALTY: localStorage.getItem(key("PENALTY"))
     };
 
-    update(ref(db, `users/${currentUser.uid}`), payload).then(() => {
-        update(ref(db, `users/${currentUser.uid}/stats`), {
-            percent: p.percent,
-            rating: getLabel(p.percent),
-            updatedAt: Date.now()
-        });
+    update(ref(db, `users/${currentUser.uid}`), payload)
+    .then(() => {
+    // ✅ LIVE STATS UPDATE (ADMIN SEES THIS)
+    update(ref(db, `users/${currentUser.uid}/stats`), {
+        percent: p.percent,
+        rating: getLabel(p.percent),
+        updatedAt: Date.now()
     });
+
+    syncStatus.innerText = "Saved";
+    setTimeout(() => syncStatus.innerText = "Online", 2000);
+})
 }
 // --- SUBJECT HELPER FUNCTIONS ---
 function getSubjectData() {
@@ -2721,103 +2955,154 @@ function setupTasks() {
   document.getElementById("reportBox").classList.add("hidden");
 }
 function loadTasks() {
-    const tList = document.getElementById("taskList");
-    const eList = document.getElementById("extraList");
-    if(!tList || !eList) return;
-    tList.innerHTML = "";
-    eList.innerHTML = "";
+  const tList = document.getElementById("taskList");
+  const eList = document.getElementById("extraList");
+  if(!tList || !eList) return;
+  tList.innerHTML = "";
+  eList.innerHTML = "";
+  
+  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+  
+  // Helper to update main logs
+  const updateLogTask = (name, isChecked, comment, due) => {
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    if(logs.length){
+      const active = logs[logs.length-1];
+      if(!active.completed) active.completed = [];
+      if(isChecked){
+        active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
+        active.completed.push({ name: name, comment: comment, due: due });
+      } else {
+        active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
+      }
+      localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+      renderLogs();
+    }
+  };
+// FIND THIS FUNCTION IN YOUR CODE AND REPLACE IT ENTIRELY
+const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
+      console.log("Saving Exact Subject:", subject); 
+
+      const subjectData = getSubjectData(); 
+      
+      // If the folder doesn't exist yet, create it using the EXACT name
+      if(!subjectData[subject]) subjectData[subject] = [];
+      
+      subjectData[subject].push({
+        id: Date.now(), 
+        date: new Date().toLocaleDateString(),
+        covered: covered || "-",
+        uncovered: uncovered || "-"
+      });
+      
+      saveSubjectData(subjectData); 
+      uploadData(); 
+  };
+  // --- RENDER STANDARD TASKS ---
+  tasks.forEach(t => {
+    const container = document.createElement("div");
+    container.style.marginBottom = "4px";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = t.done;
+    const label = document.createElement("span");
     
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    
-    const updateLogTask = (name, isChecked, comment, due) => {
-        const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-        if(logs.length){
-            const active = logs[logs.length-1];
-            if(!active.completed) active.completed = [];
-            if(isChecked){
-                active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
-                active.completed.push({ name: name, comment: comment, due: due });
-            } else {
-                active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
-            }
-            localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-            renderLogs();
-        }
+    const updateLabel = () => {
+       let display = t.name;
+       if(t.target) display += ` <span style='font-size:11px;color:#38bdf8'>(${t.target})</span>`;
+       if(t.done){
+           label.innerHTML = ` ${display} <span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>`;
+       } else {
+           label.innerHTML = " " + display;
+       }
     };
-
-    tasks.forEach(t => {
-        const container = document.createElement("div");
-        container.style.marginBottom = "6px";
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.checked = t.done;
-        const label = document.createElement("span");
+    updateLabel();
+    
+    cb.onchange = () => {
+      if (!confirm(`CONFIRM TASK:\n\nMark '${t.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) { 
+          cb.checked = !cb.checked; 
+          return; 
+      }
+      
+      if(cb.checked){
+        const remark = prompt(`What did you cover in ${t.name}?`, " ");
+        const dueVal = prompt(`Any pending work left?`, " ");
+        t.comment = remark || "-";
+        t.due = dueVal || "-";
         
-        const updateLabel = () => {
-            let display = t.name;
-            if(t.target) display += ` <span style='font-size:11px;color:#38bdf8'>(${t.target})</span>`;
-            label.innerHTML = t.done ? ` <span style="text-decoration:line-through;color:#64748b">${display}</span>` : " " + display;
-        };
-        updateLabel();
+        // CALL THE UPDATED SAVE FUNCTION
+        saveAutomatedSubjectProgress(t.name, t.comment, t.due);
         
-        cb.onchange = () => {
-            if (!confirm(`Mark '${t.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) { 
-                cb.checked = !cb.checked; 
-                return; 
-            }
-            
-            if(cb.checked){
-                const remark = prompt(`What did you cover in ${t.name}?`, " ");
-                const dueVal = prompt(`Any pending work left?`, " ");
-                t.comment = remark || "-";
-                t.due = dueVal || "-";
-                saveAutomatedSubjectProgress(t.name, t.comment, t.due);
-                handleXP();
-            } else { 
-                t.comment = ""; 
-                t.due = ""; 
-            }
-            t.done = cb.checked;
-            updateLabel();
-            updateLogTask(t.name, t.done, t.comment, t.due);
-            save(tasks, extras);
-            loadRoadmap();
-        };
-        container.append(cb, label);
-        tList.append(container);
-    });
+      } else { 
+          t.comment = ""; 
+          t.due = ""; 
+      }
+      t.done = cb.checked;
+      updateLabel();
+      updateLogTask(t.name, t.done, t.comment, t.due);
+      save(tasks, extras);
+    };
+    container.append(cb, label);
+    tList.append(container);
+  });
+  
+  // --- RENDER EXTRA WORK ---
+  extras.forEach(e => {
+    const container = document.createElement("div");
+    container.style.marginBottom = "4px";
+    
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = e.done;
+    
+    if(e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
+    
+    const label = document.createElement("span");
+    
+    const updateLabel = () => {
+       if(e.done){
+           label.innerHTML = ` <span style='color:#facc15'>${e.name}</span> <span style="font-size:12px;color:#e5e7eb">[${e.comment}]</span>`;
+       } else {
+           label.innerHTML = " " + e.name;
+       }
+    };
+    updateLabel();
+    
+    cb.onchange = () => {
+      if (!confirm(`CONFIRM WORK:\n\nSubject: ${e.name}\nMark as DONE?`)) { 
+          cb.checked = !cb.checked; 
+          return; 
+      }
+      
+      if(cb.checked){
+        const topicName = prompt(`Enter TOPIC NAME (or Test Name) for ${e.name}:`, "");
+        
+        if (!topicName) {
+            cb.checked = false;
+            return; 
+        }
 
-    extras.forEach(e => {
-        const container = document.createElement("div");
-        container.style.marginBottom = "6px";
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.checked = e.done;
-        if(e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
-        const label = document.createElement("span");
-        const updateLabel = () => {
-           label.innerHTML = e.done ? ` <span style='color:#facc15'>${e.name}</span> <span style="font-size:12px;color:#e5e7eb">[Done]</span>` : " " + e.name;
-        };
-        updateLabel();
-        cb.onchange = () => {
-          if (!confirm(`Mark as DONE?`)) { cb.checked = !cb.checked; return; }
-          if(cb.checked){
-            const topic = prompt(`Enter topic for ${e.name}:`, "");
-            if (!topic) { cb.checked = false; return; }
-            e.comment = topic; e.due = "None";
-            saveAutomatedSubjectProgress(e.name, topic, "None");
-            handleXP();
-          } else { e.comment = ""; e.due = ""; }
-          e.done = cb.checked;
-          updateLabel();
-          updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
-          save(tasks, extras);
-          loadRoadmap();
-        };
-        container.append(cb, label);
-        eList.append(container);
-    });
+        const dueVal = prompt(`Any pending work/marks?`, "None");
+        e.comment = topicName; 
+        e.due = dueVal || "-";
+
+        // CALL THE UPDATED SAVE FUNCTION
+        saveAutomatedSubjectProgress(e.name, topicName, e.due);
+
+      } else { 
+          e.comment = ""; 
+          e.due = ""; 
+      }
+      
+      e.done = cb.checked;
+      updateLabel();
+      updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
+      save(tasks, extras);
+    };
+    container.append(cb, label);
+    eList.append(container);
+  });
 }
 function addExtra() {
   // 1. Build a numbered menu string
@@ -3160,136 +3445,6 @@ window.requestSubjectDelete = async function(subject, rowId) {
   }
 };
 
-function loadRoadmap() {
-    const roadmapContainer = document.getElementById("roadmapList");
-    if (!roadmapContainer) return;
-
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    const allItems = [...tasks, ...extras];
-
-    if (allItems.length === 0) {
-        roadmapContainer.innerHTML = '<div style="color:#64748b; padding:10px;">No missions found.</div>';
-        return;
-    }
-
-    let html = "";
-    let firstActiveFound = false;
-
-    allItems.forEach((item) => {
-        let dotColor = item.done ? "#38bdf8" : (!firstActiveFound ? "#22c55e" : "#334155");
-        let statusIcon = item.done ? "✔" : (!firstActiveFound ? "▶" : "🔒");
-        
-        if (!item.done && !firstActiveFound) firstActiveFound = true;
-
-        html += `
-        <div style="position:relative; margin-bottom:15px; padding-left:10px;">
-            <div style="position:absolute; left:-27px; top:2px; width:14px; height:14px; border-radius:50%; background:${dotColor}; border:2px solid #020617; display:flex; align-items:center; justify-content:center; font-size:9px; color:white; font-weight:bold; box-shadow: ${!item.done && dotColor=="#22c55e" ? '0 0 8px #22c55e' : 'none'}">${statusIcon}</div>
-            <div style="font-size:13px; font-weight:bold; color:${item.done ? '#38bdf8' : '#e5e7eb'}">${item.name}</div>
-            <div style="font-size:11px; color:#64748b;">${item.target || item.comment || 'Next Topic'}</div>
-        </div>`;
-    });
-
-    roadmapContainer.innerHTML = html;
-    updateAITeacher(allItems);
-    updateGamificationUI();
-}
-
-function updateAITeacher(items) {
-    const aiMsg = document.getElementById("aiMessage");
-    const completed = items.filter(i => i.done).length;
-    const total = items.length;
-    const percent = total > 0 ? (completed / total) * 100 : 0;
-
-    let coachText = "";
-    let color = "#4ade80";
-
-    if (total === 0) coachText = "Assign tasks to begin supervision. 👨‍🏫";
-    else if (percent === 100) coachText = "Excellent work, Soham! Today's mission is 100% complete. 🏆";
-    else if (percent >= 75) coachText = "Almost there! Finish the last few topics. I'm watching! ⚡";
-    else if (percent >= 40) coachText = "Good steady progress. Don't lose focus now. 🔥";
-    else if (percent > 0) coachText = "Good start. Keep moving down the roadmap. 🚀";
-    else {
-        coachText = "You haven't started yet. Open your first topic! ⏱";
-        color = "#f87171";
-    }
-
-    aiMsg.innerText = coachText;
-    aiMsg.style.color = color;
-}
-
-function handleXP() {
-    let xp = parseInt(localStorage.getItem(key("XP")) || "0");
-    let level = parseInt(localStorage.getItem(key("LEVEL")) || "1");
-    let streak = parseInt(localStorage.getItem(key("STREAK")) || "0");
-
-    // XP Logic
-    xp += 25; 
-    if (xp >= 100) {
-        xp = 0;
-        level++;
-        alert("LEVEL UP 🎉 Now Level " + level);
-    }
-
-    // Streak Logic (Basic)
-    if (streak === 0) streak = 1;
-
-    localStorage.setItem(key("XP"), xp.toString());
-    localStorage.setItem(key("LEVEL"), level.toString());
-    localStorage.setItem(key("STREAK"), streak.toString());
-    
-    updateGamificationUI();
-    uploadData(); // Save to Firebase instantly
-}
-
-function updateGamificationUI() {
-    const xp = localStorage.getItem(key("XP")) || "0";
-    const level = localStorage.getItem(key("LEVEL")) || "1";
-    const streak = localStorage.getItem(key("STREAK")) || "0";
-
-    if(document.getElementById("xpBar")) document.getElementById("xpBar").style.width = xp + "%";
-    if(document.getElementById("displayXp")) document.getElementById("displayXp").innerText = xp;
-    if(document.getElementById("displayLevel")) document.getElementById("displayLevel").innerText = level;
-    if(document.getElementById("displayStreak")) document.getElementById("displayStreak").innerText = streak;
-}
-
-function updateCoachMessage(items) {
-    const aiMsg = document.getElementById("aiMessage");
-    if (!aiMsg) return;
-
-    const completed = items.filter(i => i.done).length;
-    const total = items.length;
-
-    if (total === 0) {
-        aiMsg.innerText = "Plan your day to start! 📝";
-    } else if (completed === total) {
-        aiMsg.innerText = "Mission Accomplished! Outstanding! 🏆";
-    } else if (completed > 0) {
-        const msgs = ["Keep pushing, almost there! ⚡", "You're on a roll! 🔥", "Focus on the next target 🎯"];
-        aiMsg.innerText = msgs[Math.floor(Math.random() * msgs.length)];
-    } else {
-        aiMsg.innerText = "Ready to start the first topic? 🚀";
-    }
-}
-
-function handleXPAndStreaks(taskName) {
-    let xp = parseInt(localStorage.getItem(key("XP")) || "0");
-    let level = parseInt(localStorage.getItem(key("LEVEL")) || "1");
-    let streak = parseInt(localStorage.getItem(key("STREAK")) || "0");
-
-    xp += 25;
-    if (xp >= 100) {
-        xp -= 100;
-        level += 1;
-        alert("🎉 LEVEL UP! You reached Level " + level);
-    }
-
-    localStorage.setItem(key("XP"), xp.toString());
-    localStorage.setItem(key("LEVEL"), level.toString());
-    
-    updateGamificationUI();
-    loadRoadmap();
-}
 
 
 // --- ATTACH TO WINDOW ---
