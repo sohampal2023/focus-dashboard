@@ -3476,43 +3476,80 @@ function loadRoadmap() {
     const allItems = [...tasks, ...extras];
 
     if (allItems.length === 0) {
-        roadmapContainer.innerHTML = '<div style="color:#64748b; padding:10px;">No missions assigned for today.</div>';
+        roadmapContainer.innerHTML = '<div style="color:#64748b; padding:10px;">No missions found.</div>';
         return;
     }
 
-    let html = '<div class="roadmap-line"></div>';
+    let html = "";
     let firstActiveFound = false;
 
-    allItems.forEach((item, i) => {
-        let statusClass = "";
-        let progressWidth = "0%";
-
-        if (item.done) {
-            statusClass = "done";
-            progressWidth = "100%";
-        } else if (!firstActiveFound) {
-            statusClass = "active";
-            progressWidth = "20%";
-            firstActiveFound = true;
-        }
+    allItems.forEach((item) => {
+        let dotColor = item.done ? "#38bdf8" : (!firstActiveFound ? "#22c55e" : "#334155");
+        let statusIcon = item.done ? "✔" : (!firstActiveFound ? "▶" : "🔒");
+        
+        if (!item.done && !firstActiveFound) firstActiveFound = true;
 
         html += `
-        <div class="step ${statusClass}">
-            <div class="step-content">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <b style="font-size:13px; color:${item.done ? '#38bdf8' : '#e5e7eb'}">${item.name}</b>
-                    ${item.done ? '<span style="font-size:10px; color:#38bdf8;">✔ DONE</span>' : ''}
-                </div>
-                <div style="font-size:11px; color:#94a3b8; margin:2px 0;">${item.target || 'Daily Goal'}</div>
-                <div class="progress" style="height:4px; background:#1e293b; margin-top:5px;">
-                    <div class="bar" style="width:${progressWidth}; background:${item.done ? '#38bdf8' : '#22c55e'}; height:100%;"></div>
-                </div>
-            </div>
+        <div style="position:relative; margin-bottom:15px; padding-left:10px;">
+            <div style="position:absolute; left:-27px; top:2px; width:14px; height:14px; border-radius:50%; background:${dotColor}; border:2px solid #020617; display:flex; align-items:center; justify-content:center; font-size:9px; color:white; font-weight:bold; box-shadow: ${!item.done && dotColor=="#22c55e" ? '0 0 8px #22c55e' : 'none'}">${statusIcon}</div>
+            <div style="font-size:13px; font-weight:bold; color:${item.done ? '#38bdf8' : '#e5e7eb'}">${item.name}</div>
+            <div style="font-size:11px; color:#64748b;">${item.target || item.comment || 'Next Topic'}</div>
         </div>`;
     });
 
     roadmapContainer.innerHTML = html;
-    updateCoachMessage(allItems);
+    updateAITeacher(allItems);
+    updateGamificationUI();
+}
+
+function updateAITeacher(items) {
+    const aiMsg = document.getElementById("aiMessage");
+    const completed = items.filter(i => i.done).length;
+    const total = items.length;
+    const percent = total > 0 ? (completed / total) * 100 : 0;
+
+    let coachText = "";
+    let color = "#4ade80";
+
+    if (total === 0) coachText = "Assign tasks to begin supervision. 👨‍🏫";
+    else if (percent === 100) coachText = "Excellent work, Soham! Today's mission is 100% complete. 🏆";
+    else if (percent >= 75) coachText = "Almost there! Finish the last few topics. I'm watching! ⚡";
+    else if (percent >= 40) coachText = "Good steady progress. Don't lose focus now. 🔥";
+    else if (percent > 0) coachText = "Good start. Keep moving down the roadmap. 🚀";
+    else {
+        coachText = "You haven't started yet. Open your first topic! ⏱";
+        color = "#f87171";
+    }
+
+    aiMsg.innerText = coachText;
+    aiMsg.style.color = color;
+}
+
+function handleXP() {
+    let xp = parseInt(localStorage.getItem(key("XP")) || "0");
+    let level = parseInt(localStorage.getItem(key("LEVEL")) || "1");
+    
+    xp += 25; // 4 tasks = 1 level up
+    if (xp >= 100) {
+        xp = 0;
+        level++;
+        alert("LEVEL UP 🎉 Now Level " + level);
+    }
+
+    localStorage.setItem(key("XP"), xp);
+    localStorage.setItem(key("LEVEL"), level);
+    updateGamificationUI();
+}
+
+function updateGamificationUI() {
+    const xp = localStorage.getItem(key("XP")) || "0";
+    const level = localStorage.getItem(key("LEVEL")) || "1";
+    const streak = localStorage.getItem(key("STREAK")) || "0";
+
+    if(document.getElementById("xpBar")) document.getElementById("xpBar").style.width = xp + "%";
+    if(document.getElementById("displayXp")) document.getElementById("displayXp").innerText = xp;
+    if(document.getElementById("displayLevel")) document.getElementById("displayLevel").innerText = level;
+    if(document.getElementById("displayStreak")) document.getElementById("displayStreak").innerText = streak;
 }
 
 function updateCoachMessage(items) {
@@ -3553,21 +3590,6 @@ function handleXPAndStreaks(taskName) {
     loadRoadmap();
 }
 
-function updateGamificationUI() {
-    const xp = localStorage.getItem(key("XP")) || "0";
-    const level = localStorage.getItem(key("LEVEL")) || "1";
-    const streak = localStorage.getItem(key("STREAK")) || "0";
-
-    const xpFill = document.getElementById("xpBar");
-    const xpTxt = document.getElementById("displayXp");
-    const lvlTxt = document.getElementById("displayLevel");
-    const strkTxt = document.getElementById("displayStreak");
-
-    if (xpFill) xpFill.style.width = xp + "%";
-    if (xpTxt) xpTxt.innerText = xp;
-    if (lvlTxt) lvlTxt.innerText = level;
-    if (strkTxt) strkTxt.innerText = streak;
-}
 
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
