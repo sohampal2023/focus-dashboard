@@ -752,7 +752,9 @@ const MAP_STORAGE_KEY = () => key("DAILY_BYJUS_MAPS");
 function isAdmin() {
     return currentUser && currentUser.email === ADMIN_EMAIL;
 }
-
+const closeMap = () => {
+    document.getElementById("byjusMapBox").classList.add("hidden");
+};
 // --- WHITELIST ---
 const ALLOWED_EMAILS = [
     "admin@study.com",
