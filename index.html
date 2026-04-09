@@ -689,12 +689,13 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
     <div id="reportBox" class="card hidden"></div>
 </div>
-<div id="byjusMapBox" class="card hidden">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-        <h3 id="currentMapSubject" style="color:#38bdf8; margin:0;">Journey</h3>
-        <button onclick="closeMap()" style="width:auto; padding:5px 15px;">Close Map</button>
+<div id="byjusMapBox" class="card hidden" style="position:fixed; top:50%; left:50%; transform:translate(-50%, -50%); width:95%; max-width:600px; z-index:10001; height:85vh; display:flex; flex-direction:column; background:#0f172a; border: 2px solid #38bdf8; box-shadow: 0 0 50px rgba(0,0,0,0.9); border-radius: 20px; overflow: hidden;">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:20px; border-bottom:1px solid #1e293b; background: #1e293b;">
+        <h3 id="currentMapSubject" style="color:#38bdf8; margin:0; font-size: 1.2rem;">Learning Journey</h3>
+        <button onclick="closeMap()" style="width:auto; padding:8px 20px; background:#ef4444; border:none; color:white; border-radius:8px; cursor:pointer; font-weight:bold;">CLOSE</button>
     </div>
-    <div id="mapContainer" class="map-container"></div>
+    <div id="mapContainer" class="map-container" style="flex-grow:1; overflow-y:auto; padding:50px 20px; background: #020617;">
+        </div>
 </div>
 
 <div id="bulkInputModal" class="bulk-modal hidden">
@@ -3609,9 +3610,15 @@ window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
-    const nodes = dailyMaps[today][subjectName];
+    
+    if (!dailyMaps[today] || !dailyMaps[today][subjectName]) {
+        alert("Please set the journey first by clicking '+ SET JOURNEY'");
+        return;
+    }
 
+    const nodes = dailyMaps[today][subjectName];
     const container = document.getElementById("mapContainer");
+    
     container.innerHTML = "";
     document.getElementById("currentMapSubject").innerText = subjectName;
     document.getElementById("byjusMapBox").classList.remove("hidden");
@@ -3620,18 +3627,15 @@ window.showByjusMap = function(subjectName) {
         const nodeDiv = document.createElement("div");
         nodeDiv.className = "map-node";
 
-        // 1. The Circle Node (Indicator)
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
         circle.innerText = node.status === 'done' ? '✓' : (idx + 1);
         
-        // Clicking circle toggles "In Progress"
         circle.onclick = () => {
             if(node.status === 'todo') updateNodeStatus(idx, 'doing');
             else if(node.status === 'doing') updateNodeStatus(idx, 'todo');
         };
 
-        // 2. The Slider Wrapper
         const wrapper = document.createElement("div");
         wrapper.className = "node-content-wrapper";
 
@@ -3639,29 +3643,23 @@ window.showByjusMap = function(subjectName) {
         track.className = "slider-track";
         if(node.status === 'done') track.classList.add("is-sliding-left");
 
-        // UI for Topic Text
         const labelDiv = document.createElement("div");
         labelDiv.className = "slider-label";
         labelDiv.innerText = node.label;
-        if(node.status === 'todo') labelDiv.style.opacity = "0.5";
+        if(node.status === 'todo') labelDiv.style.opacity = "0.4";
 
-        // UI for completion trigger
         const actionDiv = document.createElement("div");
         actionDiv.className = "slider-action";
         actionDiv.innerText = "DONE";
 
-        // GESTURE: Slide Left to Complete
+        // Logic for Mouse/Touch Sliding
         let startX = 0;
         track.onmousedown = (e) => { startX = e.pageX; };
         track.onmouseup = (e) => {
             let diff = startX - e.pageX;
-            if (diff > 40 && node.status !== 'done') {
-                // Slid Left
-                track.classList.add("is-sliding-left");
+            if (diff > 50 && node.status !== 'done') {
                 updateNodeStatus(idx, 'done');
-            } else if (diff < -40 && node.status === 'done') {
-                // Slid Right (Undo)
-                track.classList.remove("is-sliding-left");
+            } else if (diff < -50 && node.status === 'done') {
                 updateNodeStatus(idx, 'todo');
             }
         };
@@ -3672,7 +3670,6 @@ window.showByjusMap = function(subjectName) {
         container.appendChild(nodeDiv);
     });
 };
-
 window.toggleNodeStatus = function(nodeIdx) {
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
@@ -3703,6 +3700,20 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     
     // Refresh only the Map UI
     showByjusMap(currentMapSubject);
+};
+  const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
+    const subjectData = getSubjectData(); 
+    if(!subjectData[subject]) subjectData[subject] = [];
+    
+    subjectData[subject].push({
+        id: Date.now(), 
+        date: new Date().toLocaleDateString(),
+        covered: covered || "-",
+        uncovered: uncovered || "-"
+    });
+    
+    saveSubjectData(subjectData); 
+    uploadData(); 
 };
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
