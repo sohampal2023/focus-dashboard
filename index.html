@@ -389,6 +389,9 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 .is-sliding-left {
     transform: translateX(-80px);
 }
+.status-todo { background: #1e293b; color: #64748b; }
+.status-doing { background: #facc15 !important; color: #000 !important; animation: pulse-yellow 2s infinite; }
+.status-done { background: #22c55e !important; color: #fff !important; border-color: #4ade80 !important; }
 </style>
 </head>
 
@@ -3179,13 +3182,19 @@ function loadTasks() {
     extras.forEach(e => {
         const container = document.createElement("div");
         container.style.marginBottom = "8px";
+        
+        // Fix: Ensure special characters in subject names don't break the click
         const escapedName = e.name.replace(/'/g, "\\'");
-        // Map Button Logic for Extras
+
+        // Fix: Map Button Logic for Extras
         let mapBtnHtml = "";
-        if (dailyMaps[today] && dailyMaps[today][e.name]) {
-            mapBtnHtml = `<button onclick="showByjusMap('${e.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none;">🗺 VIEW MAP</button>`;
-        } else if (!e.name.startsWith("MOCK TEST:")) {
-            mapBtnHtml = `<button onclick="openSubjectJourney('${e.name}')" style="width:auto; padding:4px 8px; font-size:10px; margin-left:10px; background:#334155; border:none;">+ JOURNEY</button>`;
+        if (!e.name.startsWith("MOCK TEST:")) {
+            // Check if map exists for this specific extra subject
+            if (dailyMaps[today] && dailyMaps[today][e.name]) {
+                mapBtnHtml = `<button onclick="showByjusMap('${escapedName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none; color:white; border-radius:4px; cursor:pointer;">🗺 VIEW MAP</button>`;
+            } else {
+                mapBtnHtml = `<button onclick="openSubjectJourney('${escapedName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155; border:none; color:white; border-radius:4px; cursor:pointer;">+ SET JOURNEY</button>`;
+            }
         }
 
         const cb = document.createElement("input");
@@ -3204,20 +3213,14 @@ function loadTasks() {
         updateLabel();
 
         cb.onchange = () => {
-            if (!confirm(`CONFIRM WORK:\n\nSubject: ${e.name}\nMark as DONE?`)) {
-                cb.checked = !cb.checked;
-                return;
-            }
+            if (!confirm(`Mark ${e.name} as DONE?`)) { cb.checked = !cb.checked; return; }
             if (cb.checked) {
-                const topicName = prompt(`Enter TOPIC NAME for ${e.name}:`, "");
+                const topicName = prompt(`Enter Topic for ${e.name}:`, "");
                 if (!topicName) { cb.checked = false; return; }
-                const dueVal = prompt(`Any pending work/marks?`, "None");
+                const dueVal = prompt(`Pending marks/work?`, "None");
                 e.comment = topicName;
                 e.due = dueVal || "-";
                 saveAutomatedSubjectProgress(e.name, topicName, e.due);
-            } else {
-                e.comment = "";
-                e.due = "";
             }
             e.done = cb.checked;
             updateLabel();
@@ -3629,15 +3632,9 @@ window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
-    
-    if (!dailyMaps[today] || !dailyMaps[today][subjectName]) {
-        alert("Please set the journey first by clicking '+ SET JOURNEY'");
-        return;
-    }
-
     const nodes = dailyMaps[today][subjectName];
+
     const container = document.getElementById("mapContainer");
-    
     container.innerHTML = "";
     document.getElementById("currentMapSubject").innerText = subjectName;
     document.getElementById("byjusMapBox").classList.remove("hidden");
@@ -3646,9 +3643,14 @@ window.showByjusMap = function(subjectName) {
         const nodeDiv = document.createElement("div");
         nodeDiv.className = "map-node";
 
+        // Circle with Status Class (Fix for colors)
         const circle = document.createElement("div");
-        circle.className = `node-circle status-${node.status}`;
-        circle.innerText = node.status === 'done' ? '✓' : (idx + 1);
+        circle.className = `node-circle status-${node.status}`; // Uses status-todo, status-doing, status-done
+        
+        // Text inside circle
+        if(node.status === 'done') circle.innerText = '✓';
+        else if(node.status === 'doing') circle.innerText = '▶';
+        else circle.innerText = (idx + 1);
         
         circle.onclick = () => {
             if(node.status === 'todo') updateNodeStatus(idx, 'doing');
@@ -3671,16 +3673,12 @@ window.showByjusMap = function(subjectName) {
         actionDiv.className = "slider-action";
         actionDiv.innerText = "DONE";
 
-        // Logic for Mouse/Touch Sliding
         let startX = 0;
         track.onmousedown = (e) => { startX = e.pageX; };
         track.onmouseup = (e) => {
             let diff = startX - e.pageX;
-            if (diff > 50 && node.status !== 'done') {
-                updateNodeStatus(idx, 'done');
-            } else if (diff < -50 && node.status === 'done') {
-                updateNodeStatus(idx, 'todo');
-            }
+            if (diff > 50 && node.status !== 'done') updateNodeStatus(idx, 'done');
+            else if (diff < -50 && node.status === 'done') updateNodeStatus(idx, 'todo');
         };
 
         track.append(labelDiv, actionDiv);
