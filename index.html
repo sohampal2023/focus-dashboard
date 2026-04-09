@@ -704,7 +704,8 @@ let currentAdminSubjectData = {}; // Stores the loaded student's subject data
 
 // --- NEW KEY FOR SUBJECT PROGRESS ---
 const SUBJECT_TABLE_KEY = () => key("SUBJECT_WISE_TABLE");
-
+let activeMapData = {}; 
+const MAP_STORAGE_KEY = () => key("DAILY_BYJUS_MAPS");
 function isAdmin() {
     return currentUser && currentUser.email === ADMIN_EMAIL;
 }
@@ -3444,7 +3445,109 @@ window.requestSubjectDelete = async function(subject, rowId) {
     alert("Failed to send delete request: " + e.message);
   }
 };
+function openSubjectJourney(subjectName) {
+    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    const today = new Date().toLocaleDateString();
+    
+    // Check if this subject already has a locked map for today
+    if (dailyMaps[today] && dailyMaps[today][subjectName]) {
+        alert("Journey already locked for this subject. Use the 'Map' button to view.");
+        return;
+    }
 
+    currentMapSubject = subjectName;
+    document.getElementById('bulkTitle').innerText = "Set Journey: " + subjectName;
+    document.getElementById('bulkTextarea').value = "";
+    document.getElementById('bulkInputModal').classList.remove('hidden');
+}
+  window.generateMapFromBulk = function() {
+    const text = document.getElementById('bulkTextarea').value;
+    const lines = text.split('\n').filter(l => l.trim() !== "");
+    
+    if (lines.length === 0) {
+        alert("Please enter at least one topic.");
+        return;
+    }
+
+    const today = new Date().toLocaleDateString();
+    let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    
+    if (!dailyMaps[today]) dailyMaps[today] = {};
+
+    // Create the nodes with initial status 0 (Todo)
+    const nodes = lines.map((line, index) => ({
+        id: index,
+        label: line.trim(),
+        status: 'todo' // todo, doing, done
+    }));
+
+    dailyMaps[today][currentMapSubject] = nodes;
+    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
+    
+    document.getElementById('bulkInputModal').classList.add('hidden');
+    uploadData(); // Sync to Firebase
+    loadTasks(); // Refresh list to show the "Map" buttons
+};
+  // Inside your tasks.forEach or extras.forEach loop:
+const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+const today = new Date().toLocaleDateString();
+
+let mapBtnHtml = "";
+if (dailyMaps[today] && dailyMaps[today][t.name]) {
+    mapBtnHtml = `<button onclick="showByjusMap('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9;">🗺 VIEW MAP</button>`;
+} else {
+    mapBtnHtml = `<button onclick="openSubjectJourney('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155;">+ SET JOURNEY</button>`;
+}
+label.innerHTML = ` ${t.name} ${mapBtnHtml}`;
+  window.showByjusMap = function(subjectName) {
+    currentMapSubject = subjectName;
+    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    const today = new Date().toLocaleDateString();
+    const nodes = dailyMaps[today][subjectName];
+
+    const container = document.getElementById("mapContainer");
+    container.innerHTML = "";
+    document.getElementById("currentMapSubject").innerText = subjectName + " Journey";
+    document.getElementById("byjusMapBox").classList.remove("hidden");
+
+    nodes.forEach((node, idx) => {
+        const nodeDiv = document.createElement("div");
+        nodeDiv.className = "map-node";
+        
+        const circle = document.createElement("div");
+        circle.className = `node-circle status-${node.status}`;
+        circle.innerText = idx + 1;
+        circle.onclick = () => toggleNodeStatus(idx);
+
+        const label = document.createElement("div");
+        label.className = "node-label";
+        label.innerText = node.label;
+
+        nodeDiv.appendChild(circle);
+        nodeDiv.appendChild(label);
+        container.appendChild(nodeDiv);
+    });
+};
+
+window.toggleNodeStatus = function(nodeIdx) {
+    const today = new Date().toLocaleDateString();
+    let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    let nodes = dailyMaps[today][currentMapSubject];
+    
+    const currentStatus = nodes[nodeIdx].status;
+    if (currentStatus === 'todo') nodes[nodeIdx].status = 'doing';
+    else if (currentStatus === 'doing') nodes[nodeIdx].status = 'done';
+    else nodes[nodeIdx].status = 'todo';
+
+    dailyMaps[today][currentMapSubject] = nodes;
+    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
+    showByjusMap(currentMapSubject); // Re-render
+    uploadData(); // Sync
+};
+
+window.closeMap = function() {
+    document.getElementById("byjusMapBox").classList.add("hidden");
+};
 
 
 // --- ATTACH TO WINDOW ---
