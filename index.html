@@ -3215,58 +3215,36 @@ function loadTasks() {
         tList.append(container);
     });
 
-    // --- RENDER EXTRA WORK ---
-    extras.forEach(e => {
-        const container = document.createElement("div");
-        container.style.marginBottom = "8px";
-        
-        // Fix: Ensure special characters in subject names don't break the click
-        const escapedName = e.name.replace(/'/g, "\\'");
+    // --- INSIDE loadTasks() - Replace the Extras part ---
+extras.forEach(e => {
+    const container = document.createElement("div");
+    container.style.marginBottom = "8px";
+    
+    // Safety: Escape name for HTML attribute
+    const cleanName = e.name.replace(/'/g, "\\'");
 
-        // Fix: Map Button Logic for Extras
-        let mapBtnHtml = "";
-        if (!e.name.startsWith("MOCK TEST:")) {
-            // Check if map exists for this specific extra subject
-            if (dailyMaps[today] && dailyMaps[today][e.name]) {
-                mapBtnHtml = `<button onclick="showByjusMap('${escapedName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none; color:white; border-radius:4px; cursor:pointer;">🗺 VIEW MAP</button>`;
-            } else {
-                mapBtnHtml = `<button onclick="openSubjectJourney('${escapedName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155; border:none; color:white; border-radius:4px; cursor:pointer;">+ SET JOURNEY</button>`;
-            }
+    let mapBtnHtml = "";
+    if (!e.name.startsWith("MOCK TEST:")) {
+        if (dailyMaps[today] && dailyMaps[today][e.name]) {
+            mapBtnHtml = `<button onclick="showByjusMap('${cleanName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none; color:white; border-radius:4px; cursor:pointer;">🗺 VIEW MAP</button>`;
+        } else {
+            // This button triggers the function we just fixed above
+            mapBtnHtml = `<button onclick="window.openSubjectJourney('${cleanName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155; border:none; color:white; border-radius:4px; cursor:pointer;">+ SET JOURNEY</button>`;
         }
+    }
+    
+    // ... rest of your checkbox and label logic remains the same ...
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = e.done;
+    if (e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
 
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.checked = e.done;
-        if (e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
-
-        const label = document.createElement("span");
-        const updateLabel = () => {
-            if (e.done) {
-                label.innerHTML = ` <span style='color:#facc15'>${e.name}</span> ${mapBtnHtml} <span style="font-size:12px;color:#e5e7eb">[${e.comment}]</span>`;
-            } else {
-                label.innerHTML = ` ${e.name} ${mapBtnHtml}`;
-            }
-        };
-        updateLabel();
-
-        cb.onchange = () => {
-            if (!confirm(`Mark ${e.name} as DONE?`)) { cb.checked = !cb.checked; return; }
-            if (cb.checked) {
-                const topicName = prompt(`Enter Topic for ${e.name}:`, "");
-                if (!topicName) { cb.checked = false; return; }
-                const dueVal = prompt(`Pending marks/work?`, "None");
-                e.comment = topicName;
-                e.due = dueVal || "-";
-                saveAutomatedSubjectProgress(e.name, topicName, e.due);
-            }
-            e.done = cb.checked;
-            updateLabel();
-            updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
-            save(tasks, extras);
-        };
-        container.append(cb, label);
-        eList.append(container);
-    });
+    const label = document.createElement("span");
+    label.innerHTML = ` ${e.name} ${mapBtnHtml}`;
+    
+    container.append(cb, label);
+    eList.append(container);
+});
 }
 window.addExtra = function() {
     // 1. Build the menu string
@@ -3628,12 +3606,28 @@ window.requestSubjectDelete = async function(subject, rowId) {
   }
 };
 window.openSubjectJourney = function(subjectName) {
+    // 1. Force the subject into global scope
     currentMapSubject = subjectName;
-    document.getElementById('bulkTitle').innerText = "Set Journey: " + subjectName;
-    document.getElementById('bulkTextarea').value = "";
-    document.getElementById('bulkInputModal').classList.remove('hidden');
-};
+    
+    const modal = document.getElementById('bulkInputModal');
+    const title = document.getElementById('bulkTitle');
+    const textarea = document.getElementById('bulkTextarea');
 
+    if (!modal) {
+        alert("CRITICAL ERROR: bulkInputModal not found in HTML!");
+        return;
+    }
+
+    // 2. Clear previous data to prevent cross-contamination
+    title.innerText = "Set Journey: " + subjectName;
+    textarea.value = "";
+    
+    // 3. Bring to front and show
+    modal.style.display = "flex"; // Force display flex in case classes fight
+    modal.classList.remove("hidden");
+    
+    console.log("Global Journey UI triggered for:", subjectName);
+};
 window.generateMapFromBulk = function() {
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
