@@ -3130,10 +3130,11 @@ function loadTasks() {
         container.style.marginBottom = "8px";
         const cleanName = item.name.replace(/'/g, "\\'");
 
+        // --- THE FIX: ALWAYS SHOW MAP BUTTONS REGARDLESS OF MOCK TEST ---
         let mapBtnHtml = "";
         if (!item.name.startsWith("MOCK TEST:")) {
             if (dailyMaps[today] && dailyMaps[today][item.name]) {
-                mapBtnHtml = `<button onclick="showByjusMap('${cleanName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none; color:white; border-radius:4px;">🗺 VIEW MAP</button>`;
+                mapBtnHtml = `<button onclick="showByjusMap('${cleanName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none; color:white; border-radius:4px;">🗺 MAP</button>`;
             } else {
                 mapBtnHtml = `<button onclick="window.openSubjectJourney('${cleanName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155; border:none; color:white; border-radius:4px;">+ SET JOURNEY</button>`;
             }
@@ -3148,16 +3149,12 @@ function loadTasks() {
         label.innerHTML = ` ${item.name} ${mapBtnHtml}`;
 
         cb.onchange = () => {
-            if (!confirm(`Mark '${item.name}' as ${cb.checked ? 'DONE' : 'PENDING'}?`)) {
-                cb.checked = !cb.checked;
-                return;
-            }
             if (cb.checked) {
-                const remark = prompt(`What did you cover in ${item.name}?`, " ");
-                const dueVal = prompt(`Pending work?`, " ");
+                const remark = prompt(`Completed: ${item.name}. Details?`, " ");
+                const dueVal = prompt(`Pending topics?`, " ");
                 item.comment = remark || "-";
                 item.due = dueVal || "-";
-                // --- AUTOMATIC UPDATE TO SUBJECT PROGRESS TABLE ---
+                // AUTOMATICALLY UPDATE SUBJECT PROGRESS TABLE
                 saveAutomatedSubjectProgress(item.name, item.comment, item.due);
             }
             item.done = cb.checked;
@@ -3172,9 +3169,8 @@ function loadTasks() {
     tasks.forEach(t => renderItem(t, tList, false));
     extras.forEach(e => renderItem(e, eList, true));
 }
-window.addExtra = function() {
-    // 1. Build the menu from your FIXED_SUBJECTS list
-    let menu = "Select Subject for Extra Work (Enter Number):\n\n";
+  window.addExtra = function() {
+    let menu = "Select Subject for Extra Work:\n\n";
     FIXED_SUBJECTS.forEach((sub, index) => {
         menu += `${index + 1}. ${sub}\n`;
     });
@@ -3182,7 +3178,6 @@ window.addExtra = function() {
     const choice = prompt(menu);
     if (!choice) return;
 
-    // 2. Validate Selection
     const index = parseInt(choice) - 1;
     if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
         alert("Invalid selection.");
@@ -3190,18 +3185,9 @@ window.addExtra = function() {
     }
 
     const subjectName = FIXED_SUBJECTS[index];
-
-    // 🔒 Security Block for Mock Tests
-    if (subjectName.toLowerCase().includes("mock")) {
-        alert("⚠️ ACCESS DENIED\n\nUse the 'Start Mock Test' button for exams.");
-        return;
-    }
-
-    // 3. Save to Extra List
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     
-    // Logic: Use Date.now() as a unique ID so you can add the same subject 
-    // multiple times (Unlimited Duplicates).
+    // Using Date.now() as ID allows multiple entries of the same subject
     extras.push({ 
         name: subjectName, 
         done: false, 
@@ -3211,12 +3197,8 @@ window.addExtra = function() {
     });
     
     localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-
-    // 4. Force UI Update & Sync
-    uploadData(); 
-    loadTasks(); // This will now show the +SET JOURNEY button immediately
-    
-    console.log("Extra subject added:", subjectName);
+    uploadData();
+    loadTasks();
 };
 function save(tasks, extras) {
   localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
