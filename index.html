@@ -3179,7 +3179,7 @@ function loadTasks() {
     extras.forEach(e => {
         const container = document.createElement("div");
         container.style.marginBottom = "8px";
-
+        const escapedName = e.name.replace(/'/g, "\\'");
         // Map Button Logic for Extras
         let mapBtnHtml = "";
         if (dailyMaps[today] && dailyMaps[today][e.name]) {
@@ -3228,38 +3228,57 @@ function loadTasks() {
         eList.append(container);
     });
 }
-function addExtra() {
-  // 1. Build a numbered menu string
-  let menu = "Select Subject for Extra Work (Enter Number):\n\n";
-  FIXED_SUBJECTS.forEach((sub, index) => {
-      menu += `${index + 1}. ${sub}\n`;
-  });
-  
-  const choice = prompt(menu);
-  if (!choice) return; // User cancelled
+window.addExtra = function() {
+    // 1. Build the menu string
+    let menu = "Select Subject for Extra Work (Enter Number):\n\n";
+    FIXED_SUBJECTS.forEach((sub, index) => {
+        menu += `${index + 1}. ${sub}\n`;
+    });
+    
+    const choice = prompt(menu);
+    if (!choice) return;
 
-  // 2. Validate Input
-  const index = parseInt(choice) - 1;
-  if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
-      alert("Invalid selection. Please enter a number from the list.");
-      return;
-  }
+    // 2. Validate Input
+    const index = parseInt(choice) - 1;
+    if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
+        alert("Invalid selection.");
+        return;
+    }
 
-  const subjectName = FIXED_SUBJECTS[index];
+    const subjectName = FIXED_SUBJECTS[index];
 
-  // 🔒 SECURITY BLOCK: Prevent user from manually adding Mock Tests here
-  if (subjectName.toLowerCase().includes("mock")) {
-      alert("⚠️ ACCESS DENIED\n\nTo add a Mock Test, you MUST use the orange 'Start Mock Test' button.");
-      return;
-  }
+    // 🔒 Security Block
+    if (subjectName.toLowerCase().includes("mock")) {
+        alert("⚠️ ACCESS DENIED\n\nUse the 'Start Mock Test' button.");
+        return;
+    }
 
-  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  extras.push({ name: subjectName, done: false, comment: "", due: "" });
-  
-  localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-  loadTasks();
-  uploadData();
-}
+    // 3. Save to Extra List
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+    
+    // Prevent duplicate entries of the same subject in Extra Work for the same day
+    const exists = extras.some(e => e.name === subjectName);
+    if(exists) {
+        alert(subjectName + " is already in your Extra Work list.");
+        return;
+    }
+
+    extras.push({ 
+        name: subjectName, 
+        done: false, 
+        comment: "", 
+        due: "" 
+    });
+    
+    localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+
+    // 4. Force UI Update
+    // We call uploadData first to sync, then loadTasks to render the +JOURNEY button
+    uploadData();
+    loadTasks();
+    
+    console.log("Extra subject added:", subjectName);
+};
 
 function save(tasks, extras) {
   localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
