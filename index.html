@@ -3569,7 +3569,6 @@ window.showByjusMap = function(subjectName) {
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
     
-    // Calculate Global Timing based on 6-hour total budget
     let allSubjects = Object.keys(dailyMaps[today] || {});
     let totalGlobalTopics = 0;
     allSubjects.forEach(s => { totalGlobalTopics += dailyMaps[today][s].length; });
@@ -3583,13 +3582,12 @@ window.showByjusMap = function(subjectName) {
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
     nodes.forEach((node, idx) => {
-        // --- NODE CONTAINER (SPACING FIX) ---
         const nodeDiv = document.createElement("div");
         nodeDiv.className = "map-node";
-        nodeDiv.style.margin = "60px 0"; // Increased margin to prevent overlapping
-        nodeDiv.style.minHeight = "120px"; // Ensures enough space for each card
+        nodeDiv.style.margin = "70px 0"; // Strong spacing to prevent overlap
+        nodeDiv.style.minHeight = "130px"; 
 
-        // Calculate Shift Number
+        // Shift Calculation
         let prevCount = 0;
         for (let s of allSubjects) {
             if (s === subjectName) break;
@@ -3597,7 +3595,6 @@ window.showByjusMap = function(subjectName) {
         }
         const shiftNum = Math.min(4, Math.floor(((prevCount + idx) / totalGlobalTopics) * 4) + 1);
 
-        // --- CIRCLE UI ---
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
         
@@ -3606,49 +3603,46 @@ window.showByjusMap = function(subjectName) {
             circle.innerHTML = '<span style="font-size:30px; color:white;">✔</span>';
         } else if (node.status === 'doing') {
             circle.style.background = "#facc15";
-            circle.innerHTML = '<span id="miniTimer" style="font-size:12px; font-weight:900; color:black;">00:00</span>';
+            circle.innerHTML = '<span id="miniTimer" style="font-size:12px; font-weight:900; color:black;">--:--</span>';
         } else {
             circle.style.background = "#1e293b";
-            circle.style.color = "#64748b";
             circle.innerText = idx + 1;
         }
 
-        // --- CONTENT CARD ---
         const wrapper = document.createElement("div");
         wrapper.className = "node-content-wrapper";
         wrapper.style.height = "auto";
         wrapper.style.padding = "15px";
-        wrapper.style.minWidth = "240px";
+        wrapper.style.minWidth = "260px";
 
         let cardHTML = `
             <div style="display:flex; flex-direction:column; gap:5px; margin-left:20px;">
                 <div style="font-weight:800; color:#fff; font-size:15px; text-transform:uppercase;">${node.label}</div>
-                <div style="font-size:11px; color:#38bdf8; font-weight:bold;">SHIFT ${shiftNum} | EST: ${timePerTopic} MINS</div>
+                <div style="font-size:11px; color:#38bdf8; font-weight:bold;">SHIFT ${shiftNum} | ALLOCATED: ${timePerTopic}m</div>
         `;
 
         if (node.status === 'todo') {
             cardHTML += `
                 <div style="color:#64748b; font-size:11px; margin-top:5px;">Status: Yet to Done</div>
                 <button onclick="handleNodeAction(${idx}, 'start', ${timePerTopic})" 
-                    style="width:100px; background:#0ea5e9; font-weight:bold; font-size:11px; padding:6px; margin-top:10px; border:none; border-radius:4px; color:white; cursor:pointer;">
+                    style="width:100px; background:#0ea5e9; font-weight:bold; font-size:11px; padding:8px; margin-top:10px; border:none; border-radius:6px; color:white; cursor:pointer;">
                     START
                 </button>
             `;
         } else if (node.status === 'doing') {
             cardHTML += `
-                <div style="color:#facc15; font-size:11px; font-weight:bold; margin-top:5px;">● IN PROGRESS</div>
+                <div style="color:#facc15; font-size:11px; font-weight:bold; margin-top:5px;">⚡ STUDYING NOW</div>
                 <div style="display:flex; gap:10px; margin-top:10px;">
                     <button onclick="handleNodeAction(${idx}, 'done')" 
-                        style="background:#16a34a; flex:1; font-weight:bold; font-size:11px; padding:8px; border:none; border-radius:4px; color:white; cursor:pointer;">DONE</button>
+                        style="background:#16a34a; flex:1; font-weight:bold; font-size:11px; padding:10px; border:none; border-radius:6px; color:white; cursor:pointer;">DONE</button>
                     <button onclick="handleNodeAction(${idx}, 'abort')" 
-                        style="background:#dc2626; flex:1; font-weight:bold; font-size:11px; padding:8px; border:none; border-radius:4px; color:white; cursor:pointer;">ABORT</button>
+                        style="background:#dc2626; flex:1; font-weight:bold; font-size:11px; padding:10px; border:none; border-radius:6px; color:white; cursor:pointer;">ABORT</button>
                 </div>
             `;
-            setTimeout(() => startCountdown(timePerTopic), 10); 
+            // RE-ATTACH TIMER ON OPEN: Always check the backend timestamp
+            setTimeout(() => startCountdown(timePerTopic), 50); 
         } else {
-            cardHTML += `
-                <div style="color:#4ade80; font-size:12px; font-weight:bold; margin-top:5px;">Status: COMPLETED</div>
-            `;
+            cardHTML += `<div style="color:#4ade80; font-size:12px; font-weight:bold; margin-top:5px;">COMPLETED ✔</div>`;
         }
 
         cardHTML += `</div>`;
@@ -3657,46 +3651,62 @@ window.showByjusMap = function(subjectName) {
         container.appendChild(nodeDiv);
     });
 };
-window.handleNodeAction = function(idx, action, mins) {
+  window.handleNodeAction = function(idx, action, mins) {
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     let nodes = dailyMaps[today][currentMapSubject];
 
     if (action === 'start') {
-        // Reset any other active tasks globally
+        // RESET OTHER ACTIVE TASKS (Only one allowed globally)
         Object.keys(dailyMaps[today]).forEach(s => {
             dailyMaps[today][s].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
         });
+        
         nodes[idx].status = 'doing';
-        localStorage.setItem(key("MAP_TASK_START_TS"), Date.now());
+        // SAVE START TIME TO BACKEND
+        const startTS = Date.now();
+        localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), startTS);
+        localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_MINS"), mins);
+        
     } else if (action === 'done') {
         nodes[idx].status = 'done';
-        saveAutomatedSubjectProgress(currentMapSubject, nodes[idx].label, "Completed via Map Journey");
+        saveAutomatedSubjectProgress(currentMapSubject, nodes[idx].label, "Verified Completion via Map Journey");
         if(activeMapTimer) clearInterval(activeMapTimer);
+        localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
+
     } else if (action === 'abort') {
         nodes[idx].status = 'todo';
         if(activeMapTimer) clearInterval(activeMapTimer);
+        localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
     }
 
     dailyMaps[today][currentMapSubject] = nodes;
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
-    uploadData();
+    uploadData(); // Sync everything to Firebase
     showByjusMap(currentMapSubject);
 };
 
 function startCountdown(targetMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
-    const startTS = parseInt(localStorage.getItem(key("MAP_TASK_START_TS")));
+    
+    // FETCH THE PERSISTENT TIMESTAMP
+    const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
+    if (!startTS) return;
+
     const durationMs = targetMins * 60 * 1000;
 
     activeMapTimer = setInterval(() => {
-        const remaining = durationMs - (Date.now() - startTS);
+        const elapsed = Date.now() - startTS;
+        const remaining = durationMs - elapsed;
         const timerEl = document.getElementById("miniTimer");
-        if (!timerEl) { clearInterval(activeMapTimer); return; }
+
+        // If user closes map, interval keeps running in background, 
+        // but we stop trying to update the HTML element.
+        if (!timerEl) return; 
 
         if (remaining <= 0) {
             timerEl.innerText = "OVER";
-            timerEl.style.color = "red";
+            timerEl.style.color = "#ef4444";
             return;
         }
 
