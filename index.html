@@ -3574,14 +3574,17 @@ window.showByjusMap = function(subjectName) {
     document.getElementById("currentMapSubject").innerText = subjectName;
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
+    // Realistic Time Allocation Logic (6 Hour Total / 4 Shifts)
+    const timePerTopic = 360 / nodes.length; // Minutes per topic based on journey size
+
     nodes.forEach((node, idx) => {
         const nodeDiv = document.createElement("div");
         nodeDiv.className = "map-node";
 
+        // Circle Status Logic
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
         
-        // --- VISUAL FIX ---
         if (node.status === 'done') {
             circle.style.background = "#22c55e"; 
             circle.innerHTML = '<span style="font-size:30px; color:white;">✔</span>';
@@ -3589,72 +3592,103 @@ window.showByjusMap = function(subjectName) {
             circle.style.background = "#facc15"; 
             circle.innerHTML = '<span style="font-size:10px; font-weight:bold; color:black; text-align:center;">IN<br>PROG</span>';
         } else {
+            // Default: Yet to Done
             circle.style.background = "#1e293b";
+            circle.style.color = "#64748b";
             circle.innerText = idx + 1;
         }
         
         circle.onclick = () => {
-            if(node.status === 'todo') updateNodeStatus(idx, 'doing');
-            else if(node.status === 'doing') updateNodeStatus(idx, 'todo');
+            // Set all others to 'todo' if this one is clicked to 'doing' (Only one active)
+            if(node.status === 'todo') {
+                nodes.forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
+                updateNodeStatus(idx, 'doing');
+            } else if(node.status === 'doing') {
+                updateNodeStatus(idx, 'todo');
+            }
         };
 
-        // ... [Rest of slider wrapper remains same as your code] ...
         const wrapper = document.createElement("div");
         wrapper.className = "node-content-wrapper";
+
+        // Shift Allocation Display (Timetable Logic)
+        const shiftNum = Math.floor((idx / nodes.length) * 4) + 1;
+        const estTime = Math.round(timePerTopic);
+
         const track = document.createElement("div");
         track.className = "slider-track";
         if(node.status === 'done') track.classList.add("is-sliding-left");
+
         const labelDiv = document.createElement("div");
         labelDiv.className = "slider-label";
-        labelDiv.innerText = node.label;
-        track.append(labelDiv, document.createElement("div"));
+        labelDiv.innerHTML = `
+            <div style="display:flex; flex-direction:column;">
+                <span style="font-size:12px; color:#fff;">${node.label}</span>
+                <span style="font-size:9px; color:#38bdf8;">Shift ${shiftNum} • Est: ${estTime} mins</span>
+            </div>
+        `;
+
+        const actionDiv = document.createElement("div");
+        actionDiv.className = "slider-action";
+        actionDiv.innerText = "FINISH";
+
+        // Slide to Done Logic
+        let startX = 0;
+        track.onmousedown = (e) => { startX = e.pageX; };
+        track.onmouseup = (e) => {
+            if (startX - e.pageX > 50) {
+                updateNodeStatus(idx, 'done');
+                saveAutomatedSubjectProgress(subjectName, node.label, "Completed in Shift " + shiftNum);
+            }
+        };
+
+        track.append(labelDiv, actionDiv);
         wrapper.append(track);
         nodeDiv.append(circle, wrapper);
         container.appendChild(nodeDiv);
     });
 };
-  window.startNewShift = function() {
-    const shiftNum = prompt("Enter Shift Number (1-4):", "1");
-    if (!shiftNum || shiftNum < 1 || shiftNum > 4) return;
+ window.startNewShift = function() {
+    const shiftNum = prompt("Which Shift are you starting? (1-4):", "1");
+    if (!shiftNum) return;
 
-    const duration = prompt("Enter Shift Duration in Hours (1 or 2):", "2");
-    if (!duration || isNaN(duration)) return;
+    const durationHrs = prompt("Enter Shift Duration (Hours):", "2");
+    if (!durationHrs || isNaN(durationHrs)) return;
 
-    const durationMillis = parseFloat(duration) * 60 * 60 * 1000;
-    const endTime = Date.now() + durationMillis;
-
-    localStorage.setItem(key("CURRENT_SHIFT_LABEL"), "Shift #" + shiftNum);
-    localStorage.setItem(key("SHIFT_END_TS"), endTime);
+    const endTime = Date.now() + (parseFloat(durationHrs) * 3600000);
     
-    // Minimal update to firebase to sync shift status
+    localStorage.setItem(key("CURRENT_SHIFT"), shiftNum);
+    localStorage.setItem(key("SHIFT_END_TS"), endTime);
+
+    // Update Sidebar Shift Tracker
+    runShiftTimer();
+    
+    // Sync to DB
     if(currentUser) {
         update(ref(db, `users/${currentUser.uid}`), {
-            SHIFT_LABEL: "Shift #" + shiftNum,
-            SHIFT_END: endTime
+            activeShift: shiftNum,
+            shiftEnds: endTime
         });
     }
-    
-    runShiftTimer();
 };
 
 function runShiftTimer() {
-    const label = localStorage.getItem(key("CURRENT_SHIFT_LABEL")) || "No Active Shift";
     const endTime = localStorage.getItem(key("SHIFT_END_TS"));
-    const displayLabel = document.getElementById("currentShiftLabel");
-    const displayTimer = document.getElementById("shiftTimer");
+    const label = localStorage.getItem(key("CURRENT_SHIFT"));
+    const display = document.getElementById("shiftTimer");
+    const labelDisplay = document.getElementById("currentShiftLabel");
 
-    if (!displayLabel || !displayTimer) return;
-
-    displayLabel.innerText = label;
+    if (!endTime || !display) return;
 
     if (window.shiftInterval) clearInterval(window.shiftInterval);
-    if (!endTime) return;
 
     window.shiftInterval = setInterval(() => {
         const remaining = endTime - Date.now();
+        labelDisplay.innerText = "Shift #" + label;
+
         if (remaining <= 0) {
-            displayTimer.innerText = "SHIFT OVER";
-            displayTimer.style.color = "#ef4444";
+            display.innerText = "SHIFT COMPLETED";
+            display.style.color = "#ef4444";
             clearInterval(window.shiftInterval);
             return;
         }
@@ -3662,9 +3696,8 @@ function runShiftTimer() {
         const h = Math.floor(remaining / 3600000);
         const m = Math.floor((remaining % 3600000) / 60000);
         const s = Math.floor((remaining % 60000) / 1000);
-        
-        displayTimer.innerText = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-        displayTimer.style.color = "#38bdf8";
+        display.innerText = `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        display.style.color = "#38bdf8";
     }, 1000);
 }
 window.toggleNodeStatus = function(nodeIdx) {
