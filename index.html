@@ -3580,13 +3580,22 @@ window.showByjusMap = function(subjectName) {
     document.getElementById("currentMapSubject").innerText = subjectName;
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
+    // Fix: Force container to be a vertical list
+    container.style.display = "flex";
+    container.style.flexDirection = "column";
+    container.style.alignItems = "center";
+    container.style.gap = "40px"; // Clean vertical gap
+    container.style.padding = "50px 0";
+
     nodes.forEach((node, idx) => {
         const nodeDiv = document.createElement("div");
-        nodeDiv.className = "map-node";
-        nodeDiv.style.position = "relative"; // Required for absolute positioning of circle
-        nodeDiv.style.margin = "80px 0"; 
+        nodeDiv.className = "map-node-row"; // New class to avoid old "winding" CSS
         nodeDiv.style.display = "flex";
         nodeDiv.style.alignItems = "center";
+        nodeDiv.style.width = "90%";
+        nodeDiv.style.maxWidth = "400px";
+        nodeDiv.style.position = "relative";
+        nodeDiv.style.transform = "none"; // KILL the winding transform
 
         // Shift Calculation
         let prevCount = 0;
@@ -3596,16 +3605,17 @@ window.showByjusMap = function(subjectName) {
         }
         const shiftNum = Math.min(4, Math.floor(((prevCount + idx) / totalGlobalTopics) * 4) + 1);
 
-        // --- CIRCLE UI (PLACED OUTSIDE LEFT) ---
+        // --- CIRCLE UI (OUTSIDE LEFT) ---
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
         circle.style.position = "absolute";
-        circle.style.left = "-30px"; // Moves the tick outside to the left
+        circle.style.left = "-60px"; // Fully outside the box
+        circle.style.flexShrink = "0";
         circle.style.zIndex = "10";
         
         if (node.status === 'done') {
             circle.style.background = "#22c55e";
-            circle.innerHTML = '<span style="font-size:30px; color:white;">✔</span>';
+            circle.innerHTML = '<span style="font-size:28px; color:white;">✔</span>';
         } else if (node.status === 'doing') {
             circle.style.background = "#facc15";
             circle.innerHTML = '<span id="miniTimer" style="font-size:12px; font-weight:900; color:black;">--:--</span>';
@@ -3618,31 +3628,32 @@ window.showByjusMap = function(subjectName) {
         // --- CONTENT BOX ---
         const wrapper = document.createElement("div");
         wrapper.className = "node-content-wrapper";
+        wrapper.style.width = "100%";
         wrapper.style.height = "auto";
-        wrapper.style.padding = "20px"; 
-        wrapper.style.minWidth = "300px";
-        wrapper.style.marginLeft = "40px"; // Gap between the circle and the box
-        wrapper.style.borderRadius = "12px";
+        wrapper.style.padding = "18px";
         wrapper.style.background = "#0f172a";
         wrapper.style.border = "1px solid #334155";
+        wrapper.style.borderRadius = "14px";
+        wrapper.style.boxShadow = "0 4px 15px rgba(0,0,0,0.3)";
+        wrapper.style.transform = "none"; // Ensure no slide animation is messing it up
 
         let cardHTML = `
-            <div style="display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; flex-direction:column; gap:5px;">
                 <div style="font-weight:800; color:#fff; font-size:16px; text-transform:uppercase;">${node.label}</div>
-                <div style="font-size:11px; color:#38bdf8; font-weight:bold;">SHIFT ${shiftNum} | ALLOCATED: ${timePerTopic}m</div>
+                <div style="font-size:11px; color:#38bdf8; font-weight:bold; letter-spacing:0.5px;">SHIFT ${shiftNum} | TARGET: ${timePerTopic}m</div>
         `;
 
         if (node.status === 'todo') {
             cardHTML += `
-                <div style="color:#64748b; font-size:11px; margin-top:4px;">Status: Yet to Done</div>
+                <div style="color:#64748b; font-size:11px; margin-top:5px;">Status: Yet to Done</div>
                 <button onclick="handleNodeAction(${idx}, 'start', ${timePerTopic})" 
-                    style="width:110px; background:#0ea5e9; font-weight:bold; font-size:11px; padding:8px; margin-top:10px; border:none; border-radius:6px; color:white; cursor:pointer;">
+                    style="width:100px; background:#0ea5e9; font-weight:bold; font-size:11px; padding:8px; margin-top:10px; border:none; border-radius:6px; color:white; cursor:pointer;">
                     START
                 </button>
             `;
         } else if (node.status === 'doing') {
             cardHTML += `
-                <div style="color:#facc15; font-size:11px; font-weight:bold; margin-top:4px;">⚡ STUDYING...</div>
+                <div style="color:#facc15; font-size:11px; font-weight:bold; margin-top:5px;">● IN PROGRESS</div>
                 <div style="display:flex; gap:10px; margin-top:10px;">
                     <button onclick="handleNodeAction(${idx}, 'done')" 
                         style="background:#16a34a; flex:1; font-weight:bold; font-size:11px; padding:10px; border:none; border-radius:6px; color:white; cursor:pointer;">DONE</button>
@@ -3652,7 +3663,7 @@ window.showByjusMap = function(subjectName) {
             `;
             setTimeout(() => startCountdown(timePerTopic), 50); 
         } else {
-            cardHTML += `<div style="color:#4ade80; font-size:13px; font-weight:bold; margin-top:8px;">COMPLETED ✔</div>`;
+            cardHTML += `<div style="color:#4ade80; font-size:12px; font-weight:bold; margin-top:8px;">COMPLETED ✔</div>`;
         }
 
         cardHTML += `</div>`;
