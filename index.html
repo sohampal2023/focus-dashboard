@@ -3138,110 +3138,93 @@ window.openDayEnd = function() {
 }
 
 function finalDayEnd() {
-  if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
+    if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
 
-  // 1. Save Next Day Tasks (As Objects: {subject, topic})
-  const next = [];
-  for (let i = 0; i < 7; i++) {
-    const sub = document.getElementById("nd_sub_" + i).value.trim();
-    const top = document.getElementById("nd_top_" + i).value.trim();
-    
-    if(sub) {
-      next.push({ subject: sub, topic: top });
+    // 1. Save Next Day Tasks
+    const next = [];
+    for (let i = 0; i < 7; i++) {
+        const sub = document.getElementById("nd_sub_" + i).value.trim();
+        const top = document.getElementById("nd_top_" + i).value.trim();
+        if(sub) { next.push({ subject: sub, topic: top }); }
     }
-  }
-  localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
+    localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
 
-  // 2. Calculate Stats
-  const p = calculate();
-  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  
-  // 3. Time Calculation
-  let totalMillis = 0;
-  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-  const todayStr = new Date().toLocaleDateString();
-  logs.forEach(l => {
-    if (!l.loginTS || !l.logoutTS) return;
-    if (new Date(l.loginTS).toLocaleDateString() !== todayStr) return;
-    const d = l.logoutTS - l.loginTS;
-    if (d > 30000) totalMillis += d;
-  });
-  const hrs = Math.floor(Math.floor(totalMillis / 60000) / 60);
-  const mins = Math.floor(totalMillis / 60000) % 60;
-  const timeStr = `${hrs} hr ${mins} min`;
+    // 2. Calculate Stats & Time
+    const p = calculate();
+    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+    
+    let totalMillis = 0;
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    const todayStr = new Date().toLocaleDateString();
+    logs.forEach(l => {
+        if (l.loginTS && l.logoutTS && new Date(l.loginTS).toLocaleDateString() === todayStr) {
+            totalMillis += (l.logoutTS - l.loginTS);
+        }
+    });
+    const timeStr = `${Math.floor(totalMillis / 3600000)} hr ${Math.floor((totalMillis % 3600000) / 60000)} min`;
 
-  // 4. Update History (Backend Sync)
-  const historyEntry = {
-    date: new Date().toLocaleDateString(),
-    score: p.percent,
-    rating: getLabel(p.percent),
-    time: timeStr,
-    subjects: [...tasks.filter(t=>t.done).map(t=>t.name), ...extras.filter(e=>e.done).map(e=>e.name)].join(", "),
-    adminReview: null
-  };
-  let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
-  history.push(historyEntry);
-  if (history.length > 4) history.shift();
-  localStorage.setItem(key("HISTORY"), JSON.stringify(history));
-  
-  // 5. Clean up current session data
-  const carried = tasks.filter(t => !t.done);
-  localStorage.setItem(key("TASKS"), JSON.stringify(carried)); 
-  localStorage.setItem(key("EXTRA"), "[]");
-  localStorage.removeItem(key("LOGS"));
-  localStorage.setItem(key("IDLE_STRIKES"), "0");
-  localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
-  
-  // 6. Push to Firebase BEFORE logging out
-  uploadData(); 
+    // 3. Update History
+    const historyEntry = {
+        date: todayStr,
+        score: p.percent,
+        rating: getLabel(p.percent),
+        time: timeStr,
+        subjects: [...tasks.filter(t=>t.done).map(t=>t.name), ...extras.filter(e=>e.done).map(e=>e.name)].join(", ")
+    };
+    let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
+    history.push(historyEntry);
+    if (history.length > 5) history.shift();
+    localStorage.setItem(key("HISTORY"), JSON.stringify(history));
+    
+    // 4. --- CRITICAL: RESET DAILY MARKERS & JOURNEY DATA ---
+    localStorage.removeItem(key("DAILY_GOAL_DATE")); 
+    localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
+    localStorage.removeItem(key("SHIFT_END_TS"));
+    localStorage.removeItem(key("CURRENT_SHIFT_LABEL"));
+    
+    // NEW: Also clear the Map Journey for all subjects and any running task timer
+    localStorage.removeItem(MAP_STORAGE_KEY()); 
+    localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
+    if (activeMapTimer) clearInterval(activeMapTimer);
 
-  // --- 7. GENERATE THE PERMANENT REPORT HTML ---
-  const doneTasks = tasks.filter(t => t.done).length;
-const doneExtras = extras.filter(e => e.done).length;
-const totalDone = doneTasks + doneExtras;
+    // 5. Cleanup session data
+    const carried = tasks.filter(t => !t.done);
+    localStorage.setItem(key("TASKS"), JSON.stringify(carried)); 
+    localStorage.setItem(key("EXTRA"), "[]");
+    localStorage.removeItem(key("LOGS"));
+    localStorage.setItem(key("IDLE_STRIKES"), "0");
+    localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
+    
+    // 6. Sync to Firebase
+    uploadData(); 
 
-  const reportHTML =
-  '<div style="padding:20px; max-width:500px; margin:0 auto;">' +
-    '<div class="card" style="background:#1e1b4b;border-color:#6366f1; text-align:center; padding:30px;">' +
-      '<h2 style="color:#a5b4fc; margin-bottom:10px;">SESSION COMPLETED</h2>' +
-      '<div style="font-size:14px; color:#c7d2fe; margin-bottom:20px;">Safe to close browser</div>' +
+    // 7. Generate Report and Lock Screen
+    const reportHTML = `
+        <div style="padding:20px; max-width:500px; margin:0 auto;">
+            <div class="card" style="background:#1e1b4b; border-color:#6366f1; text-align:center; padding:30px;">
+                <h2 style="color:#a5b4fc; margin-bottom:10px;">DAY COMPLETED</h2>
+                <div style="font-size:14px; color:#c7d2fe; margin-bottom:20px;">Session details saved successfully</div>
+                
+                <div style="font-size:60px; font-weight:800; color:#38bdf8; line-height:1;">${p.percent}%</div>
+                <div style="font-size:24px; color:#e0e7ff; margin-bottom:20px; font-weight:bold;">${getLabel(p.percent)}</div>
+                
+                <div style="padding:15px; background:#312e81; border-radius:10px; color:#facc15; font-size:18px; margin-bottom:20px;">
+                    ⏱ Total: ${timeStr}
+                </div>
 
-      '<div style="font-size:60px;font-weight:800;color:#38bdf8; line-height:1">' +
-        p.percent + '%</div>' +
-      '<div style="font-size:24px; font-weight:bold; color:#e0e7ff">' +
-        getLabel(p.percent) + '</div>' +
+                <button onclick="dismissReportLock()" style="width:100%; background:#22c55e; padding:15px; font-size:16px; font-weight:bold; color:white; border:none; border-radius:8px; cursor:pointer; transition: 0.2s;">
+                    START NEW DAY / LOGIN
+                </button>
+            </div>
+        </div>`;
 
-      '<div style="margin:20px 0; padding:15px; background:#312e81; border-radius:10px;">' +
-        '<div style="color:#facc15;font-size:18px;">⏱ ' + timeStr + '</div>' +
-        '<div style="font-size:13px; margin-top:5px; line-height:1.6">' +
-          'Assigned Completed: ' + doneTasks + '<br>' +
-          'Extra Completed: ' + doneExtras + '<br>' +
-          '<b>Total Completed: ' + totalDone + '</b>' +
-        '</div>' +
-      '</div>' +
+    localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
 
-      '<div style="font-size:12px;color:#94a3b8; margin-bottom:20px;">' +
-        '(Waiting for Admin Review...)' +
-      '</div>' +
-
-      '<button onclick="dismissReportLock()" ' +
-        'style="width:100%; background:#22c55e; padding:15px; font-size:16px; font-weight:bold; color:white;">' +
-        'START NEW DAY (LOGIN)' +
-      '</button>' +
-    '</div>' +
-  '</div>';
-
-
-  // 8. LOCK THE SCREEN
-  localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
-
-  // 9. LOGOUT (User goes offline)
-  signOut(auth).then(() => {
-     location.reload(); 
-  });
+    signOut(auth).then(() => {
+        location.reload(); 
+    });
 }
-
 // --- NEW UNLOCK FUNCTION ---
 window.dismissReportLock = function () {
     localStorage.removeItem("LOCKED_REPORT_VIEW");
