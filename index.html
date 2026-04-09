@@ -333,6 +333,62 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     opacity: 0.2;
     z-index: 0;
 }
+/* SLIDER CONTAINER */
+.node-content-wrapper {
+    position: absolute;
+    left: 70px; top: 50%;
+    transform: translateY(-50%);
+    width: 200px;
+    height: 40px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #1e293b;
+    border: 1px solid #334155;
+    z-index: 5;
+}
+
+/* Winding logic for right-aligned labels */
+.map-node:nth-child(4n+3) .node-content-wrapper {
+    left: auto;
+    right: 70px;
+}
+
+.slider-track {
+    display: flex;
+    width: 280px; /* Label width + Action width */
+    height: 100%;
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    cursor: grab;
+}
+
+.slider-label {
+    width: 200px;
+    padding: 0 15px;
+    display: flex;
+    align-items: center;
+    font-size: 11px;
+    color: #f8fafc;
+    white-space: nowrap;
+    background: #0f172a;
+    user-select: none;
+}
+
+.slider-action {
+    width: 80px;
+    background: #22c55e;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+/* Slide Left Animation Class */
+.is-sliding-left {
+    transform: translateX(-80px);
+}
 </style>
 </head>
 
@@ -3553,51 +3609,66 @@ window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
-    
-    if (!dailyMaps[today] || !dailyMaps[today][subjectName]) {
-        alert("No Journey data found.");
-        return;
-    }
-
     const nodes = dailyMaps[today][subjectName];
+
     const container = document.getElementById("mapContainer");
-    
     container.innerHTML = "";
-    document.getElementById("currentMapSubject").innerText = subjectName + " Journey";
-    
-    // Position Map Window in Center
-    const mapBox = document.getElementById("byjusMapBox");
-    mapBox.style.position = "fixed";
-    mapBox.style.top = "50%";
-    mapBox.style.left = "50%";
-    mapBox.style.transform = "translate(-50%, -50%)";
-    mapBox.style.zIndex = "10001";
-    mapBox.classList.remove("hidden");
+    document.getElementById("currentMapSubject").innerText = subjectName;
+    document.getElementById("byjusMapBox").classList.remove("hidden");
 
     nodes.forEach((node, idx) => {
         const nodeDiv = document.createElement("div");
         nodeDiv.className = "map-node";
-        
+
+        // 1. The Circle Node (Indicator)
         const circle = document.createElement("div");
-        // status class: status-todo, status-doing, status-done
         circle.className = `node-circle status-${node.status}`;
+        circle.innerText = node.status === 'done' ? '✓' : (idx + 1);
         
-        // Show status icon/number
-        let icon = idx + 1;
-        if(node.status === 'done') icon = '✓';
-        if(node.status === 'doing') icon = '▶';
-        
-        circle.innerText = icon;
-        circle.onclick = () => window.toggleNodeStatus(idx);
+        // Clicking circle toggles "In Progress"
+        circle.onclick = () => {
+            if(node.status === 'todo') updateNodeStatus(idx, 'doing');
+            else if(node.status === 'doing') updateNodeStatus(idx, 'todo');
+        };
 
-        const label = document.createElement("div");
-        label.className = "node-label";
-        // If it's todo (yet to be done), make label slightly transparent
-        if(node.status === 'todo') label.style.opacity = "0.6";
-        label.innerText = node.label;
+        // 2. The Slider Wrapper
+        const wrapper = document.createElement("div");
+        wrapper.className = "node-content-wrapper";
 
-        nodeDiv.appendChild(circle);
-        nodeDiv.appendChild(label);
+        const track = document.createElement("div");
+        track.className = "slider-track";
+        if(node.status === 'done') track.classList.add("is-sliding-left");
+
+        // UI for Topic Text
+        const labelDiv = document.createElement("div");
+        labelDiv.className = "slider-label";
+        labelDiv.innerText = node.label;
+        if(node.status === 'todo') labelDiv.style.opacity = "0.5";
+
+        // UI for completion trigger
+        const actionDiv = document.createElement("div");
+        actionDiv.className = "slider-action";
+        actionDiv.innerText = "DONE";
+
+        // GESTURE: Slide Left to Complete
+        let startX = 0;
+        track.onmousedown = (e) => { startX = e.pageX; };
+        track.onmouseup = (e) => {
+            let diff = startX - e.pageX;
+            if (diff > 40 && node.status !== 'done') {
+                // Slid Left
+                track.classList.add("is-sliding-left");
+                updateNodeStatus(idx, 'done');
+            } else if (diff < -40 && node.status === 'done') {
+                // Slid Right (Undo)
+                track.classList.remove("is-sliding-left");
+                updateNodeStatus(idx, 'todo');
+            }
+        };
+
+        track.append(labelDiv, actionDiv);
+        wrapper.append(track);
+        nodeDiv.append(circle, wrapper);
         container.appendChild(nodeDiv);
     });
 };
@@ -3617,7 +3688,22 @@ window.toggleNodeStatus = function(nodeIdx) {
     showByjusMap(currentMapSubject); 
     uploadData();
 };
-
+const updateNodeStatus = (nodeIdx, newStatus) => {
+    const today = new Date().toLocaleDateString();
+    let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    let nodes = dailyMaps[today][currentMapSubject];
+    
+    nodes[nodeIdx].status = newStatus;
+    
+    dailyMaps[today][currentMapSubject] = nodes;
+    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
+    
+    // Auto-save to Firebase
+    uploadData();
+    
+    // Refresh only the Map UI
+    showByjusMap(currentMapSubject);
+};
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
     window.resetWatchdog = resetWatchdog;
