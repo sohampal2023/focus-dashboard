@@ -3509,34 +3509,36 @@ window.requestSubjectDelete = async function(subject, rowId) {
   }
 };
 window.openSubjectJourney = function(subjectName) {
-    // 1. Force the subject into global scope
     currentMapSubject = subjectName;
     
     const modal = document.getElementById('bulkInputModal');
     const title = document.getElementById('bulkTitle');
     const textarea = document.getElementById('bulkTextarea');
 
-    if (!modal) {
-        alert("CRITICAL ERROR: bulkInputModal not found in HTML!");
-        return;
-    }
+    if (!modal) return;
 
-    // 2. Clear previous data to prevent cross-contamination
-    title.innerText = "Set Journey: " + subjectName;
+    // Styling the Input Modal to match the Map UI
+    modal.style.display = "flex";
+    modal.style.alignItems = "center";
+    modal.style.justifyContent = "center";
+    modal.style.background = "rgba(2, 6, 23, 0.95)"; // Darker overlay
+
+    title.innerText = "Create Journey: " + subjectName;
+    title.style.color = "#38bdf8";
+    title.style.textTransform = "uppercase";
+    
     textarea.value = "";
+    textarea.placeholder = "Enter sub-topics line by line...\nExample:\nIntro to Physics\nNewton's Laws\nFriction Analysis";
     
-    // 3. Bring to front and show
-    modal.style.display = "flex"; // Force display flex in case classes fight
     modal.classList.remove("hidden");
-    
-    console.log("Global Journey UI triggered for:", subjectName);
 };
+// Add this inside your generateMapFromBulk function
 window.generateMapFromBulk = function() {
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
     
     if (lines.length === 0) {
-        alert("Please enter at least one topic.");
+        alert("Please enter topics.");
         return;
     }
 
@@ -3545,22 +3547,22 @@ window.generateMapFromBulk = function() {
     
     if (!dailyMaps[today]) dailyMaps[today] = {};
 
-    // Check if locked (optional safety)
-    if (dailyMaps[today][currentMapSubject]) {
-        if(!confirm("Journey already exists. Overwrite?")) return;
-    }
-
+    // Save as todo list
     dailyMaps[today][currentMapSubject] = lines.map((line, index) => ({
         id: Date.now() + index,
         label: line.trim(),
-        status: 'todo' // All start as "Yet to Done"
+        status: 'todo',
+        completedAt: null // Ready for HH:MM:SS timestamp
     }));
 
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
     document.getElementById('bulkInputModal').classList.add('hidden');
     
-    uploadData(); // Sync to Firebase
-    loadTasks();  // Refresh buttons in sidebar/dashboard
+    uploadData();
+    loadTasks();
+    
+    // Automatically open the map after setting it
+    showByjusMap(currentMapSubject);
 };
 let activeMapTimer = null; 
 
@@ -3801,12 +3803,7 @@ window.startNewShift = function() {
     runShiftTimer(); // Start/Restart the countdown interval
 };
 function runShiftTimer() {
-    // Get the label, if it's null or missing, use a default string
-    let label = localStorage.getItem(key("CURRENT_SHIFT_LABEL"));
-    if (!label || label.includes("null")) {
-        label = "No Active Shift";
-    }
-
+    const label = localStorage.getItem(key("CURRENT_SHIFT_LABEL")) || "No Active Shift";
     const endTime = localStorage.getItem(key("SHIFT_END_TS"));
     const displayLabel = document.getElementById("currentShiftLabel");
     const displayTimer = document.getElementById("shiftTimer");
@@ -3816,13 +3813,31 @@ function runShiftTimer() {
     displayLabel.innerText = label;
 
     if (window.shiftInterval) clearInterval(window.shiftInterval);
-    if (!endTime) return;
+    
+    // If no shift is active, reset UI to default
+    if (!endTime) {
+        displayTimer.innerText = "00:00:00";
+        displayTimer.style.color = "#38bdf8";
+        return;
+    }
 
     window.shiftInterval = setInterval(() => {
         const remaining = endTime - Date.now();
+        
         if (remaining <= 0) {
-            displayTimer.innerText = "SHIFT OVER";
+            // --- SHIFT RESET LOGIC ---
+            displayTimer.innerText = "SHIFT ENDED";
             displayTimer.style.color = "#ef4444";
+            
+            // Clear the data after 5 seconds so user can start a new shift
+            setTimeout(() => {
+                localStorage.removeItem(key("CURRENT_SHIFT_LABEL"));
+                localStorage.removeItem(key("SHIFT_END_TS"));
+                displayLabel.innerText = "No Active Shift";
+                displayTimer.innerText = "00:00:00";
+                displayTimer.style.color = "#38bdf8";
+            }, 5000);
+
             clearInterval(window.shiftInterval);
             return;
         }
