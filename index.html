@@ -451,6 +451,12 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         </div>
         <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
         <div id="timeoutCounter" class="timeout-display">Timeouts: 0</div>
+        <div class="idleBox" style="border: 1px solid #8b5cf6; background: #0f172a; border-left: 4px solid #8b5cf6; margin-top: 10px;">
+    <div style="font-size: 10px; color: #a78bfa; font-weight: 800; text-transform: uppercase; margin-bottom: 5px;">Study Shift Monitor</div>
+    <div id="currentShiftLabel" style="font-size: 13px; font-weight: bold; color: #fff;">No Shift Active</div>
+    <div id="shiftTimer" style="font-size: 20px; font-weight: 900; color: #38bdf8; margin: 5px 0; font-family: monospace;">00:00:00</div>
+    <button onclick="startNewShift()" style="background:#7c3aed; font-size: 11px; padding: 6px; width: 100%; border-radius: 6px; border: none; color: white; cursor: pointer;">Start New Shift</button>
+</div>
       </div>
       <button id="noticeBtn" onclick="toggleNoticeBoard()">📢 Notice Board</button>
       <button onclick="softRefresh()">🔄 Refresh</button>
@@ -458,12 +464,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
       <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
       <button id="histBtn" onclick="toggleHistory()" disabled>History</button>
       <button onclick="toggleSubjectProgress()" disabled>📘 Subject Progress</button>
-      <div class="idleBox" style="border: 1px solid #8b5cf6; background: #0f172a; border-left: 4px solid #8b5cf6; margin-top: 10px;">
-    <div style="font-size: 10px; color: #a78bfa; font-weight: 800; text-transform: uppercase; margin-bottom: 5px;">Study Shift Monitor</div>
-    <div id="currentShiftLabel" style="font-size: 13px; font-weight: bold; color: #fff;">No Shift Active</div>
-    <div id="shiftTimer" style="font-size: 20px; font-weight: 900; color: #38bdf8; margin: 5px 0; font-family: monospace;">00:00:00</div>
-    <button onclick="startNewShift()" style="background:#7c3aed; font-size: 11px; padding: 6px; width: 100%; border-radius: 6px; border: none; color: white; cursor: pointer;">Start New Shift</button>
-</div>
+      
       <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
   </div>
 
