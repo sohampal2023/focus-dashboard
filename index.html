@@ -389,9 +389,46 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 .is-sliding-left {
     transform: translateX(-80px);
 }
-.status-todo { background: #1e293b; color: #64748b; }
-.status-doing { background: #facc15 !important; color: #000 !important; animation: pulse-yellow 2s infinite; }
-.status-done { background: #22c55e !important; color: #fff !important; border-color: #4ade80 !important; }
+.status-todo { 
+    background: #1e293b !important; 
+    border: 3px solid #334155 !important; 
+    color: #64748b !important;
+    opacity: 0.8;
+}
+
+/* 2. IN PROGRESS (Bright Yellow + Pulsing Glow) */
+.status-doing { 
+    background: #facc15 !important; 
+    border: 3px solid #fef08a !important; 
+    color: #422006 !important; 
+    box-shadow: 0 0 20px rgba(250, 204, 21, 0.6);
+    animation: pulse-doing 2s infinite;
+}
+
+/* 3. DONE (Bright Green + Checkmark Glow) */
+.status-done { 
+    background: #22c55e !important; 
+    border: 3px solid #86efac !important; 
+    color: white !important;
+    box-shadow: 0 0 15px rgba(34, 197, 94, 0.4);
+}
+
+@keyframes pulse-doing {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(250, 204, 21, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
+}
+
+/* Wavy Path Line (Centered) */
+.map-container::before {
+    content: '';
+    position: absolute;
+    top: 0; bottom: 0; left: 50%;
+    width: 4px;
+    background: linear-gradient(to bottom, #1e293b, #38bdf8, #1e293b);
+    transform: translateX(-50%);
+    z-index: 0;
+}
 </style>
 </head>
 
@@ -3643,15 +3680,21 @@ window.showByjusMap = function(subjectName) {
         const nodeDiv = document.createElement("div");
         nodeDiv.className = "map-node";
 
-        // Circle with Status Class (Fix for colors)
+        // Circle indicator
         const circle = document.createElement("div");
-        circle.className = `node-circle status-${node.status}`; // Uses status-todo, status-doing, status-done
+        // Apply the status class (todo, doing, done)
+        circle.className = `node-circle status-${node.status}`;
         
-        // Text inside circle
-        if(node.status === 'done') circle.innerText = '✓';
-        else if(node.status === 'doing') circle.innerText = '▶';
-        else circle.innerText = (idx + 1);
+        // Show icons based on status for better visibility
+        if (node.status === 'done') {
+            circle.innerHTML = '<span style="font-size:20px">✓</span>';
+        } else if (node.status === 'doing') {
+            circle.innerHTML = '<span style="font-size:16px">▶</span>';
+        } else {
+            circle.innerText = idx + 1;
+        }
         
+        // Click circle toggles In Progress
         circle.onclick = () => {
             if(node.status === 'todo') updateNodeStatus(idx, 'doing');
             else if(node.status === 'doing') updateNodeStatus(idx, 'todo');
@@ -3667,12 +3710,17 @@ window.showByjusMap = function(subjectName) {
         const labelDiv = document.createElement("div");
         labelDiv.className = "slider-label";
         labelDiv.innerText = node.label;
-        if(node.status === 'todo') labelDiv.style.opacity = "0.4";
+        
+        // Visual text feedback
+        if(node.status === 'todo') labelDiv.style.color = "#94a3b8";
+        if(node.status === 'doing') labelDiv.style.color = "#facc15";
+        if(node.status === 'done') labelDiv.style.color = "#86efac";
 
         const actionDiv = document.createElement("div");
         actionDiv.className = "slider-action";
         actionDiv.innerText = "DONE";
 
+        // Slider Gesture Logic
         let startX = 0;
         track.onmousedown = (e) => { startX = e.pageX; };
         track.onmouseup = (e) => {
@@ -3712,11 +3760,8 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     dailyMaps[today][currentMapSubject] = nodes;
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
     
-    // Auto-save to Firebase
-    uploadData();
-    
-    // Refresh only the Map UI
-    showByjusMap(currentMapSubject);
+    uploadData(); // Sync to Firebase
+    showByjusMap(currentMapSubject); // Instant visual update
 };
   const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
     const subjectData = getSubjectData(); 
