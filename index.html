@@ -268,11 +268,11 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 .leave-status-approved { border-color: #22c55e; background: #064e3b; color: #dcfce7; }
 .leave-status-half { border-color: #eab308; background: #422006; color: #fef08a; }
 .leave-status-rejected { border-color: #ef4444; background: #450a0a; color: #fee2e2; }
-/* BYJU'S WINDING PATH LOGIC */
+/* --- BYJU'S WINDING PATH LOGIC --- */
 .map-node {
     position: relative;
     z-index: 1;
-    margin: 25px 0;
+    margin: 30px 0;
     width: 100%;
     display: flex;
     justify-content: center;
@@ -280,81 +280,92 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 }
 
 /* 4-Step Winding Pattern (S-Curve) */
-.map-node:nth-child(4n+1) { transform: translateX(-70px); } /* Far Left */
-.map-node:nth-child(4n+2) { transform: translateX(0px); }   /* Center */
-.map-node:nth-child(4n+3) { transform: translateX(70px); }  /* Far Right */
-.map-node:nth-child(4n+4) { transform: translateX(0px); }   /* Center */
+.map-node:nth-child(4n+1) { transform: translateX(-70px); }
+.map-node:nth-child(4n+2) { transform: translateX(0px); }
+.map-node:nth-child(4n+3) { transform: translateX(70px); }
+.map-node:nth-child(4n+4) { transform: translateX(0px); }
 
-.node-label {
-    position: absolute;
-    left: 70px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: #1e293b;
-    padding: 6px 14px;
-    border-radius: 8px;
-    border: 1px solid #334155;
-    white-space: nowrap;
-    font-size: 11px;
-    color: #f8fafc;
-    pointer-events: none;
-    box-shadow: 4px 4px 10px rgba(0,0,0,0.3);
+/* --- CIRCLE NODE STATUS COLORS --- */
+.node-circle {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-weight: 800;
+    z-index: 10 !important; /* Forces icons/ticks to stay on top */
+    position: relative;
+    border: 4px solid #1e293b;
+    transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
 }
 
-/* Reverse labels for right-aligned nodes */
-.map-node:nth-child(4n+3) .node-label {
-    left: auto;
-    right: 70px;
+.status-todo { 
+    background: #1e293b !important; 
+    color: #64748b !important; 
+    border-color: #334155 !important;
 }
 
-/* Visual Connectors (Optional CSS Line) */
-.map-container::before {
-    content: '';
-    position: absolute;
-    top: 0; bottom: 0; left: 50%;
-    width: 3px;
-    background: linear-gradient(to bottom, transparent, #38bdf8, transparent);
-    opacity: 0.2;
-    z-index: 0;
+.status-doing { 
+    background: #facc15 !important; 
+    color: #000 !important; 
+    border-color: #fff !important;
+    animation: pulse-doing 2s infinite;
 }
-/* SLIDER CONTAINER */
+
+.status-done { 
+    background: #22c55e !important; 
+    border-color: #86efac !important; 
+    color: white !important;
+    box-shadow: 0 0 20px rgba(34, 197, 94, 0.6);
+}
+
+/* --- SLIDER & LABEL CONTAINER --- */
 .node-content-wrapper {
     position: absolute;
-    left: 70px; top: 50%;
+    left: 45px; /* Aligned to overlap slightly behind the circle */
+    top: 50%;
     transform: translateY(-50%);
-    width: 200px;
-    height: 40px;
+    width: 210px;
+    height: 42px;
     overflow: hidden;
-    border-radius: 8px;
+    border-radius: 21px; /* Pill shape */
     background: #1e293b;
     border: 1px solid #334155;
-    z-index: 5;
+    z-index: 5 !important; /* Sits behind the circle */
 }
 
-/* Winding logic for right-aligned labels */
+/* Reverse alignment for right-winding nodes */
 .map-node:nth-child(4n+3) .node-content-wrapper {
     left: auto;
-    right: 70px;
+    right: 45px;
 }
 
 .slider-track {
     display: flex;
-    width: 280px; /* Label width + Action width */
+    width: 290px;
     height: 100%;
-    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     cursor: grab;
 }
 
 .slider-label {
-    width: 200px;
-    padding: 0 15px;
+    width: 210px;
+    padding: 0 20px 0 35px; /* Left padding ensures text isn't hidden by circle */
     display: flex;
     align-items: center;
     font-size: 11px;
-    color: #f8fafc;
+    font-weight: 600;
     white-space: nowrap;
     background: #0f172a;
     user-select: none;
+}
+
+/* Swap padding for right-aligned labels */
+.map-node:nth-child(4n+3) .slider-label {
+    padding: 0 35px 0 20px;
 }
 
 .slider-action {
@@ -365,23 +376,15 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     align-items: center;
     justify-content: center;
     font-size: 10px;
-    font-weight: bold;
+    font-weight: 800;
     text-transform: uppercase;
 }
 
-/* Slide Left Animation Class */
 .is-sliding-left {
     transform: translateX(-80px);
 }
 
-
-@keyframes pulse-doing {
-    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7); }
-    70% { transform: scale(1.05); box-shadow: 0 0 0 10px rgba(250, 204, 21, 0); }
-    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
-}
-
-/* Wavy Path Line (Centered) */
+/* --- VISUAL PATHWAY --- */
 .map-container::before {
     content: '';
     position: absolute;
@@ -390,6 +393,13 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     background: linear-gradient(to bottom, #1e293b, #38bdf8, #1e293b);
     transform: translateX(-50%);
     z-index: 0;
+    opacity: 0.3;
+}
+
+@keyframes pulse-doing {
+    0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.7); }
+    70% { transform: scale(1.05); box-shadow: 0 0 0 12px rgba(250, 204, 21, 0); }
+    100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); }
 }
 </style>
 </head>
