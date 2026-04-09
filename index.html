@@ -3563,65 +3563,72 @@ window.generateMapFromBulk = function() {
     loadTasks();  // Refresh buttons in sidebar/dashboard
 };
 let activeMapTimer = null; 
+
 window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
     
+    // 1. Calculate Global Timing (Total 360 mins divided by ALL topics planned for today)
     let allSubjects = Object.keys(dailyMaps[today] || {});
     let totalGlobalTopics = 0;
-    allSubjects.forEach(s => { totalGlobalTopics += dailyMaps[today][s].length; });
-    const timePerTopic = totalGlobalTopics > 0 ? Math.floor(360 / totalGlobalTopics) : 30;
+    allSubjects.forEach(s => {
+        totalGlobalTopics += dailyMaps[today][s].length;
+    });
+
+    const dailyBudgetMins = 360; 
+    const timePerTopic = totalGlobalTopics > 0 ? Math.floor(dailyBudgetMins / totalGlobalTopics) : 30;
 
     const nodes = dailyMaps[today][subjectName];
     const container = document.getElementById("mapContainer");
     
-    // --- RESET CONTAINER ---
+    // 2. Reset Container Styles for a Clean Vertical List
     container.innerHTML = "";
     container.style.display = "flex";
     container.style.flexDirection = "column";
     container.style.alignItems = "center";
-    container.style.gap = "30px"; // Space between rows
-    container.style.padding = "40px 0";
-
+    container.style.gap = "40px"; 
+    container.style.padding = "50px 0";
+    
     document.getElementById("currentMapSubject").innerText = subjectName;
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
     nodes.forEach((node, idx) => {
-        // --- ROW CONTAINER ---
         const nodeRow = document.createElement("div");
         nodeRow.style.display = "flex";
         nodeRow.style.alignItems = "center";
         nodeRow.style.width = "90%";
         nodeRow.style.maxWidth = "450px";
         nodeRow.style.position = "relative";
-        nodeRow.style.marginBottom = "20px";
+        nodeRow.style.marginBottom = "10px";
 
-        // Shift Logic
-        let prevCount = 0;
-        for (let s of allSubjects) {
-            if (s === subjectName) break;
-            prevCount += dailyMaps[today][s].length;
-        }
-        const shiftNum = Math.min(4, Math.floor(((prevCount + idx) / totalGlobalTopics) * 4) + 1);
+        // 3. Shift Calculation (Global Position)
+        let globalIndex = 0;
+        let found = false;
+        allSubjects.forEach(sub => {
+            if (sub === subjectName) found = true;
+            if (!found) globalIndex += dailyMaps[today][sub].length;
+        });
+        const currentGlobalIdx = globalIndex + idx;
+        const shiftNum = Math.floor((currentGlobalIdx / totalGlobalTopics) * 4) + 1;
 
-        // --- CIRCLE (OUTSIDE LEFT) ---
+        // 4. Circle UI (Status Icon)
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
-        // Kill existing CSS absolute positioning
         circle.style.position = "static"; 
         circle.style.flexShrink = "0";
-        circle.style.marginRight = "20px"; // Gap between tick and box
-        circle.style.width = "50px";
-        circle.style.height = "50px";
+        circle.style.marginRight = "25px"; 
+        circle.style.width = "54px";
+        circle.style.height = "54px";
         circle.style.borderRadius = "50%";
         circle.style.display = "flex";
         circle.style.alignItems = "center";
         circle.style.justifyContent = "center";
+        circle.style.zIndex = "10";
         
         if (node.status === 'done') {
             circle.style.background = "#22c55e";
-            circle.innerHTML = '<span style="font-size:26px; color:white;">✔</span>';
+            circle.innerHTML = '<span style="font-size:28px; color:white;">✔</span>';
         } else if (node.status === 'doing') {
             circle.style.background = "#facc15";
             circle.innerHTML = '<span id="miniTimer" style="font-size:12px; font-weight:900; color:black;">--:--</span>';
@@ -3632,42 +3639,52 @@ window.showByjusMap = function(subjectName) {
             circle.innerText = idx + 1;
         }
 
-        // --- CONTENT BOX ---
+        // 5. Content Card
         const wrapper = document.createElement("div");
-        // Kill old CSS classes that cause overlapping
-        wrapper.className = ""; 
         wrapper.style.flexGrow = "1";
         wrapper.style.background = "#0f172a";
         wrapper.style.border = "1px solid #334155";
-        wrapper.style.borderRadius = "12px";
-        wrapper.style.padding = "15px";
-        wrapper.style.boxShadow = "0 4px 6px rgba(0,0,0,0.4)";
+        wrapper.style.borderRadius = "14px";
+        wrapper.style.padding = "18px";
+        wrapper.style.boxShadow = "0 10px 15px -3px rgba(0,0,0,0.4)";
 
         let cardHTML = `
             <div style="display:flex; flex-direction:column; gap:4px;">
-                <div style="font-weight:800; color:#fff; font-size:15px; text-transform:uppercase; letter-spacing:0.5px;">${node.label}</div>
-                <div style="font-size:10px; color:#38bdf8; font-weight:bold;">SHIFT ${shiftNum} | ALLOCATED: ${timePerTopic}m</div>
+                <div style="font-weight:800; color:#fff; font-size:15px; text-transform:uppercase;">${node.label}</div>
+                <div style="font-size:10px; color:#38bdf8; font-weight:bold;">SHIFT ${shiftNum} | TARGET: ${timePerTopic}m</div>
         `;
 
         if (node.status === 'todo') {
             cardHTML += `
+                <div style="color:#64748b; font-size:11px; margin-top:5px;">Status: Yet to Done</div>
                 <button onclick="handleNodeAction(${idx}, 'start', ${timePerTopic})" 
-                    style="width:80px; background:#0ea5e9; font-weight:bold; font-size:10px; padding:6px; margin-top:8px; border:none; border-radius:4px; color:white; cursor:pointer;">
+                    style="width:90px; background:#0ea5e9; font-weight:bold; font-size:10px; padding:7px; margin-top:10px; border:none; border-radius:6px; color:white; cursor:pointer;">
                     START
                 </button>
             `;
         } else if (node.status === 'doing') {
             cardHTML += `
-                <div style="display:flex; gap:8px; margin-top:8px;">
+                <div style="color:#facc15; font-size:11px; font-weight:bold; margin-top:5px;">⚡ STUDYING NOW</div>
+                <div style="display:flex; gap:10px; margin-top:10px;">
                     <button onclick="handleNodeAction(${idx}, 'done')" 
-                        style="background:#16a34a; flex:1; font-weight:bold; font-size:10px; padding:6px; border:none; border-radius:4px; color:white; cursor:pointer;">DONE</button>
+                        style="background:#16a34a; flex:1; font-weight:bold; font-size:11px; padding:10px; border:none; border-radius:6px; color:white; cursor:pointer;">DONE</button>
                     <button onclick="handleNodeAction(${idx}, 'abort')" 
-                        style="background:#dc2626; flex:1; font-weight:bold; font-size:10px; padding:6px; border:none; border-radius:4px; color:white; cursor:pointer;">ABORT</button>
+                        style="background:#dc2626; flex:1; font-weight:bold; font-size:11px; padding:10px; border:none; border-radius:6px; color:white; cursor:pointer;">ABORT</button>
                 </div>
             `;
+            // Re-trigger the persistent background countdown
             setTimeout(() => startCountdown(timePerTopic), 50); 
         } else {
-            cardHTML += `<div style="color:#4ade80; font-size:12px; font-weight:bold; margin-top:5px;">COMPLETED ✔</div>`;
+            // --- COMPLETED STATE WITH EXCLUSIVE HH:MM:SS TIMESTAMP ---
+            const finishTime = node.completedAt || "00:00:00";
+            cardHTML += `
+                <div style="margin-top:8px; border-top:1px solid #1e293b; padding-top:8px;">
+                    <div style="color:#4ade80; font-size:12px; font-weight:bold;">COMPLETED ✔</div>
+                    <div style="color:#86efac; font-size:10px; font-family:monospace; margin-top:2px;">
+                        Finished at: ${finishTime}
+                    </div>
+                </div>
+            `;
         }
 
         cardHTML += `</div>`;
@@ -3683,22 +3700,39 @@ window.showByjusMap = function(subjectName) {
     let nodes = dailyMaps[today][currentMapSubject];
 
     if (action === 'start') {
-        // RESET OTHER ACTIVE TASKS (Only one allowed globally)
+        // Global Reset: Only one topic active across all subjects
         Object.keys(dailyMaps[today]).forEach(s => {
             dailyMaps[today][s].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
         });
         
         nodes[idx].status = 'doing';
-        // SAVE START TIME TO BACKEND
         const startTS = Date.now();
         localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), startTS);
-        localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_MINS"), mins);
         
     } else if (action === 'done') {
+        // --- CAPTURE TIME HH:MM:SS ---
+        const now = new Date();
+        const timeStamp = now.getHours().toString().padStart(2, '0') + ":" + 
+                          now.getMinutes().toString().padStart(2, '0') + ":" + 
+                          now.getSeconds().toString().padStart(2, '0');
+
         nodes[idx].status = 'done';
-        saveAutomatedSubjectProgress(currentMapSubject, nodes[idx].label, "Verified Completion via Map Journey");
+        nodes[idx].completedAt = timeStamp; // Saved only in Map Data
+
         if(activeMapTimer) clearInterval(activeMapTimer);
         localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
+
+        // Auto-tick logic for main task sidebar
+        const allFinished = nodes.every(n => n.status === 'done');
+        if (allFinished) {
+            let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+            let extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+            let found = false;
+            tasks.forEach(t => { if (t.name === currentMapSubject) { t.done = true; found = true; } });
+            if (!found) { extras.forEach(e => { if (e.name === currentMapSubject) { e.done = true; } }); }
+            localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
+            localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+        }
 
     } else if (action === 'abort') {
         nodes[idx].status = 'todo';
@@ -3708,10 +3742,10 @@ window.showByjusMap = function(subjectName) {
 
     dailyMaps[today][currentMapSubject] = nodes;
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
-    uploadData(); // Sync everything to Firebase
-    showByjusMap(currentMapSubject);
+    uploadData(); // Sync map data to Firebase
+    showByjusMap(currentMapSubject); // Refresh Map View
+    loadTasks(); // Refresh Sidebar
 };
-
 function startCountdown(targetMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
     
