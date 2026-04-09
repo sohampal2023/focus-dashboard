@@ -268,7 +268,33 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 .leave-status-approved { border-color: #22c55e; background: #064e3b; color: #dcfce7; }
 .leave-status-half { border-color: #eab308; background: #422006; color: #fef08a; }
 .leave-status-rejected { border-color: #ef4444; background: #450a0a; color: #fee2e2; }
-
+.map-container {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 40px 10px; background: #020617; border-radius: 20px;
+    max-height: 600px; overflow-y: auto; position: relative;
+}
+.map-node {
+    position: relative; z-index: 1; margin: 20px 0;
+    width: 80%; display: flex; justify-content: center;
+}
+.map-node:nth-child(odd) { transform: translateX(-40px); }
+.map-node:nth-child(even) { transform: translateX(40px); }
+.node-circle {
+    width: 50px; height: 50px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; font-weight: bold; border: 3px solid #334155;
+}
+.node-label {
+    position: absolute; top: 50%; left: 70px; transform: translateY(-50%);
+    background: #0f172a; padding: 8px 15px; border-radius: 8px;
+    border: 1px solid #334155; white-space: nowrap; font-size: 12px;
+}
+.map-node:nth-child(even) .node-label { left: auto; right: 70px; }
+.status-todo { background: #1e293b; color: #64748b; }
+.status-doing { background: #facc15; color: #000; animation: pulse-yellow 2s infinite; }
+.status-done { background: #22c55e; color: #fff; border-color: #4ade80; }
+@keyframes pulse-yellow { 0% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(250, 204, 21, 0); } 100% { box-shadow: 0 0 0 0 rgba(250, 204, 21, 0); } }
+.bulk-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.9); display: flex; align-items: center; justify-content: center; z-index: 10000; }
 </style>
 </head>
 
@@ -569,7 +595,24 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
     <div id="reportBox" class="card hidden"></div>
 </div>
+<div id="byjusMapBox" class="card hidden">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
+        <h3 id="currentMapSubject" style="color:#38bdf8; margin:0;">Journey</h3>
+        <button onclick="closeMap()" style="width:auto; padding:5px 15px;">Close Map</button>
+    </div>
+    <div id="mapContainer" class="map-container"></div>
+</div>
 
+<div id="bulkInputModal" class="bulk-modal hidden">
+    <div style="background:#0f172a; padding:25px; border-radius:15px; width:90%; max-width:500px; border:1px solid #38bdf8;">
+        <h3 id="bulkTitle" style="color:#facc15">Set Journey</h3>
+        <textarea id="bulkTextarea" rows="10" style="width:100%; background:#020617; color:#fff; border:1px solid #334155; padding:10px; border-radius:8px;" placeholder="Topic 1&#10;Topic 2"></textarea>
+        <div style="display:flex; gap:10px; margin-top:15px;">
+            <button onclick="generateMapFromBulk()" style="background:#22c55e;">Lock & Create Journey</button>
+            <button onclick="document.getElementById('bulkInputModal').classList.add('hidden')" style="background:#334155;">Cancel</button>
+        </div>
+    </div>
+</div>
 </div>
 </div>
 
@@ -2956,129 +2999,136 @@ function setupTasks() {
   document.getElementById("reportBox").classList.add("hidden");
 }
 function loadTasks() {
-  const tList = document.getElementById("taskList");
-  const eList = document.getElementById("extraList");
-  if(!tList || !eList) return;
-  tList.innerHTML = "";
-  eList.innerHTML = "";
-  
-  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  
-  // Helper to update main logs
-  const updateLogTask = (name, isChecked, comment, due) => {
-    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    if(logs.length){
-      const active = logs[logs.length-1];
-      if(!active.completed) active.completed = [];
-      if(isChecked){
-        active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
-        active.completed.push({ name: name, comment: comment, due: due });
-      } else {
-        active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
-      }
-      localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-      renderLogs();
-    }
-  };
-// FIND THIS FUNCTION IN YOUR CODE AND REPLACE IT ENTIRELY
-const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
-      console.log("Saving Exact Subject:", subject); 
+    const tList = document.getElementById("taskList");
+    const eList = document.getElementById("extraList");
+    if (!tList || !eList) return;
+    tList.innerHTML = "";
+    eList.innerHTML = "";
 
-      const subjectData = getSubjectData(); 
-      
-      // If the folder doesn't exist yet, create it using the EXACT name
-      if(!subjectData[subject]) subjectData[subject] = [];
-      
-      subjectData[subject].push({
-        id: Date.now(), 
-        date: new Date().toLocaleDateString(),
-        covered: covered || "-",
-        uncovered: uncovered || "-"
-      });
-      
-      saveSubjectData(subjectData); 
-      uploadData(); 
-  };
- // Inside your loadTasks() function where you loop through tasks:
-tasks.forEach((t) => { // Make sure 't' is defined here
-    const container = document.createElement("div");
-    container.style.marginBottom = "4px";
-
+    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
 
-    let mapBtnHtml = "";
-    // Check if map data exists for this specific task 't'
-    if (dailyMaps[today] && dailyMaps[today][t.name]) {
-        mapBtnHtml = `<button onclick="showByjusMap('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9;">🗺 VIEW MAP</button>`;
-    } else {
-        mapBtnHtml = `<button onclick="openSubjectJourney('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155;">+ SET JOURNEY</button>`;
-    }
-
-    const label = document.createElement("span");
-    // Ensure you use t.name correctly here
-    label.innerHTML = ` ${t.name} ${mapBtnHtml}`; 
-    
-    // ... rest of your checkbox logic
-});
-  
-  // --- RENDER EXTRA WORK ---
-  extras.forEach(e => {
-    const container = document.createElement("div");
-    container.style.marginBottom = "4px";
-    
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = e.done;
-    
-    if(e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
-    
-    const label = document.createElement("span");
-    
-    const updateLabel = () => {
-       if(e.done){
-           label.innerHTML = ` <span style='color:#facc15'>${e.name}</span> <span style="font-size:12px;color:#e5e7eb">[${e.comment}]</span>`;
-       } else {
-           label.innerHTML = " " + e.name;
-       }
+    // Internal Helper to update logs (your original logic)
+    const updateLogTask = (name, isChecked, comment, due) => {
+        const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+        if (logs.length) {
+            const active = logs[logs.length - 1];
+            if (!active.completed) active.completed = [];
+            if (isChecked) {
+                active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
+                active.completed.push({ name: name, comment: comment, due: due });
+            } else {
+                active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
+            }
+            localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+            renderLogs();
+        }
     };
-    updateLabel();
-    
-    cb.onchange = () => {
-      if (!confirm(`CONFIRM WORK:\n\nSubject: ${e.name}\nMark as DONE?`)) { 
-          cb.checked = !cb.checked; 
-          return; 
-      }
-      
-      if(cb.checked){
-        const topicName = prompt(`Enter TOPIC NAME (or Test Name) for ${e.name}:`, "");
-        
-        if (!topicName) {
-            cb.checked = false;
-            return; 
+
+    // --- RENDER ASSIGNED TASKS ---
+    tasks.forEach((t) => {
+        const container = document.createElement("div");
+        container.style.marginBottom = "8px";
+
+        // Map Button Logic (Merged inside loop where 't' is defined)
+        let mapBtnHtml = "";
+        if (dailyMaps[today] && dailyMaps[today][t.name]) {
+            mapBtnHtml = `<button onclick="showByjusMap('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none;">🗺 VIEW MAP</button>`;
+        } else {
+            mapBtnHtml = `<button onclick="openSubjectJourney('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155; border:none;">+ SET JOURNEY</button>`;
         }
 
-        const dueVal = prompt(`Any pending work/marks?`, "None");
-        e.comment = topicName; 
-        e.due = dueVal || "-";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = t.done;
 
-        // CALL THE UPDATED SAVE FUNCTION
-        saveAutomatedSubjectProgress(e.name, topicName, e.due);
+        const label = document.createElement("span");
+        const updateLabel = () => {
+            let display = t.name;
+            if (t.target) display += ` <span style='font-size:11px;color:#38bdf8'>(${t.target})</span>`;
+            label.innerHTML = ` ${display} ${mapBtnHtml} ${t.done ? `<span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>` : ""}`;
+        };
+        updateLabel();
 
-      } else { 
-          e.comment = ""; 
-          e.due = ""; 
-      }
-      
-      e.done = cb.checked;
-      updateLabel();
-      updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
-      save(tasks, extras);
-    };
-    container.append(cb, label);
-    eList.append(container);
-  });
+        cb.onchange = () => {
+            if (!confirm(`CONFIRM TASK:\n\nMark '${t.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) {
+                cb.checked = !cb.checked;
+                return;
+            }
+            if (cb.checked) {
+                const remark = prompt(`What did you cover in ${t.name}?`, " ");
+                const dueVal = prompt(`Any pending work left?`, " ");
+                t.comment = remark || "-";
+                t.due = dueVal || "-";
+                saveAutomatedSubjectProgress(t.name, t.comment, t.due);
+            } else {
+                t.comment = "";
+                t.due = "";
+            }
+            t.done = cb.checked;
+            updateLabel();
+            updateLogTask(t.name, t.done, t.comment, t.due);
+            save(tasks, extras);
+        };
+
+        container.append(cb, label);
+        tList.append(container);
+    });
+
+    // --- RENDER EXTRA WORK ---
+    extras.forEach(e => {
+        const container = document.createElement("div");
+        container.style.marginBottom = "8px";
+
+        // Map Button Logic for Extras
+        let mapBtnHtml = "";
+        if (dailyMaps[today] && dailyMaps[today][e.name]) {
+            mapBtnHtml = `<button onclick="showByjusMap('${e.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none;">🗺 VIEW MAP</button>`;
+        } else if (!e.name.startsWith("MOCK TEST:")) {
+            mapBtnHtml = `<button onclick="openSubjectJourney('${e.name}')" style="width:auto; padding:4px 8px; font-size:10px; margin-left:10px; background:#334155; border:none;">+ JOURNEY</button>`;
+        }
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = e.done;
+        if (e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
+
+        const label = document.createElement("span");
+        const updateLabel = () => {
+            if (e.done) {
+                label.innerHTML = ` <span style='color:#facc15'>${e.name}</span> ${mapBtnHtml} <span style="font-size:12px;color:#e5e7eb">[${e.comment}]</span>`;
+            } else {
+                label.innerHTML = ` ${e.name} ${mapBtnHtml}`;
+            }
+        };
+        updateLabel();
+
+        cb.onchange = () => {
+            if (!confirm(`CONFIRM WORK:\n\nSubject: ${e.name}\nMark as DONE?`)) {
+                cb.checked = !cb.checked;
+                return;
+            }
+            if (cb.checked) {
+                const topicName = prompt(`Enter TOPIC NAME for ${e.name}:`, "");
+                if (!topicName) { cb.checked = false; return; }
+                const dueVal = prompt(`Any pending work/marks?`, "None");
+                e.comment = topicName;
+                e.due = dueVal || "-";
+                saveAutomatedSubjectProgress(e.name, topicName, e.due);
+            } else {
+                e.comment = "";
+                e.due = "";
+            }
+            e.done = cb.checked;
+            updateLabel();
+            updateLogTask(e.name + " (Extra)", e.done, e.comment, e.due);
+            save(tasks, extras);
+        };
+        container.append(cb, label);
+        eList.append(container);
+    });
 }
 function addExtra() {
   // 1. Build a numbered menu string
@@ -3420,61 +3470,35 @@ window.requestSubjectDelete = async function(subject, rowId) {
     alert("Failed to send delete request: " + e.message);
   }
 };
-function openSubjectJourney(subjectName) {
-    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    const today = new Date().toLocaleDateString();
-    
-    // Check if this subject already has a locked map for today
-    if (dailyMaps[today] && dailyMaps[today][subjectName]) {
-        alert("Journey already locked for this subject. Use the 'Map' button to view.");
-        return;
-    }
-
+window.openSubjectJourney = function(subjectName) {
     currentMapSubject = subjectName;
     document.getElementById('bulkTitle').innerText = "Set Journey: " + subjectName;
     document.getElementById('bulkTextarea').value = "";
     document.getElementById('bulkInputModal').classList.remove('hidden');
-}
-  window.generateMapFromBulk = function() {
+};
+
+window.generateMapFromBulk = function() {
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
-    
-    if (lines.length === 0) {
-        alert("Please enter at least one topic.");
-        return;
-    }
+    if (lines.length === 0) return alert("Enter topics!");
 
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    
     if (!dailyMaps[today]) dailyMaps[today] = {};
 
-    // Create the nodes with initial status 0 (Todo)
-    const nodes = lines.map((line, index) => ({
+    dailyMaps[today][currentMapSubject] = lines.map((line, index) => ({
         id: index,
         label: line.trim(),
-        status: 'todo' // todo, doing, done
+        status: 'todo' 
     }));
 
-    dailyMaps[today][currentMapSubject] = nodes;
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
-    
     document.getElementById('bulkInputModal').classList.add('hidden');
     uploadData(); // Sync to Firebase
-    loadTasks(); // Refresh list to show the "Map" buttons
+    loadTasks();  // Refresh UI
 };
-  // Inside your tasks.forEach or extras.forEach loop:
-const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-const today = new Date().toLocaleDateString();
 
-let mapBtnHtml = "";
-if (dailyMaps[today] && dailyMaps[today][t.name]) {
-    mapBtnHtml = `<button onclick="showByjusMap('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9;">🗺 VIEW MAP</button>`;
-} else {
-    mapBtnHtml = `<button onclick="openSubjectJourney('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155;">+ SET JOURNEY</button>`;
-}
-label.innerHTML = ` ${t.name} ${mapBtnHtml}`;
-  window.showByjusMap = function(subjectName) {
+window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
@@ -3492,7 +3516,7 @@ label.innerHTML = ` ${t.name} ${mapBtnHtml}`;
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
         circle.innerText = idx + 1;
-        circle.onclick = () => toggleNodeStatus(idx);
+        circle.onclick = () => window.toggleNodeStatus(idx);
 
         const label = document.createElement("div");
         label.className = "node-label";
@@ -3516,14 +3540,9 @@ window.toggleNodeStatus = function(nodeIdx) {
 
     dailyMaps[today][currentMapSubject] = nodes;
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
-    showByjusMap(currentMapSubject); // Re-render
-    uploadData(); // Sync
+    showByjusMap(currentMapSubject); 
+    uploadData();
 };
-
-window.closeMap = function() {
-    document.getElementById("byjusMapBox").classList.add("hidden");
-};
-
 
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
@@ -3562,7 +3581,11 @@ window.closeMap = function() {
     window.renderSubjectTable = window.renderSubjectTable;
     window.clearSubjectProgress = window.clearSubjectProgress;
     window.requestSubjectDelete = window.requestSubjectDelete;
-
+    window.openSubjectJourney = openSubjectJourney;
+    window.generateMapFromBulk = generateMapFromBulk;
+    window.showByjusMap = showByjusMap;
+    window.toggleNodeStatus = toggleNodeStatus;
+    window.closeMap = closeMap;
   </script>
 
 </body>
