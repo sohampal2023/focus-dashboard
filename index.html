@@ -319,7 +319,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     background: #22c55e !important; 
     border-color: #86efac !important; 
     color: white !important;
-    box-shadow: 0 0 20px rgba(34, 197, 94, 0.6);
 }
 
 /* --- SLIDER & LABEL CONTAINER --- */
@@ -3635,9 +3634,15 @@ window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
-    const nodes = dailyMaps[today][subjectName];
+    
+    if (!dailyMaps[today] || !dailyMaps[today][subjectName]) {
+        alert("Journey data not found.");
+        return;
+    }
 
+    const nodes = dailyMaps[today][subjectName];
     const container = document.getElementById("mapContainer");
+    
     container.innerHTML = "";
     document.getElementById("currentMapSubject").innerText = subjectName;
     document.getElementById("byjusMapBox").classList.remove("hidden");
@@ -3646,26 +3651,25 @@ window.showByjusMap = function(subjectName) {
         const nodeDiv = document.createElement("div");
         nodeDiv.className = "map-node";
 
-        // --- THE CIRCLE (Icon Logic) ---
+        // 1. CIRCLE ICON LOGIC
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
         
-        // Dynamic Icon Logic
         if (node.status === 'done') {
-            circle.innerHTML = '<span style="font-size:28px; font-weight:900;">✔</span>';
+            circle.innerHTML = '<span style="font-size:32px; font-weight:900; color:white;">✔</span>';
         } else if (node.status === 'doing') {
             circle.innerHTML = '<span style="font-size:18px;">▶</span>';
         } else {
             circle.innerText = idx + 1;
         }
         
-        // Click to toggle "In Progress"
+        // Toggle In-Progress by clicking circle
         circle.onclick = () => {
             if(node.status === 'todo') updateNodeStatus(idx, 'doing');
             else if(node.status === 'doing') updateNodeStatus(idx, 'todo');
         };
 
-        // --- THE SLIDER ---
+        // 2. SLIDER WRAPPER
         const wrapper = document.createElement("div");
         wrapper.className = "node-content-wrapper";
 
@@ -3677,22 +3681,30 @@ window.showByjusMap = function(subjectName) {
         labelDiv.className = "slider-label";
         labelDiv.innerText = node.label;
         
-        // High visibility label colors
+        // Visual text status colors
         if(node.status === 'todo') labelDiv.style.color = "#64748b";
         if(node.status === 'doing') labelDiv.style.color = "#facc15";
-        if(node.status === 'done') labelDiv.style.color = "#4ade80";
+        if(node.status === 'done') labelDiv.style.color = "#86efac";
 
         const actionDiv = document.createElement("div");
         actionDiv.className = "slider-action";
         actionDiv.innerText = "DONE";
 
-        // Slide logic
+        // SLIDE GESTURE LOGIC
         let startX = 0;
         track.onmousedown = (e) => { startX = e.pageX; };
+        
         track.onmouseup = (e) => {
             let diff = startX - e.pageX;
-            if (diff > 50 && node.status !== 'done') updateNodeStatus(idx, 'done');
-            else if (diff < -50 && node.status === 'done') updateNodeStatus(idx, 'todo');
+            
+            // If slide left more than 50px
+            if (diff > 50 && node.status !== 'done') {
+                updateNodeStatus(idx, 'done');
+            } 
+            // If slide right on a completed item to undo
+            else if (diff < -50 && node.status === 'done') {
+                updateNodeStatus(idx, 'todo');
+            }
         };
 
         track.append(labelDiv, actionDiv);
@@ -3721,13 +3733,16 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     let nodes = dailyMaps[today][currentMapSubject];
     
-    nodes[nodeIdx].status = newStatus; // Updates status to 'todo', 'doing', or 'done'
+    // Update data
+    nodes[nodeIdx].status = newStatus;
     
+    // Save locally
     dailyMaps[today][currentMapSubject] = nodes;
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
     
-    uploadData(); // Sync to Firebase
-    showByjusMap(currentMapSubject); // Re-draw with the green tick
+    // Sync and Refresh UI
+    uploadData(); 
+    showByjusMap(currentMapSubject); 
 };
   const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
     const subjectData = getSubjectData(); 
