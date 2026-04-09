@@ -3569,6 +3569,7 @@ window.showByjusMap = function(subjectName) {
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
     
+    // Calculate Global Timing (6 Hours = 360 mins)
     let allSubjects = Object.keys(dailyMaps[today] || {});
     let totalGlobalTopics = 0;
     allSubjects.forEach(s => { totalGlobalTopics += dailyMaps[today][s].length; });
@@ -3584,8 +3585,8 @@ window.showByjusMap = function(subjectName) {
     nodes.forEach((node, idx) => {
         const nodeDiv = document.createElement("div");
         nodeDiv.className = "map-node";
-        nodeDiv.style.margin = "70px 0"; // Strong spacing to prevent overlap
-        nodeDiv.style.minHeight = "130px"; 
+        nodeDiv.style.margin = "80px 0"; 
+        nodeDiv.style.minHeight = "140px"; 
 
         // Shift Calculation
         let prevCount = 0;
@@ -3598,40 +3599,45 @@ window.showByjusMap = function(subjectName) {
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
         
+        // --- Circle Styling ---
         if (node.status === 'done') {
             circle.style.background = "#22c55e";
+            circle.style.zIndex = "10";
             circle.innerHTML = '<span style="font-size:30px; color:white;">✔</span>';
         } else if (node.status === 'doing') {
             circle.style.background = "#facc15";
+            circle.style.zIndex = "10";
             circle.innerHTML = '<span id="miniTimer" style="font-size:12px; font-weight:900; color:black;">--:--</span>';
         } else {
             circle.style.background = "#1e293b";
+            circle.style.zIndex = "10";
             circle.innerText = idx + 1;
         }
 
         const wrapper = document.createElement("div");
         wrapper.className = "node-content-wrapper";
         wrapper.style.height = "auto";
-        wrapper.style.padding = "15px";
-        wrapper.style.minWidth = "260px";
+        wrapper.style.padding = "15px 20px 15px 45px"; // Increased LEFT padding to prevent overlap
+        wrapper.style.minWidth = "280px";
+        wrapper.style.marginLeft = "30px"; // Pushes the whole box away from the center line
 
         let cardHTML = `
-            <div style="display:flex; flex-direction:column; gap:5px; margin-left:20px;">
-                <div style="font-weight:800; color:#fff; font-size:15px; text-transform:uppercase;">${node.label}</div>
-                <div style="font-size:11px; color:#38bdf8; font-weight:bold;">SHIFT ${shiftNum} | ALLOCATED: ${timePerTopic}m</div>
+            <div style="display:flex; flex-direction:column; gap:4px;">
+                <div style="font-weight:800; color:#fff; font-size:16px; text-transform:uppercase; white-space: nowrap;">${node.label}</div>
+                <div style="font-size:11px; color:#38bdf8; font-weight:bold; letter-spacing:0.5px;">SHIFT ${shiftNum} | ALLOCATED: ${timePerTopic}m</div>
         `;
 
         if (node.status === 'todo') {
             cardHTML += `
                 <div style="color:#64748b; font-size:11px; margin-top:5px;">Status: Yet to Done</div>
                 <button onclick="handleNodeAction(${idx}, 'start', ${timePerTopic})" 
-                    style="width:100px; background:#0ea5e9; font-weight:bold; font-size:11px; padding:8px; margin-top:10px; border:none; border-radius:6px; color:white; cursor:pointer;">
-                    START
+                    style="width:110px; background:#0ea5e9; font-weight:bold; font-size:11px; padding:8px; margin-top:10px; border:none; border-radius:6px; color:white; cursor:pointer;">
+                    START STUDY
                 </button>
             `;
         } else if (node.status === 'doing') {
             cardHTML += `
-                <div style="color:#facc15; font-size:11px; font-weight:bold; margin-top:5px;">⚡ STUDYING NOW</div>
+                <div style="color:#facc15; font-size:11px; font-weight:bold; margin-top:5px;">⚡ STUDYING NOW...</div>
                 <div style="display:flex; gap:10px; margin-top:10px;">
                     <button onclick="handleNodeAction(${idx}, 'done')" 
                         style="background:#16a34a; flex:1; font-weight:bold; font-size:11px; padding:10px; border:none; border-radius:6px; color:white; cursor:pointer;">DONE</button>
@@ -3639,10 +3645,9 @@ window.showByjusMap = function(subjectName) {
                         style="background:#dc2626; flex:1; font-weight:bold; font-size:11px; padding:10px; border:none; border-radius:6px; color:white; cursor:pointer;">ABORT</button>
                 </div>
             `;
-            // RE-ATTACH TIMER ON OPEN: Always check the backend timestamp
             setTimeout(() => startCountdown(timePerTopic), 50); 
         } else {
-            cardHTML += `<div style="color:#4ade80; font-size:12px; font-weight:bold; margin-top:5px;">COMPLETED ✔</div>`;
+            cardHTML += `<div style="color:#4ade80; font-size:13px; font-weight:bold; margin-top:8px;">COMPLETED ✔</div>`;
         }
 
         cardHTML += `</div>`;
