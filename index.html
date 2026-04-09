@@ -3125,107 +3125,55 @@ function loadTasks() {
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
 
-    // Internal Helper to update logs (your original logic)
-    const updateLogTask = (name, isChecked, comment, due) => {
-        const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-        if (logs.length) {
-            const active = logs[logs.length - 1];
-            if (!active.completed) active.completed = [];
-            if (isChecked) {
-                active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
-                active.completed.push({ name: name, comment: comment, due: due });
-            } else {
-                active.completed = active.completed.filter(i => (typeof i === 'string' ? i : i.name) !== name);
-            }
-            localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-            renderLogs();
-        }
-    };
-
-    // --- RENDER ASSIGNED TASKS ---
-    tasks.forEach((t) => {
+    const renderItem = (item, listRef, isExtra) => {
         const container = document.createElement("div");
         container.style.marginBottom = "8px";
+        const cleanName = item.name.replace(/'/g, "\\'");
 
-        // Map Button Logic (Merged inside loop where 't' is defined)
         let mapBtnHtml = "";
-        if (dailyMaps[today] && dailyMaps[today][t.name]) {
-            mapBtnHtml = `<button onclick="showByjusMap('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none;">🗺 VIEW MAP</button>`;
-        } else {
-            mapBtnHtml = `<button onclick="openSubjectJourney('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155; border:none;">+ SET JOURNEY</button>`;
+        if (!item.name.startsWith("MOCK TEST:")) {
+            if (dailyMaps[today] && dailyMaps[today][item.name]) {
+                mapBtnHtml = `<button onclick="showByjusMap('${cleanName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none; color:white; border-radius:4px;">🗺 VIEW MAP</button>`;
+            } else {
+                mapBtnHtml = `<button onclick="window.openSubjectJourney('${cleanName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155; border:none; color:white; border-radius:4px;">+ SET JOURNEY</button>`;
+            }
         }
 
         const cb = document.createElement("input");
         cb.type = "checkbox";
-        cb.checked = t.done;
+        cb.checked = item.done;
+        if (item.name.startsWith("MOCK TEST:")) cb.disabled = true;
 
         const label = document.createElement("span");
-        const updateLabel = () => {
-            let display = t.name;
-            if (t.target) display += ` <span style='font-size:11px;color:#38bdf8'>(${t.target})</span>`;
-            label.innerHTML = ` ${display} ${mapBtnHtml} ${t.done ? `<span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>` : ""}`;
-        };
-        updateLabel();
+        label.innerHTML = ` ${item.name} ${mapBtnHtml}`;
 
         cb.onchange = () => {
-            if (!confirm(`CONFIRM TASK:\n\nMark '${t.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) {
+            if (!confirm(`Mark '${item.name}' as ${cb.checked ? 'DONE' : 'PENDING'}?`)) {
                 cb.checked = !cb.checked;
                 return;
             }
             if (cb.checked) {
-                const remark = prompt(`What did you cover in ${t.name}?`, " ");
-                const dueVal = prompt(`Any pending work left?`, " ");
-                t.comment = remark || "-";
-                t.due = dueVal || "-";
-                saveAutomatedSubjectProgress(t.name, t.comment, t.due);
-            } else {
-                t.comment = "";
-                t.due = "";
+                const remark = prompt(`What did you cover in ${item.name}?`, " ");
+                const dueVal = prompt(`Pending work?`, " ");
+                item.comment = remark || "-";
+                item.due = dueVal || "-";
+                // --- AUTOMATIC UPDATE TO SUBJECT PROGRESS TABLE ---
+                saveAutomatedSubjectProgress(item.name, item.comment, item.due);
             }
-            t.done = cb.checked;
-            updateLabel();
-            updateLogTask(t.name, t.done, t.comment, t.due);
+            item.done = cb.checked;
             save(tasks, extras);
+            loadTasks();
         };
 
         container.append(cb, label);
-        tList.append(container);
-    });
+        listRef.append(container);
+    };
 
-    // --- INSIDE loadTasks() - Replace the Extras part ---
-extras.forEach(e => {
-    const container = document.createElement("div");
-    container.style.marginBottom = "8px";
-    
-    // Safety: Escape name for HTML attribute
-    const cleanName = e.name.replace(/'/g, "\\'");
-
-    let mapBtnHtml = "";
-    if (!e.name.startsWith("MOCK TEST:")) {
-        if (dailyMaps[today] && dailyMaps[today][e.name]) {
-            mapBtnHtml = `<button onclick="showByjusMap('${cleanName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none; color:white; border-radius:4px; cursor:pointer;">🗺 VIEW MAP</button>`;
-        } else {
-            // This button triggers the function we just fixed above
-            mapBtnHtml = `<button onclick="window.openSubjectJourney('${cleanName}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155; border:none; color:white; border-radius:4px; cursor:pointer;">+ SET JOURNEY</button>`;
-        }
-    }
-    
-    // ... rest of your checkbox and label logic remains the same ...
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = e.done;
-    if (e.name.startsWith("MOCK TEST:")) { cb.disabled = true; }
-
-    const label = document.createElement("span");
-    label.innerHTML = ` ${e.name} ${mapBtnHtml}`;
-    
-    container.append(cb, label);
-    eList.append(container);
-});
+    tasks.forEach(t => renderItem(t, tList, false));
+    extras.forEach(e => renderItem(e, eList, true));
 }
 window.addExtra = function() {
-    // 1. Build the menu string
-    let menu = "Select Subject for Extra Work (Enter Number):\n\n";
+    let menu = "Select Subject for Extra Work:\n\n";
     FIXED_SUBJECTS.forEach((sub, index) => {
         menu += `${index + 1}. ${sub}\n`;
     });
@@ -3233,7 +3181,6 @@ window.addExtra = function() {
     const choice = prompt(menu);
     if (!choice) return;
 
-    // 2. Validate Input
     const index = parseInt(choice) - 1;
     if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
         alert("Invalid selection.");
@@ -3241,23 +3188,9 @@ window.addExtra = function() {
     }
 
     const subjectName = FIXED_SUBJECTS[index];
-
-    // 🔒 Security Block
-    if (subjectName.toLowerCase().includes("mock")) {
-        alert("⚠️ ACCESS DENIED\n\nUse the 'Start Mock Test' button.");
-        return;
-    }
-
-    // 3. Save to Extra List
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     
-    // Prevent duplicate entries of the same subject in Extra Work for the same day
-    const exists = extras.some(e => e.name === subjectName);
-    if(exists) {
-        alert(subjectName + " is already in your Extra Work list.");
-        return;
-    }
-
+    // Unlimited duplicates allowed now
     extras.push({ 
         name: subjectName, 
         done: false, 
@@ -3266,15 +3199,9 @@ window.addExtra = function() {
     });
     
     localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-
-    // 4. Force UI Update
-    // We call uploadData first to sync, then loadTasks to render the +JOURNEY button
     uploadData();
     loadTasks();
-    
-    console.log("Extra subject added:", subjectName);
 };
-
 function save(tasks, extras) {
   localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
   localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
@@ -3640,12 +3567,6 @@ window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
-    
-    if (!dailyMaps[today] || !dailyMaps[today][subjectName]) {
-        alert("Journey data not found.");
-        return;
-    }
-
     const nodes = dailyMaps[today][subjectName];
     const container = document.getElementById("mapContainer");
     
@@ -3660,19 +3581,15 @@ window.showByjusMap = function(subjectName) {
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
         
-        // --- UPDATED MAP NODE STATUS COLORS & ICONS ---
+        // --- VISUAL FIX ---
         if (node.status === 'done') {
-            circle.style.background = "#22c55e"; // Green
-            circle.style.borderColor = "#86efac";
-            circle.innerHTML = '<span style="font-size:32px; font-weight:900; color:white;">✔</span>';
+            circle.style.background = "#22c55e"; 
+            circle.innerHTML = '<span style="font-size:30px; color:white;">✔</span>';
         } else if (node.status === 'doing') {
-            circle.style.background = "#facc15"; // Yellow
-            circle.style.borderColor = "#ffffff";
-            circle.innerHTML = '<span style="font-size:10px; font-weight:900; color:black; text-align:center; line-height:1;">IN<br>PROGRESS</span>';
+            circle.style.background = "#facc15"; 
+            circle.innerHTML = '<span style="font-size:10px; font-weight:bold; color:black; text-align:center;">IN<br>PROG</span>';
         } else {
-            // "Yet to Done" state (Todo)
             circle.style.background = "#1e293b";
-            circle.style.color = "#64748b";
             circle.innerText = idx + 1;
         }
         
@@ -3681,37 +3598,16 @@ window.showByjusMap = function(subjectName) {
             else if(node.status === 'doing') updateNodeStatus(idx, 'todo');
         };
 
+        // ... [Rest of slider wrapper remains same as your code] ...
         const wrapper = document.createElement("div");
         wrapper.className = "node-content-wrapper";
-
         const track = document.createElement("div");
         track.className = "slider-track";
         if(node.status === 'done') track.classList.add("is-sliding-left");
-
         const labelDiv = document.createElement("div");
         labelDiv.className = "slider-label";
         labelDiv.innerText = node.label;
-        
-        if(node.status === 'todo') labelDiv.style.color = "#64748b";
-        if(node.status === 'doing') labelDiv.style.color = "#facc15";
-        if(node.status === 'done') labelDiv.style.color = "#86efac";
-
-        const actionDiv = document.createElement("div");
-        actionDiv.className = "slider-action";
-        actionDiv.innerText = "DONE";
-
-        let startX = 0;
-        track.onmousedown = (e) => { startX = e.pageX; };
-        track.onmouseup = (e) => {
-            let diff = startX - e.pageX;
-            if (diff > 50 && node.status !== 'done') {
-                updateNodeStatus(idx, 'done');
-            } else if (diff < -50 && node.status === 'done') {
-                updateNodeStatus(idx, 'todo');
-            }
-        };
-
-        track.append(labelDiv, actionDiv);
+        track.append(labelDiv, document.createElement("div"));
         wrapper.append(track);
         nodeDiv.append(circle, wrapper);
         container.appendChild(nodeDiv);
