@@ -458,7 +458,12 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
       <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
       <button id="histBtn" onclick="toggleHistory()" disabled>History</button>
       <button onclick="toggleSubjectProgress()" disabled>📘 Subject Progress</button>
-
+      <div class="idleBox" style="border: 1px solid #8b5cf6; background: #0f172a; border-left: 4px solid #8b5cf6; margin-top: 10px;">
+    <div style="font-size: 10px; color: #a78bfa; font-weight: 800; text-transform: uppercase; margin-bottom: 5px;">Study Shift Monitor</div>
+    <div id="currentShiftLabel" style="font-size: 13px; font-weight: bold; color: #fff;">No Shift Active</div>
+    <div id="shiftTimer" style="font-size: 20px; font-weight: 900; color: #38bdf8; margin: 5px 0; font-family: monospace;">00:00:00</div>
+    <button onclick="startNewShift()" style="background:#7c3aed; font-size: 11px; padding: 6px; width: 100%; border-radius: 6px; border: none; color: white; cursor: pointer;">Start New Shift</button>
+</div>
       <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
   </div>
 
@@ -2349,6 +2354,7 @@ if (!hasActiveSession) {
     loadTasks();
     renderLogs();
     updateProgress();
+    runShiftTimer();
 }
 
 window.dismissFeedback = async function() {
@@ -3651,25 +3657,30 @@ window.showByjusMap = function(subjectName) {
         const nodeDiv = document.createElement("div");
         nodeDiv.className = "map-node";
 
-        // 1. CIRCLE ICON LOGIC
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
         
+        // --- UPDATED MAP NODE STATUS COLORS & ICONS ---
         if (node.status === 'done') {
+            circle.style.background = "#22c55e"; // Green
+            circle.style.borderColor = "#86efac";
             circle.innerHTML = '<span style="font-size:32px; font-weight:900; color:white;">✔</span>';
         } else if (node.status === 'doing') {
-            circle.innerHTML = '<span style="font-size:18px;">▶</span>';
+            circle.style.background = "#facc15"; // Yellow
+            circle.style.borderColor = "#ffffff";
+            circle.innerHTML = '<span style="font-size:10px; font-weight:900; color:black; text-align:center; line-height:1;">IN<br>PROGRESS</span>';
         } else {
+            // "Yet to Done" state (Todo)
+            circle.style.background = "#1e293b";
+            circle.style.color = "#64748b";
             circle.innerText = idx + 1;
         }
         
-        // Toggle In-Progress by clicking circle
         circle.onclick = () => {
             if(node.status === 'todo') updateNodeStatus(idx, 'doing');
             else if(node.status === 'doing') updateNodeStatus(idx, 'todo');
         };
 
-        // 2. SLIDER WRAPPER
         const wrapper = document.createElement("div");
         wrapper.className = "node-content-wrapper";
 
@@ -3681,7 +3692,6 @@ window.showByjusMap = function(subjectName) {
         labelDiv.className = "slider-label";
         labelDiv.innerText = node.label;
         
-        // Visual text status colors
         if(node.status === 'todo') labelDiv.style.color = "#64748b";
         if(node.status === 'doing') labelDiv.style.color = "#facc15";
         if(node.status === 'done') labelDiv.style.color = "#86efac";
@@ -3690,19 +3700,13 @@ window.showByjusMap = function(subjectName) {
         actionDiv.className = "slider-action";
         actionDiv.innerText = "DONE";
 
-        // SLIDE GESTURE LOGIC
         let startX = 0;
         track.onmousedown = (e) => { startX = e.pageX; };
-        
         track.onmouseup = (e) => {
             let diff = startX - e.pageX;
-            
-            // If slide left more than 50px
             if (diff > 50 && node.status !== 'done') {
                 updateNodeStatus(idx, 'done');
-            } 
-            // If slide right on a completed item to undo
-            else if (diff < -50 && node.status === 'done') {
+            } else if (diff < -50 && node.status === 'done') {
                 updateNodeStatus(idx, 'todo');
             }
         };
@@ -3713,6 +3717,60 @@ window.showByjusMap = function(subjectName) {
         container.appendChild(nodeDiv);
     });
 };
+  window.startNewShift = function() {
+    const shiftNum = prompt("Enter Shift Number (1-4):", "1");
+    if (!shiftNum || shiftNum < 1 || shiftNum > 4) return;
+
+    const duration = prompt("Enter Shift Duration in Hours (1 or 2):", "2");
+    if (!duration || isNaN(duration)) return;
+
+    const durationMillis = parseFloat(duration) * 60 * 60 * 1000;
+    const endTime = Date.now() + durationMillis;
+
+    localStorage.setItem(key("CURRENT_SHIFT_LABEL"), "Shift #" + shiftNum);
+    localStorage.setItem(key("SHIFT_END_TS"), endTime);
+    
+    // Minimal update to firebase to sync shift status
+    if(currentUser) {
+        update(ref(db, `users/${currentUser.uid}`), {
+            SHIFT_LABEL: "Shift #" + shiftNum,
+            SHIFT_END: endTime
+        });
+    }
+    
+    runShiftTimer();
+};
+
+function runShiftTimer() {
+    const label = localStorage.getItem(key("CURRENT_SHIFT_LABEL")) || "No Active Shift";
+    const endTime = localStorage.getItem(key("SHIFT_END_TS"));
+    const displayLabel = document.getElementById("currentShiftLabel");
+    const displayTimer = document.getElementById("shiftTimer");
+
+    if (!displayLabel || !displayTimer) return;
+
+    displayLabel.innerText = label;
+
+    if (window.shiftInterval) clearInterval(window.shiftInterval);
+    if (!endTime) return;
+
+    window.shiftInterval = setInterval(() => {
+        const remaining = endTime - Date.now();
+        if (remaining <= 0) {
+            displayTimer.innerText = "SHIFT OVER";
+            displayTimer.style.color = "#ef4444";
+            clearInterval(window.shiftInterval);
+            return;
+        }
+
+        const h = Math.floor(remaining / 3600000);
+        const m = Math.floor((remaining % 3600000) / 60000);
+        const s = Math.floor((remaining % 60000) / 1000);
+        
+        displayTimer.innerText = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        displayTimer.style.color = "#38bdf8";
+    }, 1000);
+}
 window.toggleNodeStatus = function(nodeIdx) {
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
