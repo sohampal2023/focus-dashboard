@@ -3563,19 +3563,22 @@ window.generateMapFromBulk = function() {
 };
 let activeMapTimer = null; // Global reference for the countdown
 
+let activeMapTimer = null; 
+
 window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
     
-    // 1. Calculate Global Timing (6 Hours = 360 mins)
-    let totalTopicsToday = 0;
-    if (dailyMaps[today]) {
-        Object.values(dailyMaps[today]).forEach(subTopics => {
-            totalTopicsToday += subTopics.length;
-        });
-    }
-    const timePerTopicMins = totalTopicsToday > 0 ? Math.floor(360 / totalTopicsToday) : 45;
+    // 1. Calculate Total Sub-topics across ALL Subjects for the 6-hour budget
+    let allSubjects = Object.keys(dailyMaps[today] || {});
+    let totalGlobalTopics = 0;
+    allSubjects.forEach(s => {
+        totalGlobalTopics += dailyMaps[today][s].length;
+    });
+
+    // 6 Hours = 360 Minutes total for the day
+    const timePerTopic = totalGlobalTopics > 0 ? Math.floor(360 / totalGlobalTopics) : 30;
 
     const nodes = dailyMaps[today][subjectName];
     const container = document.getElementById("mapContainer");
@@ -3588,6 +3591,16 @@ window.showByjusMap = function(subjectName) {
         const nodeDiv = document.createElement("div");
         nodeDiv.className = "map-node";
 
+        // Determine Global Position for Shift Assignment
+        let previousTopicsCount = 0;
+        for (let s of allSubjects) {
+            if (s === subjectName) break;
+            previousTopicsCount += dailyMaps[today][s].length;
+        }
+        const globalIdx = previousTopicsCount + idx;
+        // Divide total work into 4 equal shifts
+        const shiftNum = Math.min(4, Math.floor((globalIdx / totalGlobalTopics) * 4) + 1);
+
         // --- Circle UI ---
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
@@ -3597,82 +3610,78 @@ window.showByjusMap = function(subjectName) {
             circle.innerHTML = '<span style="font-size:30px; color:white;">✔</span>';
         } else if (node.status === 'doing') {
             circle.style.background = "#facc15";
-            circle.innerHTML = '<span id="miniTimer" style="font-size:11px; font-weight:bold; color:black;">--:--</span>';
+            circle.innerHTML = '<span id="miniTimer" style="font-size:11px; font-weight:900; color:black;">--:--</span>';
         } else {
             circle.style.background = "#1e293b";
             circle.style.color = "#64748b";
             circle.innerText = idx + 1;
         }
 
-        // --- Content Wrapper ---
+        // --- Content Card ---
         const wrapper = document.createElement("div");
         wrapper.className = "node-content-wrapper";
         wrapper.style.height = "auto";
-        wrapper.style.padding = "10px";
+        wrapper.style.minWidth = "220px";
+        wrapper.style.padding = "12px";
 
-        // Calculate Shift Number
-        let globalIdx = 0;
-        let foundSub = false;
-        Object.keys(dailyMaps[today]).forEach(s => {
-            if (s === subjectName) foundSub = true;
-            if (!foundSub) globalIdx += dailyMaps[today][s].length;
-        });
-        const shiftNum = Math.floor(((globalIdx + idx) / totalTopicsToday) * 4) + 1;
-
-        // --- Inner UI based on Status ---
-        let innerHTML = `
-            <div style="display:flex; flex-direction:column; gap:4px; margin-left:15px;">
-                <div style="font-weight:bold; color:#fff; font-size:13px;">${node.label}</div>
-                <div style="font-size:10px; color:#38bdf8;">Shift ${shiftNum} • Target: ${timePerTopicMins}m</div>
+        let cardHTML = `
+            <div style="display:flex; flex-direction:column; gap:2px; margin-left:15px;">
+                <div style="font-weight:800; color:#fff; font-size:14px; text-transform:uppercase;">${node.label}</div>
+                <div style="font-size:10px; color:#38bdf8; font-weight:bold;">SHIFT ${shiftNum} • ALLOCATED: ${timePerTopic} MINS</div>
         `;
 
         if (node.status === 'todo') {
-            innerHTML += `
-                <div style="color:#94a3b8; font-size:11px; font-style:italic;">Status: Yet to Done</div>
-                <button onclick="handleNodeAction(${idx}, 'start', ${timePerTopicMins})" 
-                    style="width:80px; background:#0ea5e9; font-size:10px; padding:4px; margin-top:5px; border:none; border-radius:4px; color:white; cursor:pointer;">
-                    START
+            cardHTML += `
+                <div style="color:#64748b; font-size:11px; margin-top:4px;">Status: Yet to Done</div>
+                <button onclick="handleNodeAction(${idx}, 'start', ${timePerTopic})" 
+                    style="width:100px; background:#0ea5e9; font-size:11px; font-weight:bold; padding:6px; margin-top:8px; border:none; border-radius:4px; color:white; cursor:pointer;">
+                    START TASK
                 </button>
             `;
         } else if (node.status === 'doing') {
-            innerHTML += `
-                <div style="color:#facc15; font-size:11px; font-weight:bold;">Status: IN PROGRESS</div>
-                <div style="display:flex; gap:5px; margin-top:5px;">
+            cardHTML += `
+                <div style="color:#facc15; font-size:11px; font-weight:bold; margin-top:4px;">⚡ IN PROGRESS...</div>
+                <div style="display:flex; gap:8px; margin-top:8px;">
                     <button onclick="handleNodeAction(${idx}, 'done')" 
-                        style="background:#22c55e; flex:1; font-size:10px; padding:4px; border:none; border-radius:4px; color:white;">DONE</button>
+                        style="background:#16a34a; flex:1; font-weight:bold; font-size:10px; padding:6px; border:none; border-radius:4px; color:white; cursor:pointer;">DONE</button>
                     <button onclick="handleNodeAction(${idx}, 'abort')" 
-                        style="background:#ef4444; flex:1; font-size:10px; padding:4px; border:none; border-radius:4px; color:white;">ABORT</button>
+                        style="background:#dc2626; flex:1; font-weight:bold; font-size:10px; padding:6px; border:none; border-radius:4px; color:white; cursor:pointer;">ABORT</button>
                 </div>
             `;
-            startCountdown(timePerTopicMins); // Start the visual countdown
+            startCountdown(timePerTopic); 
         } else {
-            innerHTML += `<div style="color:#4ade80; font-size:11px; font-weight:bold;">Status: COMPLETED</div>`;
+            cardHTML += `
+                <div style="color:#4ade80; font-size:11px; font-weight:bold; margin-top:4px;">Status: COMPLETED</div>
+                <div style="font-size:9px; color:#86efac; font-style:italic;">Entry added to Subject Progress Table</div>
+            `;
         }
 
-        innerHTML += `</div>`;
-        wrapper.innerHTML = innerHTML;
-
+        cardHTML += `</div>`;
+        wrapper.innerHTML = cardHTML;
         nodeDiv.append(circle, wrapper);
         container.appendChild(nodeDiv);
     });
 };
-  window.handleNodeAction = function(idx, action, mins) {
+window.handleNodeAction = function(idx, action, mins) {
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     let nodes = dailyMaps[today][currentMapSubject];
 
     if (action === 'start') {
-        // Prevent multiple active tasks
-        Object.values(dailyMaps[today]).forEach(subTopics => {
-            subTopics.forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
+        // Stop any other active timers across all subjects
+        Object.keys(dailyMaps[today]).forEach(s => {
+            dailyMaps[today][s].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
         });
         nodes[idx].status = 'doing';
-        localStorage.setItem("ACTIVE_NODE_START", Date.now());
+        localStorage.setItem(key("MAP_TASK_START_TS"), Date.now());
     } else if (action === 'done') {
         nodes[idx].status = 'done';
-        saveAutomatedSubjectProgress(currentMapSubject, nodes[idx].label, "Verified Complete via Map");
+        // Automatic update to the main Subject Progress Table
+        saveAutomatedSubjectProgress(currentMapSubject, nodes[idx].label, "Finished via Journey Map");
+        if(activeMapTimer) clearInterval(activeMapTimer);
     } else if (action === 'abort') {
         nodes[idx].status = 'todo';
+        if(activeMapTimer) clearInterval(activeMapTimer);
     }
 
     dailyMaps[today][currentMapSubject] = nodes;
@@ -3684,28 +3693,24 @@ window.showByjusMap = function(subjectName) {
 function startCountdown(targetMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
     
-    const startTime = parseInt(localStorage.getItem("ACTIVE_NODE_START"));
+    const startTime = parseInt(localStorage.getItem(key("MAP_TASK_START_TS")));
     const durationMs = targetMins * 60 * 1000;
 
     activeMapTimer = setInterval(() => {
-        const elapsed = Date.now() - startTime;
-        const remaining = durationMs - elapsed;
-        const timerEl = document.getElementById("miniTimer");
+        const remaining = durationMs - (Date.now() - startTime);
+        const timerDisplay = document.getElementById("miniTimer");
 
-        if (!timerEl) {
-            clearInterval(activeMapTimer);
-            return;
-        }
+        if (!timerDisplay) { clearInterval(activeMapTimer); return; }
 
         if (remaining <= 0) {
-            timerEl.innerText = "00:00";
-            timerEl.style.color = "red";
+            timerDisplay.innerText = "OVER";
+            timerDisplay.style.color = "#ff4444";
             return;
         }
 
         const m = Math.floor(remaining / 60000);
         const s = Math.floor((remaining % 60000) / 1000);
-        timerEl.innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        timerDisplay.innerText = `${m}:${String(s).padStart(2, '0')}`;
     }, 1000);
 }
 window.startNewShift = function() {
