@@ -3708,47 +3708,54 @@ function startCountdown(targetMins) {
         timerEl.innerText = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
     }, 1000);
 }
- window.startNewShift = function() {
-    const shiftNum = prompt("Which Shift are you starting? (1-4):", "1");
-    if (!shiftNum) return;
-
-    const durationHrs = prompt("Enter Shift Duration (Hours):", "2");
-    if (!durationHrs || isNaN(durationHrs)) return;
-
-    const endTime = Date.now() + (parseFloat(durationHrs) * 3600000);
+window.startNewShift = function() {
+    const shiftNum = prompt("Enter Shift Number (1, 2, 3, or 4):");
     
-    localStorage.setItem(key("CURRENT_SHIFT"), shiftNum);
-    localStorage.setItem(key("SHIFT_END_TS"), endTime);
-
-    // Update Sidebar Shift Tracker
-    runShiftTimer();
-    
-    // Sync to DB
-    if(currentUser) {
-        update(ref(db, `users/${currentUser.uid}`), {
-            activeShift: shiftNum,
-            shiftEnds: endTime
-        });
+    // Check if user cancelled or entered nothing
+    if (shiftNum === null || shiftNum.trim() === "") {
+        alert("Shift cancelled. Please enter a number.");
+        return;
     }
+
+    const duration = prompt("Enter Shift Duration in Hours (e.g., 1 or 2):", "2");
+    if (!duration || isNaN(duration)) return;
+
+    const durationMillis = parseFloat(duration) * 60 * 60 * 1000;
+    const endTime = Date.now() + durationMillis;
+
+    // SAVE THE VALUES
+    localStorage.setItem(key("CURRENT_SHIFT_LABEL"), "Shift #" + shiftNum);
+    localStorage.setItem(key("SHIFT_END_TS"), endTime);
+    
+    // Force immediate UI update so it doesn't wait for the next second
+    document.getElementById("currentShiftLabel").innerText = "Shift #" + shiftNum;
+    
+    uploadData(); // Sync to Firebase
+    runShiftTimer(); // Start/Restart the countdown interval
 };
-
 function runShiftTimer() {
-    const endTime = localStorage.getItem(key("SHIFT_END_TS"));
-    const label = localStorage.getItem(key("CURRENT_SHIFT"));
-    const display = document.getElementById("shiftTimer");
-    const labelDisplay = document.getElementById("currentShiftLabel");
+    // Get the label, if it's null or missing, use a default string
+    let label = localStorage.getItem(key("CURRENT_SHIFT_LABEL"));
+    if (!label || label.includes("null")) {
+        label = "No Active Shift";
+    }
 
-    if (!endTime || !display) return;
+    const endTime = localStorage.getItem(key("SHIFT_END_TS"));
+    const displayLabel = document.getElementById("currentShiftLabel");
+    const displayTimer = document.getElementById("shiftTimer");
+
+    if (!displayLabel || !displayTimer) return;
+
+    displayLabel.innerText = label;
 
     if (window.shiftInterval) clearInterval(window.shiftInterval);
+    if (!endTime) return;
 
     window.shiftInterval = setInterval(() => {
         const remaining = endTime - Date.now();
-        labelDisplay.innerText = "Shift #" + label;
-
         if (remaining <= 0) {
-            display.innerText = "SHIFT COMPLETED";
-            display.style.color = "#ef4444";
+            displayTimer.innerText = "SHIFT OVER";
+            displayTimer.style.color = "#ef4444";
             clearInterval(window.shiftInterval);
             return;
         }
@@ -3756,8 +3763,9 @@ function runShiftTimer() {
         const h = Math.floor(remaining / 3600000);
         const m = Math.floor((remaining % 3600000) / 60000);
         const s = Math.floor((remaining % 60000) / 1000);
-        display.innerText = `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-        display.style.color = "#38bdf8";
+        
+        displayTimer.innerText = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        displayTimer.style.color = "#38bdf8";
     }, 1000);
 }
 window.toggleNodeStatus = function(nodeIdx) {
