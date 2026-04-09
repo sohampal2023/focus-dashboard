@@ -3564,8 +3564,6 @@ window.generateMapFromBulk = function() {
 };
 let activeMapTimer = null; // Global reference for the countdown
 
-let activeMapTimer = null; 
-
 window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
