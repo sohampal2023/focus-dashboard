@@ -3000,53 +3000,28 @@ const saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
       saveSubjectData(subjectData); 
       uploadData(); 
   };
-  // --- RENDER STANDARD TASKS ---
-  tasks.forEach(t => {
+ // Inside your loadTasks() function where you loop through tasks:
+tasks.forEach((t) => { // Make sure 't' is defined here
     const container = document.createElement("div");
     container.style.marginBottom = "4px";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = t.done;
+
+    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    const today = new Date().toLocaleDateString();
+
+    let mapBtnHtml = "";
+    // Check if map data exists for this specific task 't'
+    if (dailyMaps[today] && dailyMaps[today][t.name]) {
+        mapBtnHtml = `<button onclick="showByjusMap('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9;">🗺 VIEW MAP</button>`;
+    } else {
+        mapBtnHtml = `<button onclick="openSubjectJourney('${t.name}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155;">+ SET JOURNEY</button>`;
+    }
+
     const label = document.createElement("span");
+    // Ensure you use t.name correctly here
+    label.innerHTML = ` ${t.name} ${mapBtnHtml}`; 
     
-    const updateLabel = () => {
-       let display = t.name;
-       if(t.target) display += ` <span style='font-size:11px;color:#38bdf8'>(${t.target})</span>`;
-       if(t.done){
-           label.innerHTML = ` ${display} <span style="font-size:12px;color:#94a3b8">[C: ${t.comment} | Due: ${t.due}]</span>`;
-       } else {
-           label.innerHTML = " " + display;
-       }
-    };
-    updateLabel();
-    
-    cb.onchange = () => {
-      if (!confirm(`CONFIRM TASK:\n\nMark '${t.name}' as ${cb.checked ? 'COMPLETED' : 'INCOMPLETE'}?`)) { 
-          cb.checked = !cb.checked; 
-          return; 
-      }
-      
-      if(cb.checked){
-        const remark = prompt(`What did you cover in ${t.name}?`, " ");
-        const dueVal = prompt(`Any pending work left?`, " ");
-        t.comment = remark || "-";
-        t.due = dueVal || "-";
-        
-        // CALL THE UPDATED SAVE FUNCTION
-        saveAutomatedSubjectProgress(t.name, t.comment, t.due);
-        
-      } else { 
-          t.comment = ""; 
-          t.due = ""; 
-      }
-      t.done = cb.checked;
-      updateLabel();
-      updateLogTask(t.name, t.done, t.comment, t.due);
-      save(tasks, extras);
-    };
-    container.append(cb, label);
-    tList.append(container);
-  });
+    // ... rest of your checkbox logic
+});
   
   // --- RENDER EXTRA WORK ---
   extras.forEach(e => {
