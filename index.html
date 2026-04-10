@@ -3343,7 +3343,7 @@ window.generateMapFromBulk = function() {
     showByjusMap(currentMapSubject);
 };
 let activeMapTimer = null; 
-window.showByjusMap = function(subjectName) {window.showByjusMap = function(subjectName) {
+window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
