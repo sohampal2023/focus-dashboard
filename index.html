@@ -2049,9 +2049,11 @@ async function initStudentDashboard() {
     document.getElementById("adminBox").classList.add("hidden");
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
+    document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
     // 2. Real-time Listeners for Admin Warnings, Leaves, Feedback, and Notices
+    // Listener for Admin REJECT/WARNING Alert
     onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
         const msg = snapshot.val();
         const popup = document.getElementById("rejectedPopup");
@@ -2064,39 +2066,39 @@ async function initStudentDashboard() {
         }
     });
 
+    // Listener for Leave Request Status updates
     onValue(ref(db, `users/${currentUser.uid}/leaveRequest`), (snap) => {
         checkLeaveStatus({ leaveRequest: snap.val() });
     });
 
+    // Listener for Admin Feedback/Daily Review
     onValue(ref(db, `users/${currentUser.uid}/newFeedback`), (snap) => {
         const msg = snap.val();
         if (msg) {
             document.getElementById("adminFeedbackBox").classList.remove("hidden");
             document.getElementById("adminFeedbackText").innerText = msg;
-            downloadData(currentUser.uid).then(data => {
-                if(data.HISTORY) localStorage.setItem(key("HISTORY"), data.HISTORY);
-            });
         }
     });
 
+    // Listener for Upcoming Exams
     onValue(ref(db, `users/${currentUser.uid}/UPCOMING_EXAMS`), (snap) => {
         const box = document.getElementById("examBox");
         const list = document.getElementById("examList");
         if (!snap.exists()) { box.style.display = "none"; return; }
-        const exams = snap.val().slice(0, 20); 
+        const exams = snap.val();
         const today = new Date(); today.setHours(0, 0, 0, 0);
         const active = exams.map(e => ({ ...e, daysLeft: Math.ceil((e.date - today.getTime()) / (24 * 60 * 60 * 1000)) }))
                             .filter(e => e.daysLeft >= 0).sort((a, b) => a.daysLeft - b.daysLeft);
         if (active.length === 0) { box.style.display = "none"; return; }
         box.style.display = "block";
-        list.style.maxHeight = "250px"; list.style.overflowY = "auto";
         list.innerHTML = active.map(e => `
-            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed #334155; align-items: center;">
-                <span style="font-weight: 500; color: #f8fafc; font-size: 13px;">${e.name}</span>
-                <span style="color:#facc15; font-weight:bold; font-size: 12px; white-space: nowrap; margin-left: 10px;">${e.daysLeft} day${e.daysLeft !== 1 ? "s" : ""} left</span>
+            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed #334155;">
+                <span>${e.name}</span>
+                <span style="color:#facc15; font-weight:bold;">${e.daysLeft} days left</span>
             </div>`).join("");
     });
 
+    // Listener for Broadcast Notices
     onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
         if (!snapshot.exists()) return;
         const notices = snapshot.val();
@@ -2105,7 +2107,7 @@ async function initStudentDashboard() {
         let latestNotice = null;
         Object.values(notices).forEach(n => { if (!latestNotice || n.time > latestNotice.time) latestNotice = n; });
         if (latestNotice && latestNotice.time > lastSeen) {
-            document.getElementById("noticePopupMsg").innerText = `${latestNotice.title}: ${latestNotice.message.substring(0, 80)}...`;
+            document.getElementById("noticePopupMsg").innerText = `${latestNotice.title}: ${latestNotice.message.substring(0, 50)}...`;
             document.getElementById("noticePopup").classList.remove("hidden");
             await update(ref(db, `users/${currentUser.uid}`), { lastSeenNoticeTime: latestNotice.time });
         }
@@ -2115,24 +2117,23 @@ async function initStudentDashboard() {
     const serverData = await downloadData(currentUser.uid);
     if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
         const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
-        document.body.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;text-align:center;background:#020617;color:#e5e7eb;">
-            <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">TERMINATED</h1>
-            <h2 style="color:#f87171;margin-top:10px">${serverData.lockoutReason || "Admin Action"}</h2>
-            <p style="margin-top:10px">Time remaining: ${minLeft} minutes</p>
-            <div style="display:flex; gap:12px; margin-top:20px">
-                <button onclick="location.reload()" style="padding:10px 24px;border-radius:8px;background:#1e293b;color:white;border:1px solid #334155">Try Again</button>
-                <button onclick="logoutFromTermination()" style="padding:10px 24px;border-radius:8px;background:#7f1d1d;color:white;border:1px solid #ef4444">Logout</button>
-            </div></div>`;
+        document.body.innerHTML = `
+            <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;text-align:center;background:#020617;color:#e5e7eb;padding:20px;">
+                <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">TERMINATED</h1>
+                <h2 style="color:#f87171;margin-top:10px">${serverData.lockoutReason || "Admin Action"}</h2>
+                <p style="margin-top:10px">System Lock Active. Time remaining: ${minLeft} minutes</p>
+                <button onclick="logoutFromTermination()" style="margin-top:20px; padding:12px 24px; background:#7f1d1d; border:none; color:white; border-radius:8px; cursor:pointer;">Logout</button>
+            </div>`;
         return; 
     }
 
-    // 4. --- DAILY SHIFT GOAL PROMPT (NEW) ---
+    // 4. --- AUTOMATIC SHIFT GOAL PROMPT (FIRST LOGIN OF DAY) ---
     const todayStr = new Date().toLocaleDateString();
-    let dailyShifts = localStorage.getItem(key("DAILY_SHIFT_COUNT"));
     let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
 
     if (goalDate !== todayStr) {
-        let askedShifts = prompt("First Login Today: How many SHIFTS (2 hours each) will you complete today?", "3");
+        // This only runs on the very first login of the day
+        let askedShifts = prompt("First Login Today: How many SHIFTS (2 hours each) will you conduct today?", "3");
         if (!askedShifts || isNaN(askedShifts)) askedShifts = "3"; 
         
         localStorage.setItem(key("DAILY_SHIFT_COUNT"), askedShifts);
@@ -2144,67 +2145,39 @@ async function initStudentDashboard() {
         });
     }
 
-    // 5. Monthly Leave Accrual Logic
-    const date = new Date();
-    const currentMonthKey = `${date.getFullYear()}-${date.getMonth()}`;
-    let leaveBalance = serverData.leaveBalance !== undefined ? serverData.leaveBalance : 6;
-    let lastAccrual = serverData.lastAccrual || "";
-    if (lastAccrual !== currentMonthKey) {
-        let carry = serverData.medicalCarry || 0;
-        leaveBalance = leaveBalance + 6 - carry;
-        await update(ref(db, `users/${currentUser.uid}`), { leaveBalance: leaveBalance, medicalCarry: 0, lastAccrual: currentMonthKey });
-        serverData.leaveBalance = leaveBalance;
-    }
-    const balDisplay = document.getElementById("leaveBalanceDisplay");
-    if(balDisplay) balDisplay.innerText = `Leave Bal: ${leaveBalance}`;
-
-    // 6. Session and Watchdog Initialization
-    checkLeaveStatus(serverData);
+    // 5. Initialize Watchdog and Session Logs
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
     dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
     document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
 
-    if (logs.length && logs[logs.length - 1].reason === "Pending") {
-        const userReason = prompt("Reason for previous break?", "Bio Break");
-        logs[logs.length - 1].reason = userReason || "Bio Break";
-        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-        uploadData();
-    }
-
+    // Handle session recovery if user didn't logout properly
     if (!logs.length || logs[logs.length - 1].logoutTS !== null) {
-        logs.push({ login: now(), loginTS: Date.now(), logout: "-", logoutTS: null, reason: "-", completed: [] });
+        logs.push({ 
+            login: new Date().toLocaleString(), 
+            loginTS: Date.now(), 
+            logout: "-", 
+            logoutTS: null, 
+            reason: "-", 
+            completed: [] 
+        });
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // 7. Component Loading
+    // 6. Final Dashboard Activation
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
     document.querySelector("button[onclick='toggleSubjectProgress()']").disabled = false;
     
-    loadSubjectList();
-    uploadData(); 
-
-    const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
-    if (activeTest) {
-        if (activeTest.status === "EXPIRED") { finishTestSequence(activeTest, true); return; }
-        if (confirm(`Resume Mock Test: ${activeTest.name}?`)) {
-            restoreTestUI(activeTest);
-            const elapsed = (Date.now() - activeTest.startTime) / 1000;
-            const remaining = (activeTest.durationMins * 60) - elapsed;
-            startIdle(remaining > 0 ? remaining : 1);
-            loadTasks(); renderLogs(); updateProgress(); return;
-        } else { finishTestSequence(activeTest, true); return; }
-    }
-
-    startIdle(1800);
-    setupTasks();
-    loadTasks();
-    renderLogs();
-    updateProgress();
-    runShiftTimer();
+    startIdle(1800);      // Start 30min Watchdog
+    loadSubjectList();    // Populate progress dropdowns
+    loadTasks();          // Load main task list
+    renderLogs();         // Load today's activity logs
+    updateProgress();     // Initialize Speedometer
+    runShiftTimer();      // Initialize current shift countdown
+    uploadData();         // Final sync to Firebase
 }
 
 window.dismissFeedback = async function() {
@@ -3401,37 +3374,32 @@ window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
-    
+    const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
+
     let allSubjects = Object.keys(dailyMaps[today] || {});
     let totalGlobalTopics = 0;
     allSubjects.forEach(s => { totalGlobalTopics += dailyMaps[today][s].length; });
 
-    // Calculate base time from shifts (Auto-calculated, default 2hr per shift)
-    const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
     const baseMins = Math.floor((shiftCount * 120) / totalGlobalTopics);
-
     const nodes = dailyMaps[today][subjectName];
     const container = document.getElementById("mapContainer");
     
     container.innerHTML = "";
-    container.style.display = "flex";
-    container.style.flexDirection = "column";
-    container.style.alignItems = "center";
-    container.style.gap = "45px"; 
-    container.style.padding = "50px 0";
-    
     document.getElementById("currentMapSubject").innerText = subjectName;
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
     nodes.forEach((node, idx) => {
-        const nodeRow = document.createElement("div");
-        nodeRow.style.display = "flex";
-        nodeRow.style.alignItems = "center";
-        nodeRow.style.width = "95%";
-        nodeRow.style.maxWidth = "500px";
-        nodeRow.style.position = "relative";
+        const currentMins = node.dynamicMins || baseMins;
+        let timeHistoryHTML = "";
 
-        // Global Shift Calculation
+        // RENDER STRIKETHROUGH HISTORY
+        if (node.history && node.history.length > 0) {
+            node.history.forEach(prev => {
+                timeHistoryHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px; opacity: 0.6;">${prev}m</span>`;
+            });
+        }
+        timeHistoryHTML += `<span style="color: #38bdf8; font-weight: 800;">${currentMins}m</span>`;
+
         let globalIndex = 0;
         let foundSub = false;
         allSubjects.forEach(sub => {
@@ -3440,124 +3408,126 @@ window.showByjusMap = function(subjectName) {
         });
         const shiftNum = Math.floor(((globalIndex + idx) / totalGlobalTopics) * shiftCount) + 1;
 
-        // --- TIME DISPLAY WITH STRIKE-THROUGH ---
-        const currentMins = node.dynamicMins || baseMins;
-        let timeHistoryHTML = "";
-        if (node.history && node.history.length > 0) {
-            node.history.forEach(h => {
-                timeHistoryHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 8px;">${h}m</span>`;
-            });
-        }
-        timeHistoryHTML += `<span style="color: #38bdf8; font-weight: 800;">${currentMins}m</span>`;
+        const nodeRow = document.createElement("div");
+        nodeRow.style.cssText = "display:flex; align-items:center; width:95%; max-width:500px; position:relative; margin-bottom:30px;";
 
-        // Circle UI
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
-        circle.style.width = "56px"; circle.style.height = "56px"; circle.style.borderRadius = "50%";
-        circle.style.display = "flex"; circle.style.alignItems = "center"; circle.style.justifyContent = "center";
-        circle.style.flexShrink = "0"; circle.style.marginRight = "25px";
+        circle.style.cssText = "width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-right:20px; font-weight:bold; border:3px solid #1e293b;";
         
         if (node.status === 'done') {
-            circle.style.background = "#22c55e";
-            circle.innerHTML = '<span style="font-size:28px; color:white;">✔</span>';
+            circle.style.background = "#22c55e"; circle.innerHTML = "✔";
         } else if (node.status === 'doing') {
-            circle.style.background = "#facc15";
-            circle.innerHTML = '<span id="miniTimer" style="font-size:12px; font-weight:900; color:black;">--:--</span>';
+            circle.style.background = "#facc15"; circle.innerHTML = '<span id="miniTimer" style="font-size:10px; color:#000;">--:--</span>';
         } else {
-            circle.style.background = "#1e293b"; circle.style.border = "2px solid #334155";
-            circle.innerText = idx + 1;
+            circle.style.background = "#1e293b"; circle.innerText = idx + 1;
         }
 
         const wrapper = document.createElement("div");
-        wrapper.style.flexGrow = "1"; wrapper.style.background = "#0f172a"; 
-        wrapper.style.border = "1px solid #334155"; wrapper.style.borderRadius = "14px";
-        wrapper.style.padding = "18px";
-
-        let cardHTML = `
+        wrapper.style.cssText = "flex-grow:1; background:#0f172a; border:1px solid #334155; border-radius:12px; padding:15px;";
+        
+        wrapper.innerHTML = `
             <div style="display:flex; flex-direction:column; gap:4px;">
-                <div style="font-weight:800; color:#fff; font-size:15px; text-transform:uppercase;">${node.label}</div>
-                <div style="font-size:11px; font-weight:bold;">
-                    <span style="color:#94a3b8;">Shift ${shiftNum} | </span> ${timeHistoryHTML}
+                <div style="font-weight:800; color:#fff; font-size:14px; text-transform:uppercase;">${node.label}</div>
+                <div style="font-size:11px; font-weight:bold; display:flex; flex-wrap:wrap; align-items:center;">
+                    <span style="color:#94a3b8; margin-right:8px;">Shift ${shiftNum} |</span>
+                    ${timeHistoryHTML}
                 </div>
+                <div style="margin-top:10px;">
+                    ${node.status === 'todo' ? 
+                        `<button onclick="handleNodeAction(${idx}, 'start', ${currentMins})" style="background:#0ea5e9; border:none; color:white; padding:6px 15px; border-radius:4px; cursor:pointer; font-size:10px; font-weight:bold;">START</button>` :
+                      node.status === 'doing' ? 
+                        `<button onclick="handleNodeAction(${idx}, 'done', ${currentMins})" style="background:#16a34a; border:none; color:white; padding:6px 15px; border-radius:4px; cursor:pointer; font-size:10px; font-weight:bold; margin-right:5px;">DONE</button>
+                         <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; border:none; color:white; padding:6px 15px; border-radius:4px; cursor:pointer; font-size:10px; font-weight:bold;">ABORT</button>` :
+                        `<span style="color:#4ade80; font-size:11px; font-weight:bold;">COMPLETED at ${node.completedAt}</span>`
+                    }
+                </div>
+            </div>
         `;
 
-        if (node.status === 'todo') {
-            cardHTML += `<button onclick="handleNodeAction(${idx}, 'start', ${currentMins})" style="width:90px; background:#0ea5e9; font-weight:bold; font-size:10px; padding:7px; margin-top:10px; border:none; border-radius:6px; color:white; cursor:pointer;">START</button>`;
-        } else if (node.status === 'doing') {
-            cardHTML += `
-                <div style="display:flex; gap:10px; margin-top:10px;">
-                    <button onclick="handleNodeAction(${idx}, 'done', ${currentMins})" style="background:#16a34a; flex:1; font-weight:bold; font-size:11px; padding:10px; border:none; border-radius:6px; color:white; cursor:pointer;">DONE</button>
-                    <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; flex:1; font-weight:bold; font-size:11px; padding:10px; border:none; border-radius:6px; color:white; cursor:pointer;">ABORT</button>
-                </div>`;
-            setTimeout(() => startCountdown(currentMins), 50); 
-        } else {
-            cardHTML += `<div style="color:#4ade80; font-size:12px; font-weight:bold; margin-top:8px;">COMPLETED ✔<br><span style="color:#86efac; font-size:10px;">at ${node.completedAt || ""}</span></div>`;
-        }
-
-        cardHTML += `</div>`;
-        wrapper.innerHTML = cardHTML;
         nodeRow.append(circle, wrapper);
         container.appendChild(nodeRow);
+        if (node.status === 'doing') startCountdown(currentMins);
     });
 };
-  window.handleNodeAction = function(idx, action, currentAllocatedMins) {
+  /* --- FULL UPDATED handleNodeAction FUNCTION --- */
+window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    
+    // Ensure the data structure for today and the subject exists
+    if (!dailyMaps[today]) dailyMaps[today] = {};
     let nodes = dailyMaps[today][currentMapSubject];
+    if (!nodes) return;
 
     if (action === 'start') {
-        // Reset any other active tasks
+        // 1. Reset any other 'doing' state across ALL subjects to 'todo'
+        // This ensures only one topic is active at a time across the whole system
         Object.keys(dailyMaps[today]).forEach(s => {
-            dailyMaps[today][s].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
+            dailyMaps[today][s].forEach(n => { 
+                if(n.status === 'doing') n.status = 'todo'; 
+            });
         });
+
+        // 2. Set current node to 'doing'
         nodes[idx].status = 'doing';
+        
+        // 3. Mark the exact start time in milliseconds
         localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
         
     } else if (action === 'done') {
         const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
-        const actualUsedMins = Math.floor((Date.now() - startTS) / 60000);
+        // Calculate minutes used (minimum 1 min to avoid division by zero errors)
+        const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
         
-        // Difference: Positive = Saved time, Negative = Went over time
+        // Calculate the difference: 
+        // Positive = Time saved (will increase others)
+        // Negative = Overtime (will decrease others)
         const difference = currentAllocatedMins - actualUsedMins; 
 
+        // 4. Update current node status to 'done'
         nodes[idx].status = 'done';
-        const now = new Date();
-        nodes[idx].completedAt = now.getHours().toString().padStart(2, '0') + ":" + 
-                                 now.getMinutes().toString().padStart(2, '0') + ":" + 
-                                 now.getSeconds().toString().padStart(2, '0');
+        nodes[idx].completedAt = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
 
-        // Find ALL remaining 'todo' topics across every subject today
+        // 5. COLLECT ALL REMAINING TODOs ACROSS ALL SUBJECTS FOR REDISTRIBUTION
         let remainingTasks = [];
         Object.keys(dailyMaps[today]).forEach(subKey => {
             dailyMaps[today][subKey].forEach((n, i) => {
-                if (n.status === 'todo') remainingTasks.push({ s: subKey, id: i });
+                if (n.status === 'todo') {
+                    remainingTasks.push({ s: subKey, id: i });
+                }
             });
         });
 
-        // --- REDISTRIBUTION LOGIC ---
+        // 6. REDISTRIBUTE TIME
         if (remainingTasks.length > 0 && difference !== 0) {
+            // Divide the difference (gain or loss) equally among all pending tasks
             const adjustment = Math.floor(difference / remainingTasks.length);
             
-            remainingTasks.forEach(task => {
-                let targetNode = dailyMaps[today][task.s][task.id];
-                
-                // Ensure history exists
-                if (!targetNode.history) targetNode.history = [];
-                
-                const oldVal = targetNode.dynamicMins || currentAllocatedMins;
-                
-                // If there's a change, strike out the old and set the new
-                if (adjustment !== 0) {
-                    targetNode.history.push(oldVal); // Store for strike-through display
-                    targetNode.dynamicMins = Math.max(5, oldVal + adjustment); // Min limit 5m
-                }
-            });
+            if (adjustment !== 0) {
+                remainingTasks.forEach(task => {
+                    let targetNode = dailyMaps[today][task.s][task.id];
+                    
+                    // Initialize history array if it doesn't exist
+                    if (!targetNode.history) targetNode.history = [];
+                    
+                    // Capture current value to be struck out in the UI
+                    const currentVal = targetNode.dynamicMins || currentAllocatedMins;
+                    
+                    // Push to history for strikethrough display
+                    targetNode.history.push(currentVal); 
+                    
+                    // Update the dynamic minutes (Set a floor of 5 minutes so tasks don't vanish)
+                    targetNode.dynamicMins = Math.max(5, currentVal + adjustment);
+                });
+            }
         }
 
+        // 7. Cleanup timers
         if(activeMapTimer) clearInterval(activeMapTimer);
         localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
 
-        // Auto-tick main sidebar
+        // 8. Auto-tick main sidebar tasks if all sub-topics are finished
         const allFinished = nodes.every(n => n.status === 'done');
         if (allFinished) {
             let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
@@ -3569,16 +3539,19 @@ window.showByjusMap = function(subjectName) {
         }
 
     } else if (action === 'abort') {
+        // Simply revert status to todo and stop timers
         nodes[idx].status = 'todo';
         if(activeMapTimer) clearInterval(activeMapTimer);
         localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
     }
 
+    // Save final state back to LocalStorage and Firebase
     dailyMaps[today][currentMapSubject] = nodes;
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
-    uploadData();
-    showByjusMap(currentMapSubject);
-    loadTasks();
+    
+    uploadData();         // Sync to Firebase
+    showByjusMap(currentMapSubject); // Refresh Map UI
+    loadTasks();          // Refresh Sidebar UI
 };
 function startCountdown(targetMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
