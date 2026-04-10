@@ -3463,11 +3463,11 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
         nodes[idx].status = 'done';
         nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-        // Send to Progress Table
+        // 1. PROGRESS TABLE LOG
         const due = nodes.filter(n => n.status === 'todo').map(n => n.label).join(", ") || "Goal Reached";
         saveAutomatedSubjectProgress(currentMapSubject, `${nodes[idx].label} (${actualUsedMins}m)`, due);
 
-        // GLOBAL REDISTRIBUTE
+        // 2. GLOBAL REDISTRIBUTION
         let remainingTasks = [];
         Object.keys(dailyMaps[today]).forEach(subKey => {
             dailyMaps[today][subKey].forEach((n, i) => {
@@ -3481,8 +3481,6 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
                 let target = dailyMaps[today][task.sub][task.index];
                 const oldVal = target.dynamicMins || currentAllocatedMins;
                 const newVal = Math.max(5, Math.round(oldVal + adjustment));
-
-                // ONLY STRIKE IF CHANGED
                 if (newVal !== Math.round(oldVal)) {
                     if (!target.history) target.history = [];
                     target.history.push(Math.round(oldVal));
@@ -3491,14 +3489,38 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
             });
         }
 
-        // Auto-tick sidebar
-        const allFinished = nodes.every(n => n.status === 'done');
-        if (allFinished) {
+        // 3. --- CRITICAL: SIDEBAR AUTO-TICK LOGIC ---
+        const allSubtopicsFinished = nodes.every(n => n.status === 'done');
+        
+        if (allSubtopicsFinished) {
             let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-            tasks.forEach(t => { if (t.name === currentMapSubject) t.done = true; });
+            let extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+            
+            // Clean names for comparison (remove spaces/case issues)
+            const targetName = currentMapSubject.trim().toLowerCase();
+
+            // Check Assigned Tasks
+            tasks.forEach(t => {
+                if (t.name.trim().toLowerCase() === targetName) {
+                    t.done = true;
+                }
+            });
+
+            // Check Extra Work
+            extras.forEach(e => {
+                if (e.name.trim().toLowerCase() === targetName) {
+                    e.done = true;
+                }
+            });
+
             localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
+            localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
         }
 
+        if(activeMapTimer) clearInterval(activeMapTimer);
+        localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
+    } else if (action === 'abort') {
+        nodes[idx].status = 'todo';
         if(activeMapTimer) clearInterval(activeMapTimer);
         localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
     }
@@ -3507,7 +3529,7 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
     uploadData();
     showByjusMap(currentMapSubject);
-    loadTasks();
+    loadTasks(); // This re-renders the sidebar to show the tick
 };
 function startCountdown(targetMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
