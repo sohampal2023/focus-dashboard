@@ -2443,44 +2443,52 @@ window.loadSubjectList = function() {
   });
 }
 
+/* --- HELPER: AUTOMATED SUBJECT LOGGING --- */
+window.saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
+    const subjectData = getSubjectData(); 
+    if(!subjectData[subject]) subjectData[subject] = [];
+    
+    // Check if entry for today already exists to prevent duplicate rows for the same action
+    subjectData[subject].push({
+        id: Date.now(), 
+        date: new Date().toLocaleDateString(),
+        covered: covered || "-",
+        uncovered: uncovered || "-"
+    });
+    
+    saveSubjectData(subjectData); 
+    uploadData(); // Sync to Firebase
+};
+
+/* --- UI: RENDER SUBJECT TABLE --- */
 window.renderSubjectTable = function(subject) {
-  const tbody = document.getElementById("subjectTableBody");
-  const data = getSubjectData();
+    const tbody = document.getElementById("subjectTableBody");
+    const data = getSubjectData();
 
-  if (!subject || !data[subject] || data[subject].length === 0) {
-    tbody.innerHTML = `
-      <tr>
-        <td colspan="3" style="color:#94a3b8">
-          No data available for this subject
-        </td>
-      </tr>
-    `;
-    return;
-  }
+    if (!subject || !data[subject] || data[subject].length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" style="color:#94a3b8">No data recorded for this subject</td></tr>`;
+        return;
+    }
 
-  tbody.innerHTML = "";
+    tbody.innerHTML = "";
+    // Show newest records at the top
+    const rows = [...data[subject]].reverse();
 
-  // Reverse so newest is top
-  const rows = [...data[subject]].reverse();
-
-  rows.forEach(row => {
-    tbody.innerHTML += `
-  <tr>
-    <td>${row.date}</td>
-    <td style="text-align:left">${row.covered}</td>
-    <td style="text-align:left;color:#fca5a5">${row.uncovered}</td>
-    <td>
-      <button
-        style="font-size:11px;background:#7f1d1d"
-        onclick="requestSubjectDelete('${subject.replace(/'/g, "\\'")}', ${row.id || 0})">
-        Request Delete
-      </button>
-    </td>
-  </tr>
-`;
-
-  });
-}
+    rows.forEach(row => {
+        tbody.innerHTML += `
+            <tr>
+                <td style="color:#94a3b8; font-size:12px;">${row.date}</td>
+                <td style="text-align:left; color:#86efac;">${row.covered}</td>
+                <td style="text-align:left; color:#fca5a5; font-size:12px;">${row.uncovered}</td>
+                <td>
+                    <button style="background:#7f1d1d; font-size:10px; padding:4px 8px; width:auto;" 
+                        onclick="requestSubjectDelete('${subject.replace(/'/g, "\\'")}', ${row.id})">
+                        Delete
+                    </button>
+                </td>
+            </tr>`;
+    });
+};
 
 
 // --- HISTORY LOGIC ---
