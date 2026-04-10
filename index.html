@@ -3344,7 +3344,7 @@ window.generateMapFromBulk = function() {
 };
 let activeMapTimer = null; 
 
-/* --- 1. THE MAP RENDERER (STRIKE-THROUGH UI) --- */
+/* --- 1. THE MAP RENDERER (WITH STRIKE-THROUGH & GLOBAL BALANCE) --- */
 window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
@@ -3355,7 +3355,10 @@ window.showByjusMap = function(subjectName) {
     let totalGlobalTopics = 0;
     allSubjects.forEach(s => { totalGlobalTopics += dailyMaps[today][s].length; });
 
-    const baseMins = totalGlobalTopics > 0 ? Math.floor((shiftCount * 120) / totalGlobalTopics) : 0;
+    // Calculate the absolute target time for the day in minutes
+    const totalDayMins = shiftCount * 120;
+    const baseMins = totalGlobalTopics > 0 ? Math.floor(totalDayMins / totalGlobalTopics) : 0;
+    
     const nodes = dailyMaps[today][subjectName] || [];
     const container = document.getElementById("mapContainer");
     
@@ -3364,9 +3367,10 @@ window.showByjusMap = function(subjectName) {
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
     nodes.forEach((node, idx) => {
+        // OBEYING LOGIC: If a new topic was loaded, node.dynamicMins might not exist yet.
+        // We use baseMins which is globally adjusted based on the current total topic count.
         const currentMins = node.dynamicMins || baseMins;
         
-        // BUILD STRIKE-THROUGH HISTORY
         let timeDisplayHTML = "";
         if (node.history && node.history.length > 0) {
             node.history.forEach(h => {
@@ -3419,7 +3423,7 @@ window.showByjusMap = function(subjectName) {
     });
 };
 
-/* --- 2. THE DYNAMIC REDISTRIBUTION LOGIC --- */
+/* --- 2. THE DYNAMIC REDISTRIBUTION LOGIC (OBEYING GLOBAL CHANGE) --- */
 window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
@@ -3440,26 +3444,26 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
         nodes[idx].status = 'done';
         nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-        // REDISTRIBUTE ACROSS ALL REMAINING TOPICS
+        // Identify ALL remaining TODOs globally
         let remainingTasks = [];
         Object.keys(dailyMaps[today]).forEach(subKey => {
             dailyMaps[today][subKey].forEach((n, i) => {
-                if (n.status === 'todo') remainingTasks.push({ s: subKey, id: i });
+                if (n.status === 'todo') remainingTasks.push({ sub: subKey, index: i });
             });
         });
 
+        // Global Redistribution
         if (remainingTasks.length > 0 && difference !== 0) {
-            const adjustment = Math.floor(difference / remainingTasks.length);
+            const adjustment = difference / remainingTasks.length;
             remainingTasks.forEach(task => {
-                let targetNode = dailyMaps[today][task.s][task.id];
+                let targetNode = dailyMaps[today][task.sub][task.index];
                 if (!targetNode.history) targetNode.history = [];
                 const oldVal = targetNode.dynamicMins || currentAllocatedMins;
-                if (adjustment !== 0) {
-                    targetNode.history.push(oldVal); 
-                    targetNode.dynamicMins = Math.max(5, oldVal + adjustment);
-                }
+                targetNode.history.push(Math.round(oldVal)); 
+                targetNode.dynamicMins = Math.max(5, Math.round(oldVal + adjustment));
             });
         }
+
         if(activeMapTimer) clearInterval(activeMapTimer);
         localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
 
@@ -3475,7 +3479,6 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     showByjusMap(currentMapSubject);
     loadTasks();
 };
- 
 function startCountdown(targetMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
     
