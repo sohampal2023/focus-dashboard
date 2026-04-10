@@ -3044,7 +3044,6 @@ window.openDayEnd = function() {
 
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
-
 function finalDayEnd() {
     if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
 
@@ -3085,29 +3084,33 @@ function finalDayEnd() {
     if (history.length > 5) history.shift();
     localStorage.setItem(key("HISTORY"), JSON.stringify(history));
     
-    // 4. --- CRITICAL: RESET DAILY MARKERS & JOURNEY DATA ---
+    // 4. --- RESET DAILY MARKERS ---
     localStorage.removeItem(key("DAILY_GOAL_DATE")); 
     localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
     localStorage.removeItem(key("SHIFT_END_TS"));
     localStorage.removeItem(key("CURRENT_SHIFT_LABEL"));
-    
-    // NEW: Also clear the Map Journey for all subjects and any running task timer
     localStorage.removeItem(MAP_STORAGE_KEY()); 
     localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
     if (activeMapTimer) clearInterval(activeMapTimer);
 
-    // 5. Cleanup session data
+    // 5. --- CRITICAL: RESET PENALTY AND STRIKES TO 0 ---
+    penalty = 0;
+    idleStrikes = 0;
+    dailyTimeouts = 0;
+    localStorage.setItem(key("PENALTY"), "0");
+    localStorage.setItem(key("IDLE_STRIKES"), "0");
+    localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
+
+    // 6. Cleanup session data
     const carried = tasks.filter(t => !t.done);
     localStorage.setItem(key("TASKS"), JSON.stringify(carried)); 
     localStorage.setItem(key("EXTRA"), "[]");
     localStorage.removeItem(key("LOGS"));
-    localStorage.setItem(key("IDLE_STRIKES"), "0");
-    localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
     
-    // 6. Sync to Firebase
+    // 7. Sync to Firebase (penalty is now 0 in the payload)
     uploadData(); 
 
-    // 7. Generate Report and Lock Screen
+    // 8. Generate Report and Lock Screen
     const reportHTML = `
         <div style="padding:20px; max-width:500px; margin:0 auto;">
             <div class="card" style="background:#1e1b4b; border-color:#6366f1; text-align:center; padding:30px;">
