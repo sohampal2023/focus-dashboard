@@ -2044,34 +2044,38 @@ async function loadNotices() {
 }
 
 async function initStudentDashboard() {
-    // 1. UI Setup: Reveal Student View and Controls
+    // 1. --- FORCE UI VISIBILITY ---
+    // Ensure the main student layout is visible and admin parts are hidden
     document.getElementById("studentView").classList.remove("hidden");
+    document.getElementById("taskBox")?.classList.remove("hidden");
+    document.getElementById("logBox")?.classList.remove("hidden");
     document.getElementById("adminBox").classList.add("hidden");
+    
+    // Update sidebar status
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 2. Real-time Listeners for Admin Warnings, Leaves, Feedback, and Notices
-    // Listener for Admin REJECT/WARNING Alert
+    // 2. --- REAL-TIME LISTENERS ---
+    // Warning Alert Listener
     onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
         const msg = snapshot.val();
         const popup = document.getElementById("rejectedPopup");
-        const popupTxt = document.getElementById("rejectedMsg");
         if (msg) {
-            popupTxt.innerText = `Admin: "${msg}"`;
+            document.getElementById("rejectedMsg").innerText = `Admin: "${msg}"`;
             popup.classList.remove("hidden");
         } else {
             popup.classList.add("hidden");
         }
     });
 
-    // Listener for Leave Request Status updates
+    // Leave Status Listener
     onValue(ref(db, `users/${currentUser.uid}/leaveRequest`), (snap) => {
         checkLeaveStatus({ leaveRequest: snap.val() });
     });
 
-    // Listener for Admin Feedback/Daily Review
+    // Feedback Listener
     onValue(ref(db, `users/${currentUser.uid}/newFeedback`), (snap) => {
         const msg = snap.val();
         if (msg) {
@@ -2080,104 +2084,73 @@ async function initStudentDashboard() {
         }
     });
 
-    // Listener for Upcoming Exams
+    // Exam Listener
     onValue(ref(db, `users/${currentUser.uid}/UPCOMING_EXAMS`), (snap) => {
         const box = document.getElementById("examBox");
-        const list = document.getElementById("examList");
         if (!snap.exists()) { box.style.display = "none"; return; }
         const exams = snap.val();
         const today = new Date(); today.setHours(0, 0, 0, 0);
-        const active = exams.map(e => ({ ...e, daysLeft: Math.ceil((e.date - today.getTime()) / (24 * 60 * 60 * 1000)) }))
+        const active = exams.map(e => ({ ...e, daysLeft: Math.ceil((e.date - today.getTime()) / 86400000) }))
                             .filter(e => e.daysLeft >= 0).sort((a, b) => a.daysLeft - b.daysLeft);
-        if (active.length === 0) { box.style.display = "none"; return; }
-        box.style.display = "block";
-        list.innerHTML = active.map(e => `
-            <div style="display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px dashed #334155;">
-                <span>${e.name}</span>
-                <span style="color:#facc15; font-weight:bold;">${e.daysLeft} days left</span>
-            </div>`).join("");
-    });
-
-    // Listener for Broadcast Notices
-    onValue(ref(db, `users/${currentUser.uid}/NOTICES`), async (snapshot) => {
-        if (!snapshot.exists()) return;
-        const notices = snapshot.val();
-        const seenSnap = await get(ref(db, `users/${currentUser.uid}/lastSeenNoticeTime`));
-        const lastSeen = seenSnap.exists() ? seenSnap.val() : 0;
-        let latestNotice = null;
-        Object.values(notices).forEach(n => { if (!latestNotice || n.time > latestNotice.time) latestNotice = n; });
-        if (latestNotice && latestNotice.time > lastSeen) {
-            document.getElementById("noticePopupMsg").innerText = `${latestNotice.title}: ${latestNotice.message.substring(0, 50)}...`;
-            document.getElementById("noticePopup").classList.remove("hidden");
-            await update(ref(db, `users/${currentUser.uid}`), { lastSeenNoticeTime: latestNotice.time });
+        if (active.length > 0) {
+            box.style.display = "block";
+            document.getElementById("examList").innerHTML = active.map(e => `
+                <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed #334155;">
+                    <span>${e.name}</span><span style="color:#facc15;font-weight:bold;">${e.daysLeft}d</span>
+                </div>`).join("");
         }
     });
 
-    // 3. Download Server Data and Check Lockout Status
+    // 3. --- SECURITY & SERVER DATA ---
     const serverData = await downloadData(currentUser.uid);
-    if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
+    if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
         const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
-        document.body.innerHTML = `
-            <div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;text-align:center;background:#020617;color:#e5e7eb;padding:20px;">
-                <h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">TERMINATED</h1>
-                <h2 style="color:#f87171;margin-top:10px">${serverData.lockoutReason || "Admin Action"}</h2>
-                <p style="margin-top:10px">System Lock Active. Time remaining: ${minLeft} minutes</p>
-                <button onclick="logoutFromTermination()" style="margin-top:20px; padding:12px 24px; background:#7f1d1d; border:none; color:white; border-radius:8px; cursor:pointer;">Logout</button>
-            </div>`;
+        document.body.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;background:#020617;color:#e5e7eb;text-align:center;">
+            <h1 style="color:#ef4444;">TERMINATED</h1><h2>${serverData.lockoutReason || "Admin Action"}</h2>
+            <p>Locked for ${minLeft} mins</p><button onclick="logoutFromTermination()" style="margin-top:20px;padding:10px 20px;background:#7f1d1d;color:white;border:none;border-radius:5px;">Logout</button>
+        </div>`;
         return; 
     }
 
-    // 4. --- AUTOMATIC SHIFT GOAL PROMPT (FIRST LOGIN OF DAY) ---
+    // 4. --- AUTOMATIC SHIFT GOAL (FIRST LOGIN ONLY) ---
     const todayStr = new Date().toLocaleDateString();
     let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
 
     if (goalDate !== todayStr) {
-        // This only runs on the very first login of the day
         let askedShifts = prompt("First Login Today: How many SHIFTS (2 hours each) will you conduct today?", "3");
         if (!askedShifts || isNaN(askedShifts)) askedShifts = "3"; 
-        
         localStorage.setItem(key("DAILY_SHIFT_COUNT"), askedShifts);
         localStorage.setItem(key("DAILY_GOAL_DATE"), todayStr);
-        
-        await update(ref(db, `users/${currentUser.uid}`), { 
-            dailyShiftTarget: askedShifts,
-            dailyGoalDate: todayStr 
-        });
+        await update(ref(db, `users/${currentUser.uid}`), { dailyShiftTarget: askedShifts, dailyGoalDate: todayStr });
     }
 
-    // 5. Initialize Watchdog and Session Logs
+    // 5. --- LOCAL STATE RECOVERY ---
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     idleStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
     dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
     document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
 
-    // Handle session recovery if user didn't logout properly
     if (!logs.length || logs[logs.length - 1].logoutTS !== null) {
-        logs.push({ 
-            login: new Date().toLocaleString(), 
-            loginTS: Date.now(), 
-            logout: "-", 
-            logoutTS: null, 
-            reason: "-", 
-            completed: [] 
-        });
+        logs.push({ login: new Date().toLocaleString(), loginTS: Date.now(), logout: "-", logoutTS: null, reason: "-", completed: [] });
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // 6. Final Dashboard Activation
+    // 6. --- COMPONENT BOOTUP ---
+    // Ensure all sidebar buttons are active
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
-    document.querySelector("button[onclick='toggleSubjectProgress()']").disabled = false;
     
-    startIdle(1800);      // Start 30min Watchdog
-    loadSubjectList();    // Populate progress dropdowns
-    loadTasks();          // Load main task list
-    renderLogs();         // Load today's activity logs
-    updateProgress();     // Initialize Speedometer
-    runShiftTimer();      // Initialize current shift countdown
-    uploadData();         // Final sync to Firebase
+    // Start System Functions
+    startIdle(1800);      
+    loadSubjectList();    
+    setupTasks(); // This is critical to ensure task list structure exists
+    loadTasks();          
+    renderLogs();         
+    updateProgress();     
+    runShiftTimer();      
+    uploadData();         
 }
 
 window.dismissFeedback = async function() {
