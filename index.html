@@ -3343,6 +3343,8 @@ window.generateMapFromBulk = function() {
     showByjusMap(currentMapSubject);
 };
 let activeMapTimer = null; 
+
+/* --- 1. THE MAP RENDERER (STRIKE-THROUGH UI) --- */
 window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
@@ -3353,8 +3355,8 @@ window.showByjusMap = function(subjectName) {
     let totalGlobalTopics = 0;
     allSubjects.forEach(s => { totalGlobalTopics += dailyMaps[today][s].length; });
 
-    const baseMins = Math.floor((shiftCount * 120) / totalGlobalTopics);
-    const nodes = dailyMaps[today][subjectName];
+    const baseMins = totalGlobalTopics > 0 ? Math.floor((shiftCount * 120) / totalGlobalTopics) : 0;
+    const nodes = dailyMaps[today][subjectName] || [];
     const container = document.getElementById("mapContainer");
     
     container.innerHTML = "";
@@ -3364,16 +3366,15 @@ window.showByjusMap = function(subjectName) {
     nodes.forEach((node, idx) => {
         const currentMins = node.dynamicMins || baseMins;
         
-        // Logic to build the Strikethrough history string
+        // BUILD STRIKE-THROUGH HISTORY
         let timeDisplayHTML = "";
         if (node.history && node.history.length > 0) {
             node.history.forEach(h => {
-                timeDisplayHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px;">${h}m</span>`;
+                timeDisplayHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px; opacity: 0.6;">${h}m</span>`;
             });
         }
         timeDisplayHTML += `<span style="color: #38bdf8; font-weight: 800;">${currentMins}m</span>`;
 
-        // Calculate Shift number
         let globalIndex = 0;
         let foundSub = false;
         allSubjects.forEach(sub => {
@@ -3387,7 +3388,10 @@ window.showByjusMap = function(subjectName) {
 
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
-        
+        if (node.status === 'done') circle.innerHTML = "✔";
+        else if (node.status === 'doing') circle.innerHTML = '<span id="miniTimer" style="font-size:12px; font-weight:900; color:black;">--:--</span>';
+        else circle.innerText = idx + 1;
+
         const wrapper = document.createElement("div");
         wrapper.style.cssText = "flex-grow:1; background:#0f172a; border:1px solid #334155; border-radius:14px; padding:18px;";
         
@@ -3414,14 +3418,14 @@ window.showByjusMap = function(subjectName) {
         if (node.status === 'doing') startCountdown(currentMins);
     });
 };
-  /* --- FULL UPDATED handleNodeAction FUNCTION --- */
+
+/* --- 2. THE DYNAMIC REDISTRIBUTION LOGIC --- */
 window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     let nodes = dailyMaps[today][currentMapSubject];
 
     if (action === 'start') {
-        // Clear any other active 'doing' states
         Object.keys(dailyMaps[today]).forEach(s => {
             dailyMaps[today][s].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
         });
@@ -3431,14 +3435,12 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     } else if (action === 'done') {
         const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
         const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
-        
-        // OBEYING LOGIC: Calculate difference (Gain or Loss)
         const difference = currentAllocatedMins - actualUsedMins; 
 
         nodes[idx].status = 'done';
         nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-        // Find ALL remaining 'todo' topics across all subjects
+        // REDISTRIBUTE ACROSS ALL REMAINING TOPICS
         let remainingTasks = [];
         Object.keys(dailyMaps[today]).forEach(subKey => {
             dailyMaps[today][subKey].forEach((n, i) => {
@@ -3446,26 +3448,18 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
             });
         });
 
-        // OBEYING LOGIC: Redistribute the remaining time
         if (remainingTasks.length > 0 && difference !== 0) {
             const adjustment = Math.floor(difference / remainingTasks.length);
-            
             remainingTasks.forEach(task => {
                 let targetNode = dailyMaps[today][task.s][task.id];
                 if (!targetNode.history) targetNode.history = [];
-                
-                // Keep track of the value before the change
                 const oldVal = targetNode.dynamicMins || currentAllocatedMins;
-                
                 if (adjustment !== 0) {
-                    // Save for strikethrough
                     targetNode.history.push(oldVal); 
-                    // Set new time
                     targetNode.dynamicMins = Math.max(5, oldVal + adjustment);
                 }
             });
         }
-
         if(activeMapTimer) clearInterval(activeMapTimer);
         localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
 
@@ -3481,6 +3475,7 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     showByjusMap(currentMapSubject);
     loadTasks();
 };
+ 
 function startCountdown(targetMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
     
