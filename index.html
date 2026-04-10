@@ -3502,11 +3502,16 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
         nodes[idx].status = 'done';
         nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-        // 1. Log to Progress Table
-        const dueTopics = nodes.filter(n => n.status === 'todo').map(n => n.label).join(", ") || "Completed";
-        saveAutomatedSubjectProgress(currentMapSubject, `${nodes[idx].label} (${actualUsedMins}m)`, dueTopics);
+        // 1. AUTOMATED PROGRESS TABLE SYNC
+        // Find remaining sub-topics in THIS subject journey to list as "Due"
+        const dueTopics = nodes.filter(n => n.status === 'todo').map(n => n.label).join(", ") || "Goal Reached";
+        saveAutomatedSubjectProgress(
+            currentMapSubject, 
+            `${nodes[idx].label} (Fixed: ${actualUsedMins}m)`, 
+            dueTopics
+        );
 
-        // 2. Identify ALL TODOs globally for redistribution
+        // 2. GLOBAL REDISTRIBUTION (RECALCULATE ALL SUBJECTS)
         let remainingTasks = [];
         Object.keys(dailyMaps[today]).forEach(subKey => {
             dailyMaps[today][subKey].forEach((n, i) => {
@@ -3514,19 +3519,21 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
             });
         });
 
-        // 3. Redistribute Evenly
         if (remainingTasks.length > 0 && difference !== 0) {
             const adjustment = difference / remainingTasks.length;
             remainingTasks.forEach(task => {
                 let targetNode = dailyMaps[today][task.sub][task.index];
                 if (!targetNode.history) targetNode.history = [];
                 const oldVal = targetNode.dynamicMins || currentAllocatedMins;
+                
+                // Add to Strikethrough History
                 targetNode.history.push(Math.round(oldVal)); 
+                // Set New Balanced Time
                 targetNode.dynamicMins = Math.max(5, Math.round(oldVal + adjustment));
             });
         }
 
-        // 4. Auto-Tick Sidebar
+        // 3. AUTO-TICK SIDEBAR TASK
         const allFinished = nodes.every(n => n.status === 'done');
         if (allFinished) {
             let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
@@ -3548,6 +3555,7 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     uploadData();
     showByjusMap(currentMapSubject);
     loadTasks();
+    loadSubjectList(); // Refresh dropdown
 };
 function startCountdown(targetMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
