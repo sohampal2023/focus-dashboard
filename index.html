@@ -2042,7 +2042,6 @@ async function loadNotices() {
         console.error("Notice load error:", e);
     }
 }
-
 async function initStudentDashboard() {
     // 1. --- FORCE UI VISIBILITY ---
     document.getElementById("studentView").classList.remove("hidden");
@@ -2057,7 +2056,7 @@ async function initStudentDashboard() {
     // 2. --- DOWNLOAD DATA & CHECK LOCKOUT ---
     const serverData = await downloadData(currentUser.uid);
     if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
-        location.reload(); // Trigger termination screen via page reload logic
+        location.reload(); 
         return; 
     }
 
@@ -2073,16 +2072,34 @@ async function initStudentDashboard() {
     }
 
     // 4. --- RECOVER STATE ---
-    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
     document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
 
-    if (!logs.length || logs[logs.length - 1].logoutTS !== null) {
-        logs.push({ login: new Date().toLocaleString(), loginTS: Date.now(), logout: "-", logoutTS: null, reason: "-", completed: [] });
+    // 5. --- CRITICAL: BIO BREAK / PENDING REASON CHECK ---
+    let logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    
+    // Check if the very last log entry has a "Pending" reason from a Bio Break
+    if (logs.length > 0 && logs[logs.length - 1].reason === "Pending") {
+        const userReason = prompt("You are back! What was the reason for your previous break?", "Bio Break");
+        logs[logs.length - 1].reason = userReason || "Bio Break";
+        // Save immediately so it's reflected in the table
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // 5. --- COMPONENT BOOTUP ---
+    // Now start a fresh log entry for the current session
+    if (!logs.length || logs[logs.length - 1].logoutTS !== null) {
+        logs.push({ 
+            login: new Date().toLocaleString(), 
+            loginTS: Date.now(), 
+            logout: "-", 
+            logoutTS: null, 
+            reason: "-", 
+            completed: [] 
+        });
+        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
+
+    // 6. --- COMPONENT BOOTUP ---
     startIdle(1800);      
     loadSubjectList();    
     setupTasks(); 
@@ -2092,7 +2109,7 @@ async function initStudentDashboard() {
     runShiftTimer();      
     uploadData();
 
-    // 6. --- CRITICAL: UNLOCK THE BUTTONS ---
+    // 7. --- UNLOCK SIDEBAR BUTTONS ---
     const buttonsToEnable = [
         "bioBtn", "histBtn", "dayBtn", 
         "button[onclick='toggleSubjectProgress()']",
