@@ -3343,7 +3343,7 @@ window.generateMapFromBulk = function() {
     showByjusMap(currentMapSubject);
 };
 let activeMapTimer = null; 
-window.showByjusMap = function(subjectName) {
+window.showByjusMap = function(subjectName) {window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
@@ -3363,16 +3363,17 @@ window.showByjusMap = function(subjectName) {
 
     nodes.forEach((node, idx) => {
         const currentMins = node.dynamicMins || baseMins;
-        let timeHistoryHTML = "";
-
-        // RENDER STRIKETHROUGH HISTORY
+        
+        // Logic to build the Strikethrough history string
+        let timeDisplayHTML = "";
         if (node.history && node.history.length > 0) {
-            node.history.forEach(prev => {
-                timeHistoryHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px; opacity: 0.6;">${prev}m</span>`;
+            node.history.forEach(h => {
+                timeDisplayHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px;">${h}m</span>`;
             });
         }
-        timeHistoryHTML += `<span style="color: #38bdf8; font-weight: 800;">${currentMins}m</span>`;
+        timeDisplayHTML += `<span style="color: #38bdf8; font-weight: 800;">${currentMins}m</span>`;
 
+        // Calculate Shift number
         let globalIndex = 0;
         let foundSub = false;
         allSubjects.forEach(sub => {
@@ -3382,41 +3383,31 @@ window.showByjusMap = function(subjectName) {
         const shiftNum = Math.floor(((globalIndex + idx) / totalGlobalTopics) * shiftCount) + 1;
 
         const nodeRow = document.createElement("div");
-        nodeRow.style.cssText = "display:flex; align-items:center; width:95%; max-width:500px; position:relative; margin-bottom:30px;";
+        nodeRow.style.cssText = "display:flex; align-items:center; width:95%; max-width:500px; position:relative; margin-bottom:40px;";
 
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
-        circle.style.cssText = "width:50px; height:50px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; margin-right:20px; font-weight:bold; border:3px solid #1e293b;";
         
-        if (node.status === 'done') {
-            circle.style.background = "#22c55e"; circle.innerHTML = "✔";
-        } else if (node.status === 'doing') {
-            circle.style.background = "#facc15"; circle.innerHTML = '<span id="miniTimer" style="font-size:10px; color:#000;">--:--</span>';
-        } else {
-            circle.style.background = "#1e293b"; circle.innerText = idx + 1;
-        }
-
         const wrapper = document.createElement("div");
-        wrapper.style.cssText = "flex-grow:1; background:#0f172a; border:1px solid #334155; border-radius:12px; padding:15px;";
+        wrapper.style.cssText = "flex-grow:1; background:#0f172a; border:1px solid #334155; border-radius:14px; padding:18px;";
         
         wrapper.innerHTML = `
             <div style="display:flex; flex-direction:column; gap:4px;">
-                <div style="font-weight:800; color:#fff; font-size:14px; text-transform:uppercase;">${node.label}</div>
-                <div style="font-size:11px; font-weight:bold; display:flex; flex-wrap:wrap; align-items:center;">
-                    <span style="color:#94a3b8; margin-right:8px;">Shift ${shiftNum} |</span>
-                    ${timeHistoryHTML}
+                <div style="font-weight:800; color:#fff; font-size:15px; text-transform:uppercase;">${node.label}</div>
+                <div style="font-size:11px; font-weight:bold;">
+                    <span style="color:#94a3b8;">Shift ${shiftNum} | </span>
+                    ${timeDisplayHTML}
                 </div>
                 <div style="margin-top:10px;">
                     ${node.status === 'todo' ? 
-                        `<button onclick="handleNodeAction(${idx}, 'start', ${currentMins})" style="background:#0ea5e9; border:none; color:white; padding:6px 15px; border-radius:4px; cursor:pointer; font-size:10px; font-weight:bold;">START</button>` :
+                        `<button onclick="handleNodeAction(${idx}, 'start', ${currentMins})" style="background:#0ea5e9; border:none; color:white; padding:7px 15px; border-radius:6px; cursor:pointer; font-size:10px; font-weight:bold;">START</button>` :
                       node.status === 'doing' ? 
-                        `<button onclick="handleNodeAction(${idx}, 'done', ${currentMins})" style="background:#16a34a; border:none; color:white; padding:6px 15px; border-radius:4px; cursor:pointer; font-size:10px; font-weight:bold; margin-right:5px;">DONE</button>
-                         <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; border:none; color:white; padding:6px 15px; border-radius:4px; cursor:pointer; font-size:10px; font-weight:bold;">ABORT</button>` :
-                        `<span style="color:#4ade80; font-size:11px; font-weight:bold;">COMPLETED at ${node.completedAt}</span>`
+                        `<button onclick="handleNodeAction(${idx}, 'done', ${currentMins})" style="background:#16a34a; border:none; color:white; padding:7px 15px; border-radius:6px; cursor:pointer; font-size:10px; font-weight:bold; margin-right:8px;">DONE</button>
+                         <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; border:none; color:white; padding:7px 15px; border-radius:6px; cursor:pointer; font-size:10px; font-weight:bold;">ABORT</button>` :
+                        `<div style="color:#4ade80; font-size:12px; font-weight:bold;">✔ COMPLETED <br><span style="color:#86efac; font-size:10px; font-weight:normal;">at ${node.completedAt}</span></div>`
                     }
                 </div>
-            </div>
-        `;
+            </div>`;
 
         nodeRow.append(circle, wrapper);
         container.appendChild(nodeRow);
@@ -3427,104 +3418,68 @@ window.showByjusMap = function(subjectName) {
 window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    
-    // Ensure the data structure for today and the subject exists
-    if (!dailyMaps[today]) dailyMaps[today] = {};
     let nodes = dailyMaps[today][currentMapSubject];
-    if (!nodes) return;
 
     if (action === 'start') {
-        // 1. Reset any other 'doing' state across ALL subjects to 'todo'
-        // This ensures only one topic is active at a time across the whole system
+        // Clear any other active 'doing' states
         Object.keys(dailyMaps[today]).forEach(s => {
-            dailyMaps[today][s].forEach(n => { 
-                if(n.status === 'doing') n.status = 'todo'; 
-            });
+            dailyMaps[today][s].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
         });
-
-        // 2. Set current node to 'doing'
         nodes[idx].status = 'doing';
-        
-        // 3. Mark the exact start time in milliseconds
         localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
         
     } else if (action === 'done') {
         const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
-        // Calculate minutes used (minimum 1 min to avoid division by zero errors)
         const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
         
-        // Calculate the difference: 
-        // Positive = Time saved (will increase others)
-        // Negative = Overtime (will decrease others)
+        // OBEYING LOGIC: Calculate difference (Gain or Loss)
         const difference = currentAllocatedMins - actualUsedMins; 
 
-        // 4. Update current node status to 'done'
         nodes[idx].status = 'done';
-        nodes[idx].completedAt = new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit', second:'2-digit'});
+        nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-        // 5. COLLECT ALL REMAINING TODOs ACROSS ALL SUBJECTS FOR REDISTRIBUTION
+        // Find ALL remaining 'todo' topics across all subjects
         let remainingTasks = [];
         Object.keys(dailyMaps[today]).forEach(subKey => {
             dailyMaps[today][subKey].forEach((n, i) => {
-                if (n.status === 'todo') {
-                    remainingTasks.push({ s: subKey, id: i });
-                }
+                if (n.status === 'todo') remainingTasks.push({ s: subKey, id: i });
             });
         });
 
-        // 6. REDISTRIBUTE TIME
+        // OBEYING LOGIC: Redistribute the remaining time
         if (remainingTasks.length > 0 && difference !== 0) {
-            // Divide the difference (gain or loss) equally among all pending tasks
             const adjustment = Math.floor(difference / remainingTasks.length);
             
-            if (adjustment !== 0) {
-                remainingTasks.forEach(task => {
-                    let targetNode = dailyMaps[today][task.s][task.id];
-                    
-                    // Initialize history array if it doesn't exist
-                    if (!targetNode.history) targetNode.history = [];
-                    
-                    // Capture current value to be struck out in the UI
-                    const currentVal = targetNode.dynamicMins || currentAllocatedMins;
-                    
-                    // Push to history for strikethrough display
-                    targetNode.history.push(currentVal); 
-                    
-                    // Update the dynamic minutes (Set a floor of 5 minutes so tasks don't vanish)
-                    targetNode.dynamicMins = Math.max(5, currentVal + adjustment);
-                });
-            }
+            remainingTasks.forEach(task => {
+                let targetNode = dailyMaps[today][task.s][task.id];
+                if (!targetNode.history) targetNode.history = [];
+                
+                // Keep track of the value before the change
+                const oldVal = targetNode.dynamicMins || currentAllocatedMins;
+                
+                if (adjustment !== 0) {
+                    // Save for strikethrough
+                    targetNode.history.push(oldVal); 
+                    // Set new time
+                    targetNode.dynamicMins = Math.max(5, oldVal + adjustment);
+                }
+            });
         }
 
-        // 7. Cleanup timers
         if(activeMapTimer) clearInterval(activeMapTimer);
         localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
 
-        // 8. Auto-tick main sidebar tasks if all sub-topics are finished
-        const allFinished = nodes.every(n => n.status === 'done');
-        if (allFinished) {
-            let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-            let extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-            tasks.forEach(t => { if (t.name === currentMapSubject) t.done = true; });
-            extras.forEach(e => { if (e.name === currentMapSubject) e.done = true; });
-            localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
-            localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-        }
-
     } else if (action === 'abort') {
-        // Simply revert status to todo and stop timers
         nodes[idx].status = 'todo';
         if(activeMapTimer) clearInterval(activeMapTimer);
         localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
     }
 
-    // Save final state back to LocalStorage and Firebase
     dailyMaps[today][currentMapSubject] = nodes;
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
-    
-    uploadData();         // Sync to Firebase
-    showByjusMap(currentMapSubject); // Refresh Map UI
-    loadTasks();          // Refresh Sidebar UI
+    uploadData();
+    showByjusMap(currentMapSubject);
+    loadTasks();
 };
 function startCountdown(targetMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
