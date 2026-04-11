@@ -3389,12 +3389,14 @@ window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
+    
+    // 1. GET THE ACTUAL SHIFT DATA
     const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
-    const totalDayMins = shiftCount * 120;
+    const totalDayMins = shiftCount * 120; // This is your MAX budget (e.g., 360m)
 
     let allSubjects = Object.keys(dailyMaps[today] || {});
     
-    // Calculate Global Counts
+    // 2. CALCULATE ACTUAL CONSUMPTION
     let doneNodes = [];
     let pendingNodes = [];
     allSubjects.forEach(s => {
@@ -3404,18 +3406,19 @@ window.showByjusMap = function(subjectName) {
         });
     });
 
-    // Calculate how much time has ALREADY been consumed by finished topics
+    // Hard Fix: Time consumed is ONLY what you actually clicked 'DONE' on
     const consumedMins = doneNodes.reduce((sum, node) => sum + (node.dynamicMins || 0), 0);
-    const remainingMins = Math.max(0, totalDayMins - consumedMins);
     
-    // Evenly distribute ONLY the remaining budget among pending topics
+    // 3. REMAINING BUDGET CALCULATION
+    // If consumed is 307 but you only studied 120, this will force the rest to stay in budget
+    const remainingMins = Math.max(0, totalDayMins - consumedMins);
     const balancedPendingMins = pendingNodes.length > 0 ? Math.floor(remainingMins / pendingNodes.length) : 0;
     
     const nodes = dailyMaps[today][subjectName] || [];
     const container = document.getElementById("mapContainer");
     container.innerHTML = "";
     
-    // Header Logic
+    // Header UI
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:5px; width:100%;">
@@ -3426,8 +3429,10 @@ window.showByjusMap = function(subjectName) {
                     <button onclick="extendShiftDirectly()" style="background:#7c3aed; font-size:9px; padding:5px 10px; border-radius:4px; border:none; color:white;">➕ SHIFT</button>
                 </div>
             </div>
-            <div style="font-size:10px; color:#94a3b8; letter-spacing:0.5px;">
-                USED: ${consumedMins}m | REMAINING: ${remainingMins}m | ALLOCATED: ${balancedPendingMins}m
+            <div style="font-size:11px; color:#94a3b8; border-top:1px solid #1e293b; padding-top:5px; margin-top:5px;">
+                <span style="color:#ef4444">STUDIED: ${consumedMins}m</span> | 
+                <span style="color:#4ade80">REMAINING: ${remainingMins}m</span> | 
+                <span>LIMIT: ${totalDayMins}m</span>
             </div>
         </div>
     `;
@@ -3435,22 +3440,21 @@ window.showByjusMap = function(subjectName) {
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
     nodes.forEach((node, idx) => {
-        // If node is done, use its locked time. If pending, use the balanced calculation.
         const currentMins = (node.status === 'done') ? (node.dynamicMins || 0) : balancedPendingMins;
         
-        // Update the node's memory so other subjects can "see" this allocation
+        // Save the balanced time back to the node so other maps see the same number
         if (node.status !== 'done') node.dynamicMins = currentMins;
 
         let timeDisplayHTML = "";
         if (node.history && node.history.length > 0) {
-            node.history.slice(-3).forEach(h => {
-                timeDisplayHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px; opacity: 0.5;">${h}m</span>`;
+            node.history.slice(-2).forEach(h => {
+                timeDisplayHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px; opacity: 0.5; font-size:0.9em;">${h}m</span>`;
             });
         }
         timeDisplayHTML += `<span style="color: #38bdf8; font-weight: 900; font-size:1.1em;">${currentMins}m</span>`;
 
         const nodeRow = document.createElement("div");
-        nodeRow.style.cssText = "display:flex; align-items:center; width:95%; max-width:500px; position:relative; margin-bottom:35px;";
+        nodeRow.style.cssText = "display:flex; align-items:center; width:95%; max-width:500px; position:relative; margin-bottom:30px;";
 
         const circle = document.createElement("div");
         circle.className = `node-circle status-${node.status}`;
@@ -3459,19 +3463,19 @@ window.showByjusMap = function(subjectName) {
         else circle.innerText = idx + 1;
 
         const wrapper = document.createElement("div");
-        wrapper.style.cssText = "flex-grow:1; background:#0f172a; border:1px solid #334155; border-radius:14px; padding:18px;";
+        wrapper.style.cssText = "flex-grow:1; background:#0f172a; border:1px solid #334155; border-radius:14px; padding:15px;";
         
         wrapper.innerHTML = `
-            <div style="display:flex; flex-direction:column; gap:4px;">
-                <div style="font-weight:800; color:#fff; font-size:14px; text-transform:uppercase;">${node.label}</div>
+            <div style="display:flex; flex-direction:column; gap:2px;">
+                <div style="font-weight:800; color:#fff; font-size:13px; text-transform:uppercase;">${node.label}</div>
                 <div style="font-size:11px; font-weight:bold;">${timeDisplayHTML}</div>
-                <div style="margin-top:12px;">
+                <div style="margin-top:10px;">
                     ${node.status === 'todo' ? 
-                        `<button onclick="handleNodeAction(${idx}, 'start', ${currentMins})" style="background:#0ea5e9; border:none; color:white; padding:7px 15px; border-radius:6px; cursor:pointer; font-size:10px; font-weight:bold;">START</button>` :
+                        `<button onclick="handleNodeAction(${idx}, 'start', ${currentMins})" style="background:#0ea5e9; border:none; color:white; padding:6px 12px; border-radius:5px; cursor:pointer; font-size:10px; font-weight:bold;">START</button>` :
                       node.status === 'doing' ? 
-                        `<button onclick="handleNodeAction(${idx}, 'done', ${currentMins})" style="background:#16a34a; border:none; color:white; padding:7px 15px; border-radius:6px; cursor:pointer; font-size:10px; font-weight:bold; margin-right:8px;">DONE</button>
-                         <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; border:none; color:white; padding:7px 15px; border-radius:6px; cursor:pointer; font-size:10px; font-weight:bold;">ABORT</button>` :
-                        `<div style="color:#4ade80; font-size:11px; font-weight:bold;">✔ COMPLETED <span style="color:#86efac; font-weight:normal; font-size:10px;">at ${node.completedAt}</span></div>`
+                        `<button onclick="handleNodeAction(${idx}, 'done', ${currentMins})" style="background:#16a34a; border:none; color:white; padding:6px 12px; border-radius:5px; cursor:pointer; font-size:10px; font-weight:bold; margin-right:8px;">DONE</button>
+                         <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; border:none; color:white; padding:6px 12px; border-radius:5px; cursor:pointer; font-size:10px; font-weight:bold;">ABORT</button>` :
+                        `<div style="color:#4ade80; font-size:11px; font-weight:bold;">✔ OK <span style="color:#86efac; font-weight:normal; font-size:10px;">@ ${node.completedAt}</span></div>`
                     }
                 </div>
             </div>`;
@@ -3481,7 +3485,6 @@ window.showByjusMap = function(subjectName) {
         if (node.status === 'doing') startCountdown(currentMins);
     });
 };
-
 /* --- 2. GLOBAL REDISTRIBUTION (REMAINING TIME FOCUS) --- */
 window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     const today = new Date().toLocaleDateString();
