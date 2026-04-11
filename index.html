@@ -2047,19 +2047,25 @@ async function initStudentDashboard() {
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox")?.classList.remove("hidden");
     document.getElementById("logBox")?.classList.remove("hidden");
+    document.getElementById("adminBox").classList.add("hidden");
+    
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 2. --- SERVER DATA CHECK ---
+    // 2. --- SERVER DATA & LOCKOUT CHECK ---
     const serverData = await downloadData(currentUser.uid);
     if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
-        location.reload(); 
+        const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
+        document.body.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;background:#020617;color:#e5e7eb;text-align:center;">
+            <h1 style="color:#ef4444;">TERMINATED</h1><h2>${serverData.lockoutReason || "Admin Action"}</h2>
+            <p>Locked for ${minLeft} mins</p><button onclick="logoutFromTermination()" style="margin-top:20px;padding:10px 20px;background:#7f1d1d;color:white;border:none;border-radius:5px;">Logout</button>
+        </div>`;
         return; 
     }
 
-    // 3. --- AUTOMATIC SHIFT GOAL ---
+    // 3. --- AUTOMATIC SHIFT GOAL (FIRST LOGIN) ---
     const todayStr = new Date().toLocaleDateString();
     let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
     if (goalDate !== todayStr) {
@@ -2070,11 +2076,7 @@ async function initStudentDashboard() {
         await update(ref(db, `users/${currentUser.uid}`), { dailyShiftTarget: askedShifts, dailyGoalDate: todayStr });
     }
 
-    // 4. --- RECOVER STATE ---
-    dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
-    document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
-
-    // 5. --- BIO BREAK / PENDING REASON CHECK ---
+    // 4. --- BIO BREAK / PENDING REASON CHECK ---
     let logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if (logs.length > 0 && logs[logs.length - 1].reason === "Pending") {
         const userReason = prompt("Welcome back! Reason for the break?", "Bio Break");
@@ -2082,13 +2084,12 @@ async function initStudentDashboard() {
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // 5.5 --- RESUME SHIFT TIMER LOGIC ---
+    // 5. --- RESUME SHIFT TIMER ---
     const pausedRemaining = localStorage.getItem(key("PAUSED_SHIFT_REMAINING"));
     if (pausedRemaining && parseInt(pausedRemaining) > 0) {
-        // Resume shift by setting a new end time based on remaining duration
         const newEnd = Date.now() + parseInt(pausedRemaining);
         localStorage.setItem(key("SHIFT_END_TS"), newEnd);
-        localStorage.removeItem(key("PAUSED_SHIFT_REMAINING")); // Clear pause marker
+        localStorage.removeItem(key("PAUSED_SHIFT_REMAINING"));
     }
 
     if (!logs.length || logs[logs.length - 1].logoutTS !== null) {
@@ -2096,22 +2097,42 @@ async function initStudentDashboard() {
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // 6. --- COMPONENT BOOTUP ---
+    // 6. --- INITIALIZE SYSTEM COMPONENTS ---
     startIdle(1800);      
     loadSubjectList();    
     setupTasks(); 
     loadTasks();          
     renderLogs();         
     updateProgress();     
-    runShiftTimer(); // This will now pick up the resumed time
+    runShiftTimer();      
     uploadData();
 
-    // 7. --- UNLOCK BUTTONS ---
-    const buttonsToEnable = ["bioBtn", "histBtn", "dayBtn", "button[onclick='toggleSubjectProgress()']"];
-    buttonsToEnable.forEach(sel => {
-        const b = document.querySelector(sel);
-        if(b) { b.disabled = false; b.style.opacity = "1"; }
+    // 7. --- CRITICAL: FORCE UNLOCK ALL BUTTONS ---
+    // This specifically targets the greyed out buttons in your image
+    const buttons = [
+        "bioBtn", 
+        "histBtn", 
+        "dayBtn", 
+        "leaveBtn",
+        "noticeBtn"
+    ];
+    
+    buttons.forEach(id => {
+        const btn = document.getElementById(id);
+        if(btn) {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
+        }
     });
+
+    // Special selector for the Subject Progress button (which often uses a class or query)
+    const progressBtn = document.querySelector("button[onclick='toggleSubjectProgress()']");
+    if(progressBtn) {
+        progressBtn.disabled = false;
+        progressBtn.style.opacity = "1";
+        progressBtn.style.cursor = "pointer";
+    }
 }
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
