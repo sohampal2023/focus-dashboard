@@ -3384,64 +3384,55 @@ window.addNewSubTopic = function(subjectName) {
 };
 let activeMapTimer = null; 
 
-/* --- 1. THE MAP RENDERER (TOTAL DAY ACCOUNTING) --- */
+/* --- 1. THE MAP RENDERER (DYNAMIC BUDGET VIEW) --- */
 window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
     const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
+    const totalDayMins = shiftCount * 120; // e.g., 360 mins
 
-    const totalDayMins = shiftCount * 120;
     let allSubjects = Object.keys(dailyMaps[today] || {});
     
-    // 1. Calculate how many topics are left vs how many are done
-    let doneNodes = [];
-    let pendingNodes = [];
-    
-    allSubjects.forEach(s => {
-        (dailyMaps[today][s] || []).forEach(n => {
-            if (n.status === 'done') doneNodes.push(n);
-            else pendingNodes.push(n);
-        });
-    });
-
-    // 2. Base Mins: (Total Day Mins - Time already consumed) / Remaining Topics
-    // This ensures we never "ignore" the time taken by finished subjects
-    const totalGlobalTopics = doneNodes.length + pendingNodes.length;
+    // Calculate global counts to find the initial baseline
+    let totalGlobalTopics = 0;
+    allSubjects.forEach(s => { totalGlobalTopics += (dailyMaps[today][s] || []).length; });
     const baseMins = totalGlobalTopics > 0 ? Math.floor(totalDayMins / totalGlobalTopics) : 0;
     
     const nodes = dailyMaps[today][subjectName] || [];
     const container = document.getElementById("mapContainer");
     container.innerHTML = "";
     
-    // Header remains the same...
+    // Header
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:1.1rem; color:#38bdf8;">${subjectName}</span>
+                <span style="font-size:1.1rem; color:#38bdf8; font-weight:bold;">${subjectName}</span>
                 <div style="display:flex; gap:8px;">
                     <button onclick="addNewSubTopic('${subjectName.replace(/'/g, "\\'")}')" style="background:#16a34a; font-size:9px; padding:5px 10px; border-radius:4px; border:none; color:white; cursor:pointer;">➕ TOPIC</button>
                     <button onclick="extendShiftDirectly()" style="background:#7c3aed; font-size:9px; padding:5px 10px; border-radius:4px; border:none; color:white; cursor:pointer;">➕ SHIFT</button>
                 </div>
             </div>
-            <div style="font-size:10px; color:#94a3b8; text-transform:uppercase;">Daily Target: ${totalDayMins}m | Total Topics: ${totalGlobalTopics}</div>
+            <div style="font-size:10px; color:#94a3b8; letter-spacing:1px;">BUDGET: ${totalDayMins}m | REMAINING TIME IS AUTO-DISTRIBUTED</div>
         </div>
     `;
 
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
     nodes.forEach((node, idx) => {
-        const currentMins = node.dynamicMins || baseMins;
-        let timeDisplayHTML = "";
+        // Use dynamicMins if it was recalculated, otherwise use the fresh baseMins
+        const currentMins = (node.dynamicMins !== undefined && node.dynamicMins !== null) ? node.dynamicMins : baseMins;
         
+        let timeDisplayHTML = "";
         if (node.history && node.history.length > 0) {
             node.history.slice(-3).forEach(h => {
-                timeDisplayHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px; opacity: 0.5;">${h}m</span>`;
+                timeDisplayHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px; opacity: 0.5; font-weight:normal;">${h}m</span>`;
             });
         }
         timeDisplayHTML += `<span style="color: #38bdf8; font-weight: 900; font-size:1.1em;">${currentMins}m</span>`;
 
+        // Calculate Shift Number
         let globalIndex = 0;
         let foundSub = false;
         allSubjects.forEach(sub => {
@@ -3485,7 +3476,7 @@ window.showByjusMap = function(subjectName) {
     });
 };
 
-/* --- 2. GLOBAL REDISTRIBUTION (DOES NOT IGNORE COMPLETED TIME) --- */
+/* --- 2. THE DYNAMIC REDISTRIBUTION (REAL-TIME AUTO CHANGE) --- */
 window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
@@ -3502,17 +3493,18 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
         const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
         const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
         
-        // LOGIC: The gain/loss from THIS topic must be spread across ALL remaining topics
+        // Difference is what we gained or lost from the wallet
         const difference = currentAllocatedMins - actualUsedMins; 
 
         nodes[idx].status = 'done';
+        nodes[idx].dynamicMins = actualUsedMins; // Freeze the actual time spent
         nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-        // Save progress...
+        // LOG TO PROGRESS TABLE
         const due = nodes.filter(n => n.status === 'todo').map(n => n.label).join(", ") || "Goal Reached";
-        saveAutomatedSubjectProgress(currentMapSubject, `${nodes[idx].label} (${actualUsedMins}m)`, due);
+        saveAutomatedSubjectProgress(currentMapSubject, `${nodes[idx].label} (Spent: ${actualUsedMins}m)`, due);
 
-        // Identify ALL pending tasks GLOBALLY
+        // FIND ALL REMAINING TODOs GLOBALLY
         let pendingTasks = [];
         Object.keys(dailyMaps[today]).forEach(subKey => {
             dailyMaps[today][subKey].forEach((n, i) => {
@@ -3520,22 +3512,23 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
             });
         });
 
-        // REBALANCE: Divide gain/loss by total pending count
+        // REBALANCE: Redistribute gained/lost minutes evenly across future tasks
         if (pendingTasks.length > 0 && difference !== 0) {
             const adjustment = difference / pendingTasks.length;
             pendingTasks.forEach(task => {
                 let target = dailyMaps[today][task.sub][task.index];
+                if (!target.history) target.history = [];
+                
                 const oldVal = target.dynamicMins || currentAllocatedMins;
                 const newVal = Math.max(5, Math.round(oldVal + adjustment));
+
                 if (newVal !== Math.round(oldVal)) {
-                    if (!target.history) target.history = [];
                     target.history.push(Math.round(oldVal));
                     target.dynamicMins = newVal;
                 }
             });
         }
 
-        // Sidebar Auto-tick...
         const allFinished = nodes.every(n => n.status === 'done');
         if (allFinished) {
             let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
@@ -3557,7 +3550,6 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     showByjusMap(currentMapSubject);
     loadTasks();
 };
-
 /* --- 3. OPTION TO ADD NEW SHIFT MID-DAY --- */
 window.extendShiftDirectly = function() {
     const current = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
