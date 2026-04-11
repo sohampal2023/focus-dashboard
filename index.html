@@ -3389,14 +3389,10 @@ window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
-    
-    // 1. GET THE ACTUAL SHIFT DATA
     const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
-    const totalDayMins = shiftCount * 120; // This is your MAX budget (e.g., 360m)
+    const totalDayMins = shiftCount * 120;
 
     let allSubjects = Object.keys(dailyMaps[today] || {});
-    
-    // 2. CALCULATE ACTUAL CONSUMPTION
     let doneNodes = [];
     let pendingNodes = [];
     allSubjects.forEach(s => {
@@ -3406,84 +3402,46 @@ window.showByjusMap = function(subjectName) {
         });
     });
 
-    // Hard Fix: Time consumed is ONLY what you actually clicked 'DONE' on
-    const consumedMins = doneNodes.reduce((sum, node) => sum + (node.dynamicMins || 0), 0);
+    const usedTime = doneNodes.reduce((s, n) => s + (n.dynamicMins || 0), 0);
+    const remainTime = Math.max(0, totalDayMins - usedTime);
+    const evenAlloc = pendingNodes.length > 0 ? Math.floor(remainTime / pendingNodes.length) : 0;
     
-    // 3. REMAINING BUDGET CALCULATION
-    // If consumed is 307 but you only studied 120, this will force the rest to stay in budget
-    const remainingMins = Math.max(0, totalDayMins - consumedMins);
-    const balancedPendingMins = pendingNodes.length > 0 ? Math.floor(remainingMins / pendingNodes.length) : 0;
-    
-    const nodes = dailyMaps[today][subjectName] || [];
     const container = document.getElementById("mapContainer");
     container.innerHTML = "";
     
-    // Header UI
+    // Header Info
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
-        <div style="display:flex; flex-direction:column; gap:5px; width:100%;">
+        <div style="display:flex; flex-direction:column; gap:4px;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:1.1rem; color:#38bdf8; font-weight:bold;">${subjectName}</span>
-                <div style="display:flex; gap:8px;">
-                    <button onclick="addNewSubTopic('${subjectName.replace(/'/g, "\\'")}')" style="background:#16a34a; font-size:9px; padding:5px 10px; border-radius:4px; border:none; color:white;">➕ TOPIC</button>
-                    <button onclick="extendShiftDirectly()" style="background:#7c3aed; font-size:9px; padding:5px 10px; border-radius:4px; border:none; color:white;">➕ SHIFT</button>
-                </div>
+                <span style="font-weight:bold; color:#38bdf8;">${subjectName}</span>
+                <button onclick="addNewSubTopic('${subjectName.replace(/'/g, "\\'")}')" style="background:#16a34a; font-size:9px; padding:4px 8px;">➕ TOPIC</button>
             </div>
-            <div style="font-size:11px; color:#94a3b8; border-top:1px solid #1e293b; padding-top:5px; margin-top:5px;">
-                <span style="color:#ef4444">STUDIED: ${consumedMins}m</span> | 
-                <span style="color:#4ade80">REMAINING: ${remainingMins}m</span> | 
-                <span>LIMIT: ${totalDayMins}m</span>
-            </div>
+            <div style="font-size:10px; color:#94a3b8;">USED: ${usedTime}m | REMAIN: ${remainTime}m | TOTAL: ${totalDayMins}m</div>
         </div>
     `;
 
-    document.getElementById("byjusMapBox").classList.remove("hidden");
+    (dailyMaps[today][subjectName] || []).forEach((node, idx) => {
+        const displayMins = node.status === 'done' ? node.dynamicMins : evenAlloc;
+        let histHtml = (node.history || []).slice(-3).map(h => `<span style="text-decoration:line-through; opacity:0.5; margin-right:5px;">${h}m</span>`).join("");
 
-    nodes.forEach((node, idx) => {
-        const currentMins = (node.status === 'done') ? (node.dynamicMins || 0) : balancedPendingMins;
-        
-        // Save the balanced time back to the node so other maps see the same number
-        if (node.status !== 'done') node.dynamicMins = currentMins;
-
-        let timeDisplayHTML = "";
-        if (node.history && node.history.length > 0) {
-            node.history.slice(-2).forEach(h => {
-                timeDisplayHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px; opacity: 0.5; font-size:0.9em;">${h}m</span>`;
-            });
-        }
-        timeDisplayHTML += `<span style="color: #38bdf8; font-weight: 900; font-size:1.1em;">${currentMins}m</span>`;
-
-        const nodeRow = document.createElement("div");
-        nodeRow.style.cssText = "display:flex; align-items:center; width:95%; max-width:500px; position:relative; margin-bottom:30px;";
-
-        const circle = document.createElement("div");
-        circle.className = `node-circle status-${node.status}`;
-        if (node.status === 'done') circle.innerHTML = "✔";
-        else if (node.status === 'doing') circle.innerHTML = '<span id="miniTimer" style="font-size:11px; font-weight:900;">--:--</span>';
-        else circle.innerText = idx + 1;
-
-        const wrapper = document.createElement("div");
-        wrapper.style.cssText = "flex-grow:1; background:#0f172a; border:1px solid #334155; border-radius:14px; padding:15px;";
-        
-        wrapper.innerHTML = `
-            <div style="display:flex; flex-direction:column; gap:2px;">
-                <div style="font-weight:800; color:#fff; font-size:13px; text-transform:uppercase;">${node.label}</div>
-                <div style="font-size:11px; font-weight:bold;">${timeDisplayHTML}</div>
+        const row = document.createElement("div");
+        row.style.cssText = "display:flex; align-items:center; margin-bottom:30px; gap:15px;";
+        row.innerHTML = `
+            <div class="node-circle status-${node.status}" style="width:45px; height:45px; flex-shrink:0;">${node.status === 'done' ? '✔' : idx+1}</div>
+            <div style="flex-grow:1; background:#0f172a; padding:15px; border-radius:12px; border:1px solid #1e293b;">
+                <div style="font-weight:bold; font-size:13px; color:#fff;">${node.label}</div>
+                <div style="font-size:11px;">${histHtml} <span style="color:#38bdf8; font-weight:900;">${displayMins}m</span></div>
                 <div style="margin-top:10px;">
-                    ${node.status === 'todo' ? 
-                        `<button onclick="handleNodeAction(${idx}, 'start', ${currentMins})" style="background:#0ea5e9; border:none; color:white; padding:6px 12px; border-radius:5px; cursor:pointer; font-size:10px; font-weight:bold;">START</button>` :
-                      node.status === 'doing' ? 
-                        `<button onclick="handleNodeAction(${idx}, 'done', ${currentMins})" style="background:#16a34a; border:none; color:white; padding:6px 12px; border-radius:5px; cursor:pointer; font-size:10px; font-weight:bold; margin-right:8px;">DONE</button>
-                         <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; border:none; color:white; padding:6px 12px; border-radius:5px; cursor:pointer; font-size:10px; font-weight:bold;">ABORT</button>` :
-                        `<div style="color:#4ade80; font-size:11px; font-weight:bold;">✔ OK <span style="color:#86efac; font-weight:normal; font-size:10px;">@ ${node.completedAt}</span></div>`
-                    }
+                    ${node.status === 'todo' ? `<button onclick="handleNodeAction(${idx}, 'start', ${displayMins})" style="background:#0ea5e9; padding:5px 12px; font-size:10px;">START</button>` : 
+                      node.status === 'doing' ? `<button onclick="handleNodeAction(${idx}, 'done', ${displayMins})" style="background:#16a34a; padding:5px 12px; font-size:10px;">DONE</button>` : 
+                      `<span style="color:#4ade80; font-size:10px; font-weight:bold;">✔ FINISHED</span>`}
                 </div>
-            </div>`;
-
-        nodeRow.append(circle, wrapper);
-        container.appendChild(nodeRow);
-        if (node.status === 'doing') startCountdown(currentMins);
+            </div>
+        `;
+        container.appendChild(row);
     });
+    document.getElementById("byjusMapBox").classList.remove("hidden");
 };
 /* --- 2. GLOBAL REDISTRIBUTION (REMAINING TIME FOCUS) --- */
 window.handleNodeAction = function(idx, action, currentAllocatedMins) {
@@ -3501,32 +3459,59 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     } else if (action === 'done') {
         const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
         const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
-        
+        const difference = currentAllocatedMins - actualUsedMins; 
+
         nodes[idx].status = 'done';
-        nodes[idx].dynamicMins = actualUsedMins; // Freeze actual consumption
+        nodes[idx].dynamicMins = actualUsedMins; 
         nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-        // Automated Progress Table Sync
-        const due = nodes.filter(n => n.status === 'todo').map(n => n.label).join(", ") || "Goal Reached";
-        saveAutomatedSubjectProgress(currentMapSubject, `${nodes[idx].label} (${actualUsedMins}m)`, due);
-
-        // Sidebar Auto-tick Logic
+        // Check if this subject is now 100% complete
         const allFinished = nodes.every(n => n.status === 'done');
+        
         if (allFinished) {
+            // Auto-Tick Sidebar
             let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
             let extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-            tasks.forEach(t => { if (t.name.trim().toLowerCase() === currentMapSubject.trim().toLowerCase()) t.done = true; });
-            extras.forEach(e => { if (e.name.trim().toLowerCase() === currentMapSubject.trim().toLowerCase()) e.done = true; });
+            const target = currentMapSubject.trim().toLowerCase();
+            [...tasks, ...extras].forEach(t => {
+                if (t.name.trim().toLowerCase() === target) t.done = true;
+            });
             localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
             localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+
+            // Log Final Status to Progress Table
+            const totalTime = nodes.reduce((s, n) => s + (n.dynamicMins || 0), 0);
+            saveAutomatedSubjectProgress(currentMapSubject, `Completed (${totalTime}m)`, "NONE - All Clear");
+        }
+
+        // REBALANCE: Redistribute gained/lost time globally
+        let pending = [];
+        Object.keys(dailyMaps[today]).forEach(sub => {
+            dailyMaps[today][sub].forEach((n, i) => {
+                if (n.status === 'todo') pending.push({ s: sub, idx: i });
+            });
+        });
+
+        if (pending.length > 0 && difference !== 0) {
+            const adj = difference / pending.length;
+            pending.forEach(p => {
+                let target = dailyMaps[today][p.s][p.idx];
+                const old = target.dynamicMins || currentAllocatedMins;
+                const newVal = Math.max(5, Math.round(old + adj));
+                if (newVal !== Math.round(old)) {
+                    if (!target.history) target.history = [];
+                    target.history.push(Math.round(old));
+                    target.dynamicMins = newVal;
+                }
+            });
         }
 
         if(activeMapTimer) clearInterval(activeMapTimer);
         localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
+
     } else if (action === 'abort') {
         nodes[idx].status = 'todo';
         if(activeMapTimer) clearInterval(activeMapTimer);
-        localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
     }
 
     dailyMaps[today][currentMapSubject] = nodes;
@@ -3716,6 +3701,33 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     
     saveSubjectData(subjectData); 
     uploadData(); 
+};
+  window.finalDayEnd = function() {
+    if(!confirm("Submit Report & End Day?")) return;
+
+    const today = new Date().toLocaleDateString();
+    let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    
+    // Log any unfinished work as "DUE" before clearing
+    Object.keys(dailyMaps[today] || {}).forEach(sub => {
+        const nodes = dailyMaps[today][sub];
+        const pending = nodes.filter(n => n.status !== 'done');
+        if (pending.length > 0) {
+            const done = nodes.filter(n => n.status === 'done').map(n => n.label).join(", ") || "None";
+            const due = pending.map(n => n.label).join(", ");
+            saveAutomatedSubjectProgress(sub, `Partial: ${done}`, `DUE: ${due}`);
+        }
+    });
+
+    // Reset Penalties and Local Storage
+    localStorage.setItem(key("PENALTY"), "0");
+    localStorage.setItem(key("IDLE_STRIKES"), "0");
+    localStorage.removeItem(key("DAILY_GOAL_DATE"));
+    localStorage.removeItem(MAP_STORAGE_KEY());
+    
+    uploadData();
+    // Generate Report HTML and Lock... (standard report code)
+    location.reload();
 };
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
