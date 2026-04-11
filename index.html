@@ -2047,13 +2047,12 @@ async function initStudentDashboard() {
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox")?.classList.remove("hidden");
     document.getElementById("logBox")?.classList.remove("hidden");
-    
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 2. --- DOWNLOAD DATA & CHECK LOCKOUT ---
+    // 2. --- SERVER DATA CHECK ---
     const serverData = await downloadData(currentUser.uid);
     if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
         location.reload(); 
@@ -2075,27 +2074,25 @@ async function initStudentDashboard() {
     dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
     document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
 
-    // 5. --- CRITICAL: BIO BREAK / PENDING REASON CHECK ---
+    // 5. --- BIO BREAK / PENDING REASON CHECK ---
     let logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    
-    // Check if the very last log entry has a "Pending" reason from a Bio Break
     if (logs.length > 0 && logs[logs.length - 1].reason === "Pending") {
-        const userReason = prompt("You are back! What was the reason for your previous break?", "Bio Break");
+        const userReason = prompt("Welcome back! Reason for the break?", "Bio Break");
         logs[logs.length - 1].reason = userReason || "Bio Break";
-        // Save immediately so it's reflected in the table
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // Now start a fresh log entry for the current session
+    // 5.5 --- RESUME SHIFT TIMER LOGIC ---
+    const pausedRemaining = localStorage.getItem(key("PAUSED_SHIFT_REMAINING"));
+    if (pausedRemaining && parseInt(pausedRemaining) > 0) {
+        // Resume shift by setting a new end time based on remaining duration
+        const newEnd = Date.now() + parseInt(pausedRemaining);
+        localStorage.setItem(key("SHIFT_END_TS"), newEnd);
+        localStorage.removeItem(key("PAUSED_SHIFT_REMAINING")); // Clear pause marker
+    }
+
     if (!logs.length || logs[logs.length - 1].logoutTS !== null) {
-        logs.push({ 
-            login: new Date().toLocaleString(), 
-            loginTS: Date.now(), 
-            logout: "-", 
-            logoutTS: null, 
-            reason: "-", 
-            completed: [] 
-        });
+        logs.push({ login: new Date().toLocaleString(), loginTS: Date.now(), logout: "-", logoutTS: null, reason: "-", completed: [] });
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
@@ -2106,22 +2103,14 @@ async function initStudentDashboard() {
     loadTasks();          
     renderLogs();         
     updateProgress();     
-    runShiftTimer();      
+    runShiftTimer(); // This will now pick up the resumed time
     uploadData();
 
-    // 7. --- UNLOCK SIDEBAR BUTTONS ---
-    const buttonsToEnable = [
-        "bioBtn", "histBtn", "dayBtn", 
-        "button[onclick='toggleSubjectProgress()']",
-        "button[onclick='toggleHistory()']"
-    ];
-    buttonsToEnable.forEach(selector => {
-        const btn = document.querySelector(selector) || document.getElementById(selector);
-        if(btn) {
-            btn.disabled = false;
-            btn.style.opacity = "1";
-            btn.style.cursor = "pointer";
-        }
+    // 7. --- UNLOCK BUTTONS ---
+    const buttonsToEnable = ["bioBtn", "histBtn", "dayBtn", "button[onclick='toggleSubjectProgress()']"];
+    buttonsToEnable.forEach(sel => {
+        const b = document.querySelector(sel);
+        if(b) { b.disabled = false; b.style.opacity = "1"; }
     });
 }
 window.dismissFeedback = async function() {
@@ -2641,25 +2630,32 @@ function autoLogout() {
 }
 
 function bioBreak() {
-  clearInterval(idleTimer);
+    clearInterval(idleTimer);
+    if (window.shiftInterval) clearInterval(window.shiftInterval);
 
-  const idleBox = document.getElementById("idleBox");
-  if (idleBox) idleBox.classList.add("hidden");
+    // PAUSE LOGIC: Calculate remaining time in the shift
+    const shiftEnd = localStorage.getItem(key("SHIFT_END_TS"));
+    if (shiftEnd) {
+        const remaining = Math.max(0, parseInt(shiftEnd) - Date.now());
+        localStorage.setItem(key("PAUSED_SHIFT_REMAINING"), remaining);
+    }
 
-  localStorage.setItem(key("IDLE_STRIKES"), "0");
+    const idleBox = document.getElementById("idleBox");
+    if (idleBox) idleBox.classList.add("hidden");
 
-  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-  if (logs.length) {
-    const last = logs[logs.length - 1];
-    last.logout = now();
-    last.logoutTS = Date.now();
-    last.reason = "Pending";
-    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-  }
+    localStorage.setItem(key("IDLE_STRIKES"), "0");
 
-  uploadData();
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    if (logs.length) {
+        const last = logs[logs.length - 1];
+        last.logout = now();
+        last.logoutTS = Date.now();
+        last.reason = "Pending"; // This triggers the prompt on next login
+        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
 
-  signOut(auth).then(() => location.reload());
+    uploadData();
+    signOut(auth).then(() => location.reload());
 }
 
 
