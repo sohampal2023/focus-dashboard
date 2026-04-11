@@ -3384,28 +3384,37 @@ window.addNewSubTopic = function(subjectName) {
 };
 let activeMapTimer = null; 
 
-/* --- 1. THE MAP RENDERER (UI + DYNAMIC GLOBAL BALANCE) --- */
+/* --- 1. THE MAP RENDERER (TOTAL DAY ACCOUNTING) --- */
 window.showByjusMap = function(subjectName) {
     currentMapSubject = subjectName;
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
     const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
 
-    // Calculate Total Minutes Budget for the Day
     const totalDayMins = shiftCount * 120;
-
     let allSubjects = Object.keys(dailyMaps[today] || {});
-    let totalGlobalTopics = 0;
-    allSubjects.forEach(s => { totalGlobalTopics += (dailyMaps[today][s] || []).length; });
+    
+    // 1. Calculate how many topics are left vs how many are done
+    let doneNodes = [];
+    let pendingNodes = [];
+    
+    allSubjects.forEach(s => {
+        (dailyMaps[today][s] || []).forEach(n => {
+            if (n.status === 'done') doneNodes.push(n);
+            else pendingNodes.push(n);
+        });
+    });
 
-    // Base Mins calculation to ensure the SUM equals the TOTAL Day Timing
+    // 2. Base Mins: (Total Day Mins - Time already consumed) / Remaining Topics
+    // This ensures we never "ignore" the time taken by finished subjects
+    const totalGlobalTopics = doneNodes.length + pendingNodes.length;
     const baseMins = totalGlobalTopics > 0 ? Math.floor(totalDayMins / totalGlobalTopics) : 0;
     
     const nodes = dailyMaps[today][subjectName] || [];
     const container = document.getElementById("mapContainer");
     container.innerHTML = "";
     
-    // --- HEADER WITH ADD TOPIC & ADD SHIFT OPTIONS ---
+    // Header remains the same...
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
         <div style="display:flex; flex-direction:column; gap:8px; width:100%;">
@@ -3416,7 +3425,7 @@ window.showByjusMap = function(subjectName) {
                     <button onclick="extendShiftDirectly()" style="background:#7c3aed; font-size:9px; padding:5px 10px; border-radius:4px; border:none; color:white; cursor:pointer;">➕ SHIFT</button>
                 </div>
             </div>
-            <div style="font-size:10px; color:#94a3b8; text-transform:uppercase;">Daily Budget: ${totalDayMins}m | Count: ${totalGlobalTopics}</div>
+            <div style="font-size:10px; color:#94a3b8; text-transform:uppercase;">Daily Target: ${totalDayMins}m | Total Topics: ${totalGlobalTopics}</div>
         </div>
     `;
 
@@ -3424,8 +3433,8 @@ window.showByjusMap = function(subjectName) {
 
     nodes.forEach((node, idx) => {
         const currentMins = node.dynamicMins || baseMins;
-        
         let timeDisplayHTML = "";
+        
         if (node.history && node.history.length > 0) {
             node.history.slice(-3).forEach(h => {
                 timeDisplayHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px; opacity: 0.5;">${h}m</span>`;
@@ -3476,7 +3485,7 @@ window.showByjusMap = function(subjectName) {
     });
 };
 
-/* --- 2. THE DYNAMIC REDISTRIBUTION & BALANCING LOGIC --- */
+/* --- 2. GLOBAL REDISTRIBUTION (DOES NOT IGNORE COMPLETED TIME) --- */
 window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
@@ -3492,28 +3501,31 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     } else if (action === 'done') {
         const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
         const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
+        
+        // LOGIC: The gain/loss from THIS topic must be spread across ALL remaining topics
         const difference = currentAllocatedMins - actualUsedMins; 
 
         nodes[idx].status = 'done';
         nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-        // Progress Table Log
+        // Save progress...
         const due = nodes.filter(n => n.status === 'todo').map(n => n.label).join(", ") || "Goal Reached";
         saveAutomatedSubjectProgress(currentMapSubject, `${nodes[idx].label} (${actualUsedMins}m)`, due);
 
-        // GLOBAL REDISTRIBUTE: All remaining topics across all subjects
-        let remainingTasks = [];
+        // Identify ALL pending tasks GLOBALLY
+        let pendingTasks = [];
         Object.keys(dailyMaps[today]).forEach(subKey => {
             dailyMaps[today][subKey].forEach((n, i) => {
-                if (n.status === 'todo') remainingTasks.push({ sub: subKey, index: i });
+                if (n.status === 'todo') pendingTasks.push({ sub: subKey, index: i });
             });
         });
 
-        if (remainingTasks.length > 0 && difference !== 0) {
-            const adjustment = difference / remainingTasks.length;
-            remainingTasks.forEach(task => {
+        // REBALANCE: Divide gain/loss by total pending count
+        if (pendingTasks.length > 0 && difference !== 0) {
+            const adjustment = difference / pendingTasks.length;
+            pendingTasks.forEach(task => {
                 let target = dailyMaps[today][task.sub][task.index];
-                const oldVal = target.dynamicMins || (parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) * 120 / (remainingTasks.length + nodes.filter(x => x.status === 'done').length));
+                const oldVal = target.dynamicMins || currentAllocatedMins;
                 const newVal = Math.max(5, Math.round(oldVal + adjustment));
                 if (newVal !== Math.round(oldVal)) {
                     if (!target.history) target.history = [];
@@ -3523,7 +3535,7 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
             });
         }
 
-        // Auto-tick sidebar
+        // Sidebar Auto-tick...
         const allFinished = nodes.every(n => n.status === 'done');
         if (allFinished) {
             let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
