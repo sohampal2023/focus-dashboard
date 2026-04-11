@@ -3333,12 +3333,10 @@ window.showByjusMap = function(subjectName) {
     const today = new Date().toLocaleDateString();
     const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
 
-    // Calculate Global Counts for even distribution
     let allSubjects = Object.keys(dailyMaps[today] || {});
     let totalGlobalTopics = 0;
     allSubjects.forEach(s => { totalGlobalTopics += (dailyMaps[today][s] || []).length; });
 
-    // Global Base Mins based on Total Day Capacity
     const totalDayMins = shiftCount * 120;
     const baseMins = totalGlobalTopics > 0 ? Math.floor(totalDayMins / totalGlobalTopics) : 0;
     
@@ -3347,7 +3345,6 @@ window.showByjusMap = function(subjectName) {
     
     container.innerHTML = "";
     
-    // Header with Edit Option
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
         <div style="display:flex; align-items:center; gap:15px;">
@@ -3365,14 +3362,19 @@ window.showByjusMap = function(subjectName) {
         const currentMins = node.dynamicMins || baseMins;
         
         let timeDisplayHTML = "";
+        
+        // --- LOGIC: ONLY SHOW LAST 3 STRIKETHROUGH ENTRIES ---
         if (node.history && node.history.length > 0) {
-            node.history.forEach(h => {
-                timeDisplayHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px; opacity: 0.6;">${h}m</span>`;
+            // .slice(-3) keeps only the last 3 elements of the array
+            const visibleHistory = node.history.slice(-3); 
+            visibleHistory.forEach(h => {
+                timeDisplayHTML += `<span style="text-decoration: line-through; color: #64748b; margin-right: 6px; opacity: 0.5; font-weight: normal;">${h}m</span>`;
             });
         }
-        timeDisplayHTML += `<span style="color: #38bdf8; font-weight: 800;">${currentMins}m</span>`;
+        
+        // Current active time in bright blue
+        timeDisplayHTML += `<span style="color: #38bdf8; font-weight: 900; font-size: 1.1em;">${currentMins}m</span>`;
 
-        // Calculate exact Shift Number globally
         let globalIndex = 0;
         let foundSub = false;
         allSubjects.forEach(sub => {
@@ -3395,12 +3397,12 @@ window.showByjusMap = function(subjectName) {
         
         wrapper.innerHTML = `
             <div style="display:flex; flex-direction:column; gap:4px;">
-                <div style="font-weight:800; color:#fff; font-size:14px; text-transform:uppercase;">${node.label}</div>
-                <div style="font-size:11px; font-weight:bold;">
-                    <span style="color:#94a3b8;">Shift ${shiftNum} | </span>
+                <div style="font-weight:800; color:#fff; font-size:15px; text-transform:uppercase;">${node.label}</div>
+                <div style="font-size:11px; font-weight:bold; display:flex; align-items:center; flex-wrap:wrap;">
+                    <span style="color:#94a3b8; margin-right:8px;">Shift ${shiftNum} | </span>
                     ${timeDisplayHTML}
                 </div>
-                <div style="margin-top:10px;">
+                <div style="margin-top:12px;">
                     ${node.status === 'todo' ? 
                         `<button onclick="handleNodeAction(${idx}, 'start', ${currentMins})" style="background:#0ea5e9; border:none; color:white; padding:7px 15px; border-radius:6px; cursor:pointer; font-size:10px; font-weight:bold;">START</button>` :
                       node.status === 'doing' ? 
