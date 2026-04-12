@@ -3397,13 +3397,12 @@ window.saveAdminJourney = async function() {
     const topics = document.getElementById("admTopics").value;
     const lines = topics.split('\n').filter(l => l.trim() !== "");
 
-    if (!lines.length) return alert("Error: Subtopics cannot be empty!");
+    if (!lines.length) return alert("Please enter subtopics!");
 
     const taskId = "TASK_" + Date.now();
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const targetUid = window.currentAdminTargetUid;
 
-    // Create detailed text for student dashboard
     const displayLabel = `${sub} | ${mod}: ${chap} (${lines.slice(0,2).join(", ")}...)`;
 
     const newMapData = lines.map(line => ({
@@ -3413,11 +3412,11 @@ window.saveAdminJourney = async function() {
         dynamicMins: 30
     }));
 
-    // 1. Fetch current tasks
+    // 1. Get current tasks
     const taskSnap = await get(ref(db, `users/${targetUid}/TASKS`));
     let currentTasks = JSON.parse(taskSnap.val() || "[]");
 
-    // 2. Add the new entry
+    // 2. Add new entry
     currentTasks.push({
         id: taskId,
         name: displayLabel,
@@ -3425,24 +3424,26 @@ window.saveAdminJourney = async function() {
         done: false
     });
 
-    // 3. ATOMIC BATCH UPDATE (CRITICAL FOR SYNC)
-    // This pushes the Map and the Task List simultaneously
+    // 3. BATCH UPDATE: Includes the removal of the request notification
     const updates = {};
     updates[`users/${targetUid}/dailyMaps/${todayKey}/${taskId}`] = newMapData;
     updates[`users/${targetUid}/TASKS`] = JSON.stringify(currentTasks);
     
-    // Clear request if it exists
+    // 🔥 CLEAR THE NOTIFICATION/REQUEST
     if (window.currentRequestId) {
         updates[`users/${targetUid}/EXTRA_REQUESTS/${window.currentRequestId}`] = null;
     }
 
     try {
         await update(ref(db), updates);
-        alert("SUCCESS: Journey saved manually. Student dashboard updated.");
-        document.getElementById('adminControlCenter').remove();
-        window.currentRequestId = null;
+        alert("Journey Pushed! Notification cleared from Admin Panel.");
+        
+        const modal = document.getElementById('adminControlCenter');
+        if(modal) modal.remove();
+        
+        window.currentRequestId = null; // Reset the ID
     } catch (err) {
-        alert("Save Failed: " + err.message);
+        alert("Save failed: " + err.message);
     }
 };
 window.generateMapFromBulk = function() {
@@ -3839,42 +3840,66 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("End Day and generate 1-row-per-subject report?")) return;
+    if(!confirm("Submit Day End? This will clear all current tasks for a new start.")) return;
 
     const todayStr = new Date().toLocaleDateString();
     const todayKey = todayStr.replace(/\//g, "-");
+    
+    // 1. Fetch current data for logging
     const snapshot = await get(ref(db, `users/${currentUser.uid}`));
     const data = snapshot.val() || {};
     
     const tasks = JSON.parse(data.TASKS || "[]");
     const maps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
 
-    const summary = {}; // { "Power System": {covered: [], uncovered: []} }
-
+    // 2. Consolidate logic: 1 row per subject
+    const summary = {}; 
     tasks.forEach(t => {
         if (t.done && maps[t.id]) {
             const subject = t.subjectOnly || "General";
             if (!summary[subject]) summary[subject] = { covered: [], uncovered: [] };
 
             maps[t.id].forEach(node => {
-                if (node.status === 'done') summary[subject].covered.push(`[${node.module}] ${node.label}`);
-                else summary[subject].uncovered.push(`[${node.module}] ${node.label}`);
+                if (node.status === 'done') {
+                    summary[subject].covered.push(`[${node.module}] ${node.label}`);
+                } else {
+                    summary[subject].uncovered.push(`[${node.module}] ${node.label}`);
+                }
             });
         }
     });
 
+    // 3. Save to Progress Table
     for (const sub in summary) {
         saveAutomatedSubjectProgress(
             sub, 
-            summary[sub].covered.join(", ") || "None", 
+            summary[sub].covered.join(", ") || "Completed", 
             summary[sub].uncovered.join(", ") || "All Clear"
         );
     }
 
-    // Full cleanup
-    await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-    await update(ref(db, `users/${currentUser.uid}`), { TASKS: "[]", EXTRA: "[]" });
-    location.reload();
+    // 4. THE CLEANUP: Reset everything for the next day
+    const cleanupUpdates = {};
+    cleanupUpdates[`users/${currentUser.uid}/TASKS`] = "[]";
+    cleanupUpdates[`users/${currentUser.uid}/EXTRA`] = "[]";
+    cleanupUpdates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null; // Delete today's maps
+    cleanupUpdates[`users/${currentUser.uid}/CURRENT_SHIFT_LABEL`] = "No Shift Active";
+    cleanupUpdates[`users/${currentUser.uid}/SHIFT_END_TS`] = null;
+
+    try {
+        await update(ref(db), cleanupUpdates);
+        
+        // Clear local storage markers
+        localStorage.removeItem(key("DAILY_GOAL_DATE"));
+        localStorage.removeItem(key("SHIFT_END_TS"));
+        localStorage.setItem(key("TASKS"), "[]");
+        localStorage.setItem(key("EXTRA"), "[]");
+
+        alert("Day End Successful. Dashboard Cleared.");
+        location.reload();
+    } catch (err) {
+        alert("Cleanup Error: " + err.message);
+    }
 };
  window.loadTasks = function() {
     const tList = document.getElementById("taskList");
