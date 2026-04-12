@@ -2052,12 +2052,13 @@ window.initStudentDashboard = function() {
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
 
-    // FORCE ENABLE ALL SIDEBAR BUTTONS
+    // 1. HARD UNLOCK: Ensure sidebar buttons from your screenshot never disable
     const sidebarButtons = document.querySelectorAll(".sidebar button");
     sidebarButtons.forEach(btn => {
         btn.disabled = false;
         btn.style.opacity = "1";
         btn.style.cursor = "pointer";
+        btn.style.filter = "none";
     });
 
     if (window.studentUnsubscribe) window.studentUnsubscribe();
@@ -2066,20 +2067,22 @@ window.initStudentDashboard = function() {
     window.studentUnsubscribe = onValue(userRef, (snapshot) => {
         const data = snapshot.val() || {};
         
-        // --- FIX: Sync Firebase data to LocalStorage so loadTasks() can see it ---
+        // Update LocalStorage so loadTasks() UI helper works
         if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
         if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
         
-        // --- FIX: Call loadTasks (the correct function name) ---
+        // Redraw the tasks (Student will now see Subject + Module + Topics)
         loadTasks(); 
+
+        // Sync Shift UI (Timer and Label)
+        if(data.CURRENT_SHIFT_LABEL) {
+            document.getElementById("currentShiftLabel").innerText = data.CURRENT_SHIFT_LABEL;
+        }
         
-        // Sync Shift UI
-        document.getElementById("currentShiftLabel").innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
-        
-        // Sync Watchdog
+        // Sync Watchdog Timeout Counter
         document.getElementById("timeoutCounter").innerText = "Timeouts: " + (data.DAILY_TIMEOUTS || 0);
         
-        // Admin Warning logic
+        // Handle Active Alerts/Warnings
         if (data.activeAlert) {
             document.getElementById("rejectedMsg").innerText = "Admin: " + data.activeAlert;
             document.getElementById("rejectedPopup").classList.remove("hidden");
@@ -2087,7 +2090,7 @@ window.initStudentDashboard = function() {
             document.getElementById("rejectedPopup").classList.add("hidden");
         }
 
-        document.getElementById("syncStatus").innerText = "Real-time Synced";
+        document.getElementById("syncStatus").innerText = "Real-time Active";
     });
 
     startIdle(1800);
@@ -3309,10 +3312,13 @@ window.generateMapFromBulk = function() {
     }
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    
-    // Target the specific student selected in the Admin Panel
     const targetUid = window.currentAdminTargetUid || currentUser.uid;
     const uniqueTaskId = window.currentMapTaskId || ("TASK_" + Date.now());
+
+    // Construct detailed display name for the Dashboard
+    // Format: SUBJECT | MODULE | Topic1, Topic2...
+    const subtopicSummary = lines.slice(0, 3).join(", ") + (lines.length > 3 ? "..." : "");
+    const detailedTaskName = `${window.currentMapSubject} [${moduleName}]: ${subtopicSummary}`;
 
     const newMapData = lines.map(line => ({
         label: line.trim(),
@@ -3322,18 +3328,35 @@ window.generateMapFromBulk = function() {
         dynamicMins: 30 
     }));
 
-    const updatePayload = {};
-    updatePayload[uniqueTaskId] = newMapData;
+    // 1. Create the Map Data object
+    const mapPayload = {};
+    mapPayload[uniqueTaskId] = newMapData;
 
-    // Push to the student's ID
-    update(ref(db, `users/${targetUid}/dailyMaps/${todayKey}`), updatePayload)
-    .then(() => {
-        alert("Journey Pushed Successfully.");
-        document.getElementById('bulkInputModal').classList.add('hidden');
-        window.currentAdminTargetUid = null; 
-    })
-    .catch((error) => {
-        alert("Sync Error: " + error.message);
+    // 2. Fetch current TASKS to add this new detailed entry
+    get(ref(db, `users/${targetUid}/TASKS`)).then((snapshot) => {
+        let currentTasks = JSON.parse(snapshot.val() || "[]");
+        
+        // Add the new entry with the detailed name
+        currentTasks.push({
+            id: uniqueTaskId,
+            name: detailedTaskName,
+            done: false,
+            comment: "",
+            due: ""
+        });
+
+        const finalUpdate = {
+            [`dailyMaps/${todayKey}/${uniqueTaskId}`]: newMapData,
+            "TASKS": JSON.stringify(currentTasks)
+        };
+
+        // Push everything to Firebase in one go for instant sync
+        update(ref(db, `users/${targetUid}`), finalUpdate)
+        .then(() => {
+            alert("Success: Detailed Journey pushed to Dashboard.");
+            document.getElementById('bulkInputModal').classList.add('hidden');
+            window.currentAdminTargetUid = null;
+        });
     });
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
