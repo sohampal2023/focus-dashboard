@@ -3043,15 +3043,7 @@ window.openDayEnd = function() {
 function finalDayEnd() {
     if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
 
-    // 1. Save Next Day Tasks
-    const next = [];
-    for (let i = 0; i < 7; i++) {
-        const sub = document.getElementById("nd_sub_" + i).value.trim();
-        const top = document.getElementById("nd_top_" + i).value.trim();
-        if(sub) { next.push({ subject: sub, topic: top }); }
-    }
-    localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
-
+   
     // 2. Calculate Stats & Time
     const p = calculate();
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
