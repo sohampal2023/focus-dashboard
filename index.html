@@ -3541,39 +3541,41 @@ window.showByjusMap = async function(subjectName, taskId) {
     const container = document.getElementById("mapContainer");
     
     if(!container) return;
-    container.innerHTML = "<div style='color:#38bdf8;'>Loading Journey...</div>";
+    container.innerHTML = "<div style='color:#38bdf8;'>Syncing Journey...</div>";
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
+    // Fetch latest data from server
     const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
     const dailyMaps = snapshot.val() || {};
     const nodes = dailyMaps[taskId];
 
-    // SAFETY CHECK: If no nodes found, show message instead of crashing
+    // Safety check if Admin is still writing data
     if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
-        container.innerHTML = "<div style='color:#fca5a5; padding:20px; text-align:center;'>Map data is still syncing. <br> Please close and reopen in 5 seconds.</div>";
+        container.innerHTML = "<div style='color:#fca5a5; padding:20px; text-align:center;'>Map data is arriving... <br> Please wait a few seconds and reopen.</div>";
         return;
     }
 
     const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
     const totalDayMins = shiftCount * 120;
+    
+    // Calculate global metrics
     let totalGlobalTopics = 0;
     Object.keys(dailyMaps).forEach(k => { 
         if(Array.isArray(dailyMaps[k])) totalGlobalTopics += dailyMaps[k].length; 
     });
 
-    const studied = nodes.filter(n => n && n.status==='done').reduce((s,n)=>s+(n.dynamicMins||0), 0);
+    const studied = nodes.filter(n => n && n.status === 'done').reduce((s, n) => s + (n.dynamicMins || 0), 0);
     const headerTitle = document.getElementById("currentMapSubject");
     
-    // Safety check for nodes[0]
-    const moduleInfo = nodes[0].module || "Assigned Task";
-
+    // Update Header Summary
     headerTitle.innerHTML = `
         <div style="width:100%;">
-            <div style="display:flex; justify-content:space-between;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="font-weight:bold; color:#38bdf8;">${subjectName}</span>
+                <span style="font-size:10px; background:#1e293b; padding:2px 8px; border-radius:4px; color:#4ade80;">Live Sync Active</span>
             </div>
             <div style="font-size:10px; color:#94a3b8; margin-top:5px; border-top:1px solid #1e293b; padding-top:5px;">
-                STUDIED: ${studied}m | BUDGET: ${totalDayMins}m
+                STUDIED: ${studied}m | TOTAL BUDGET: ${totalDayMins}m
             </div>
         </div>`;
 
@@ -3583,21 +3585,48 @@ window.showByjusMap = async function(subjectName, taskId) {
         const isDoing = node.status === 'doing';
         const isDone = node.status === 'done';
 
+        // Stage-based Button Logic
+        let actionButtons = "";
+        if (isDone) {
+            actionButtons = `<span style="color:#4ade80; font-size:10px; font-weight:bold;">COMPLETED @ ${node.completedAt || 'N/A'}</span>`;
+        } else if (isDoing) {
+            // Stage 2: Only DONE or ABORT
+            actionButtons = `
+                <button onclick="handleNodeAction(${idx}, 'done', ${node.dynamicMins || 0})" style="background:#16a34a; padding:6px 15px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">DONE</button>
+                <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; padding:6px 15px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">ABORT</button>
+            `;
+        } else {
+            // Stage 1: START
+            actionButtons = `
+                <button onclick="handleNodeAction(${idx}, 'start')" style="background:#0ea5e9; padding:6px 20px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">START</button>
+            `;
+        }
+
         const row = document.createElement("div");
-        row.style.cssText = "display:flex; align-items:center; margin-bottom:25px; gap:12px;";
+        row.style.cssText = "display:flex; align-items:center; margin-bottom:20px; gap:12px;";
         row.innerHTML = `
-            <div class="node-circle status-${node.status}" style="width:40px; height:40px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:10px; color:#000;">--:--</span>' : idx+1}
+            <div class="node-circle status-${node.status}" style="width:45px; height:45px; display:flex; align-items:center; justify-content:center; flex-shrink:0; border: 3px solid ${isDoing ? '#facc15' : '#1e293b'}; background:${isDone ? '#16a34a' : '#0f172a'};">
+                ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:11px; font-weight:900; color:#facc15;">--:--</span>' : idx+1}
             </div>
-            <div style="flex-grow:1; background:#0f172a; padding:15px; border-radius:12px; border:1px solid ${isDoing ? '#facc15' : '#1e293b'};">
-                <div style="font-size:9px; color:#94a3b8; text-transform:uppercase;">${node.module}</div>
-                <div style="font-weight:bold; color:#fff; font-size:13px;">${node.label}</div>
-                <div style="margin-top:10px; display:flex; gap:8px;">
-                    ${!isDone ? `<button onclick="handleNodeAction(${idx}, '${isDoing ? 'done' : 'start'}', ${node.dynamicMins || 0})" style="background:${isDoing ? '#16a34a' : '#0ea5e9'}; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px;">${isDoing ? 'DONE' : 'START'}</button>` : ''}
+            <div style="flex-grow:1; background:#0f172a; padding:15px; border-radius:12px; border:1px solid ${isDoing ? '#facc15' : '#1e293b'}; box-shadow: ${isDoing ? '0 0 15px rgba(250, 204, 21, 0.2)' : 'none'};">
+                <div style="font-size:9px; color:#94a3b8; text-transform:uppercase; letter-spacing:1px; margin-bottom:2px;">${node.module}</div>
+                <div style="font-weight:bold; color:#fff; font-size:14px; margin-bottom:8px;">${node.label}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-size:11px; color:${isDone ? '#4ade80' : '#38bdf8'}; font-weight:bold;">
+                        ${isDone ? 'Time Taken: ' : 'Allocated: '}${node.dynamicMins || 0}m
+                    </div>
+                    <div style="display:flex; gap:8px;">
+                        ${actionButtons}
+                    </div>
                 </div>
             </div>`;
+        
         container.appendChild(row);
-        if(isDoing) startCountdown(node.dynamicMins || 30);
+
+        // If this specific node is being studied, trigger the countdown
+        if(isDoing) {
+            startCountdown(node.dynamicMins || 30);
+        }
     });
 };
 /* --- 2. GLOBAL REDISTRIBUTION (REMAINING TIME FOCUS) --- */
@@ -3609,32 +3638,39 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
         let dailyMaps = snapshot.val() || {};
         let nodes = dailyMaps[uniqueKey];
 
-        // LOGIC GUARD: If data is missing, don't crash
-        if (!nodes || !nodes[idx]) {
-            console.warn("Sync delay detected.");
-            // Force a 500ms delay and try one more time before alerting the user
-            setTimeout(() => {
-                location.reload(); 
-            }, 500);
-            return;
-        }
+        if (!nodes || !nodes[idx]) return;
 
         if (action === 'start') {
+            // 1. Ensure no other node is 'doing' (Global reset for this student)
             Object.keys(dailyMaps).forEach(k => {
                 if(Array.isArray(dailyMaps[k])) {
                     dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
                 }
             });
-            nodes[idx].status = 'doing';
-            localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
-        } else if (action === 'done') {
-            const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
-            const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
-            nodes[idx].status = 'done';
-            nodes[idx].dynamicMins = actualUsedMins;
-            nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-            // Auto-redistribution
+            // 2. Change stage to 'doing' (This triggers DONE/ABORT buttons in UI)
+            nodes[idx].status = 'doing';
+            
+            // 3. Start the persistent timer
+            const startTime = Date.now();
+            localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), startTime);
+            
+            // Sync to Firebase so timer is same on all devices
+            update(ref(db, `users/${currentUser.uid}`), {
+                "CURRENT_ACTIVE_TOPIC_TS": startTime
+            });
+
+        } else if (action === 'done') {
+            // 1. Calculate time consumed
+            const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS"))) || Date.now();
+            const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
+            
+            // 2. Lock the node as done
+            nodes[idx].status = 'done';
+            nodes[idx].dynamicMins = actualUsedMins; // Save actual time taken
+            nodes[idx].completedAt = new Date().toLocaleTimeString(); // Save end time
+
+            // 3. Time Redistribution (Give saved time to pending tasks)
             const diff = currentAllocatedMins - actualUsedMins;
             let pending = [];
             Object.keys(dailyMaps).forEach(k => {
@@ -3642,18 +3678,26 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
                     dailyMaps[k].forEach((n, i) => { if(n.status === 'todo') pending.push({k, i}); });
                 }
             });
+            
             if(pending.length > 0) {
                 const adj = diff / pending.length;
                 pending.forEach(p => {
-                    let t = dailyMaps[p.k][p.i];
-                    if(t) t.dynamicMins = Math.max(5, Math.round((t.dynamicMins || currentAllocatedMins) + adj));
+                    let target = dailyMaps[p.k][p.i];
+                    target.dynamicMins = Math.max(5, Math.round((target.dynamicMins || 30) + adj));
                 });
             }
             if(activeMapTimer) clearInterval(activeMapTimer);
+
+        } else if (action === 'abort') {
+            // RETURN TO PREVIOUS STAGE
+            nodes[idx].status = 'todo';
+            if(activeMapTimer) clearInterval(activeMapTimer);
+            localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
         }
 
+        // Save and Refresh only the Map UI
         update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps).then(() => {
-            showByjusMap(currentMapSubject, uniqueKey);
+            showByjusMap(window.currentMapSubject, uniqueKey);
         });
     });
 };
