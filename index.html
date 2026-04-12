@@ -2047,17 +2047,18 @@ async function loadNotices() {
     }
 }
 window.initStudentDashboard = function() {
-    // FORCE UI VISIBILITY FIRST
     const studentView = document.getElementById("studentView");
     const studentControls = document.getElementById("studentControls");
+    const taskBox = document.getElementById("taskBox"); // <--- ADD THIS
+
     if(studentView) studentView.classList.remove("hidden");
     if(studentControls) studentControls.classList.remove("hidden");
+    if(taskBox) taskBox.classList.remove("hidden"); // <--- FORCE THIS VISIBLE
     
-    // Login/Logout button swap
     document.getElementById("loginBtn")?.classList.add("hidden");
     document.getElementById("logoutBtn")?.classList.remove("hidden");
 
-    // UNLOCK ALL SIDEBAR BUTTONS
+    // UNLOCK SIDEBAR
     document.querySelectorAll(".sidebar button").forEach(btn => {
         btn.disabled = false;
         btn.style.opacity = "1";
@@ -2066,27 +2067,15 @@ window.initStudentDashboard = function() {
     if (window.studentUnsubscribe) window.studentUnsubscribe();
 
     const userRef = ref(db, `users/${currentUser.uid}`);
-    
-    // Start Live Sync
     window.studentUnsubscribe = onValue(userRef, (snapshot) => {
         const data = snapshot.val() || {};
-        
-        // Push data to local storage safely
         localStorage.setItem(key("TASKS"), data.TASKS || "[]");
         localStorage.setItem(key("EXTRA"), data.EXTRA || "[]");
         
-        // Trigger the drawing of tasks
         if (typeof window.loadTasks === "function") {
             window.loadTasks();
         }
-
-        // Sync visual labels
-        const shiftLabel = document.getElementById("currentShiftLabel");
-        if (shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
-        
         document.getElementById("syncStatus").innerText = "Ready & Synced";
-    }, (err) => {
-        document.getElementById("syncStatus").innerText = "Offline/Error";
     });
 
     startIdle(1800);
@@ -3721,56 +3710,27 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
   window.loadTasks = function() {
     const tList = document.getElementById("taskList");
     const eList = document.getElementById("extraList");
-    
-    // Safety 1: If HTML elements are missing, don't crash
-    if (!tList || !eList) return; 
+    if (!tList) return; 
+
+    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
 
     tList.innerHTML = "";
     eList.innerHTML = "";
 
-    try {
-        // Safety 2: Handle empty or corrupted LocalStorage
-        const taskRaw = localStorage.getItem(key("TASKS"));
-        const extraRaw = localStorage.getItem(key("EXTRA"));
-        
-        const tasks = JSON.parse(taskRaw || "[]");
-        const extras = JSON.parse(extraRaw || "[]");
-        
-        if (tasks.length === 0 && extras.length === 0) {
-            tList.innerHTML = `<div style="padding:20px; color:#64748b; text-align:center; font-size:12px;">
-                No tasks assigned yet. Wait for Admin.
-            </div>`;
-            return;
-        }
-
-        const renderItem = (item, listRef) => {
-            const div = document.createElement("div");
-            div.style.cssText = "background:#0f172a; border:1px solid #1e293b; padding:12px; border-radius:10px; margin-bottom:10px; display:flex; align-items:center; gap:10px;";
-            
-            const cb = document.createElement("input");
-            cb.type = "checkbox";
-            cb.checked = item.done;
-            
-            const label = document.createElement("span");
-            label.style.fontSize = "13px";
-            label.innerText = item.name || "Untitled Task";
-
-            div.append(cb, label);
-            listRef.append(div);
-            
-            cb.onchange = () => {
-                item.done = cb.checked;
-                save(tasks, extras);
-            };
-        };
-
-        tasks.forEach(t => renderItem(t, tList));
-        extras.forEach(e => renderItem(e, eList));
-
-    } catch (err) {
-        console.error("Critical Render Error:", err);
-        tList.innerHTML = `<div style="color:#ef4444; font-size:12px;">Data Error: Try Logout & Login again.</div>`;
+    if (tasks.length === 0 && extras.length === 0) {
+        tList.innerHTML = `<div style="padding:20px; border:1px dashed #334155; border-radius:10px; color:#64748b; text-align:center;">
+            NO TASKS ASSIGNED. <br> Admin must "Set Journey" to show topics.
+        </div>`;
+        return;
     }
+
+    tasks.forEach(t => {
+        const div = document.createElement("div");
+        div.style.cssText = "background:#0f172a; border:1px solid #1e293b; padding:12px; border-radius:10px; margin-bottom:10px; color:white;";
+        div.innerHTML = `<input type="checkbox" ${t.done?'checked':''}> <span>${t.name}</span>`;
+        tList.appendChild(div);
+    });
 };
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
