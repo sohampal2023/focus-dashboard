@@ -3641,63 +3641,44 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
         if (!nodes || !nodes[idx]) return;
 
         if (action === 'start') {
-            // 1. Ensure no other node is 'doing' (Global reset for this student)
+            // Reset all other nodes first
             Object.keys(dailyMaps).forEach(k => {
                 if(Array.isArray(dailyMaps[k])) {
                     dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
                 }
             });
 
-            // 2. Change stage to 'doing' (This triggers DONE/ABORT buttons in UI)
             nodes[idx].status = 'doing';
             
-            // 3. Start the persistent timer
             const startTime = Date.now();
-            localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), startTime);
+            // Use String key to avoid ReferenceError
+            localStorage.setItem("CURRENT_ACTIVE_TOPIC_TS", startTime.toString());
             
-            // Sync to Firebase so timer is same on all devices
+            // Sync to Firebase
             update(ref(db, `users/${currentUser.uid}`), {
                 "CURRENT_ACTIVE_TOPIC_TS": startTime
             });
 
         } else if (action === 'done') {
-            // 1. Calculate time consumed
-            const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS"))) || Date.now();
+            const startTS = parseInt(localStorage.getItem("CURRENT_ACTIVE_TOPIC_TS")) || Date.now();
             const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
             
-            // 2. Lock the node as done
             nodes[idx].status = 'done';
-            nodes[idx].dynamicMins = actualUsedMins; // Save actual time taken
-            nodes[idx].completedAt = new Date().toLocaleTimeString(); // Save end time
+            nodes[idx].dynamicMins = actualUsedMins;
+            nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-            // 3. Time Redistribution (Give saved time to pending tasks)
-            const diff = currentAllocatedMins - actualUsedMins;
-            let pending = [];
-            Object.keys(dailyMaps).forEach(k => {
-                if(Array.isArray(dailyMaps[k])) {
-                    dailyMaps[k].forEach((n, i) => { if(n.status === 'todo') pending.push({k, i}); });
-                }
-            });
-            
-            if(pending.length > 0) {
-                const adj = diff / pending.length;
-                pending.forEach(p => {
-                    let target = dailyMaps[p.k][p.i];
-                    target.dynamicMins = Math.max(5, Math.round((target.dynamicMins || 30) + adj));
-                });
-            }
+            // Cleanup
+            localStorage.removeItem("CURRENT_ACTIVE_TOPIC_TS");
             if(activeMapTimer) clearInterval(activeMapTimer);
 
         } else if (action === 'abort') {
-            // RETURN TO PREVIOUS STAGE
             nodes[idx].status = 'todo';
+            localStorage.removeItem("CURRENT_ACTIVE_TOPIC_TS");
             if(activeMapTimer) clearInterval(activeMapTimer);
-            localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
         }
 
-        // Save and Refresh only the Map UI
         update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps).then(() => {
-            showByjusMap(window.currentMapSubject, uniqueKey);
+            window.showByjusMap(window.currentMapSubject, uniqueKey);
         });
     });
 };
