@@ -2047,36 +2047,47 @@ async function initStudentDashboard() {
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox")?.classList.remove("hidden");
     document.getElementById("logBox")?.classList.remove("hidden");
-    document.getElementById("adminBox").classList.add("hidden");
     
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 2. --- SERVER DATA & LOCKOUT CHECK ---
+    // 2. --- SERVER DATA CHECK ---
     const serverData = await downloadData(currentUser.uid);
     if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
-        const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
-        document.body.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;background:#020617;color:#e5e7eb;text-align:center;">
-            <h1 style="color:#ef4444;">TERMINATED</h1><h2>${serverData.lockoutReason || "Admin Action"}</h2>
-            <p>Locked for ${minLeft} mins</p><button onclick="logoutFromTermination()" style="margin-top:20px;padding:10px 20px;background:#7f1d1d;color:white;border:none;border-radius:5px;">Logout</button>
-        </div>`;
+        location.reload(); 
         return; 
     }
 
-    // 3. --- AUTOMATIC SHIFT GOAL (FIRST LOGIN) ---
+    // 3. --- SHIFT GOAL PROMPT (The Fix) ---
     const todayStr = new Date().toLocaleDateString();
     let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
-    if (goalDate !== todayStr) {
-        let askedShifts = prompt("First Login Today: How many SHIFTS (2 hours each) will you conduct today?", "3");
+
+    // If goalDate is missing or different, it means a NEW day or a Restart after Day End
+    if (!goalDate || goalDate !== todayStr) {
+        let askedShifts = prompt("START NEW SESSION: How many SHIFTS (2 hours each) will you conduct today?", "3");
         if (!askedShifts || isNaN(askedShifts)) askedShifts = "3"; 
+        
         localStorage.setItem(key("DAILY_SHIFT_COUNT"), askedShifts);
         localStorage.setItem(key("DAILY_GOAL_DATE"), todayStr);
-        await update(ref(db, `users/${currentUser.uid}`), { dailyShiftTarget: askedShifts, dailyGoalDate: todayStr });
+        
+        // Save to Firebase so Admin sees your target
+        await update(ref(db, `users/${currentUser.uid}`), { 
+            dailyShiftTarget: askedShifts, 
+            dailyGoalDate: todayStr,
+            penalty: 0 // Reset penalty on new day
+        });
     }
 
-    // 4. --- BIO BREAK / PENDING REASON CHECK ---
+    // 4. --- RECOVER STATE & BALANCES ---
+    dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
+    document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
+    
+    // Recovery of Penalties
+    penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+
+    // 5. --- BIO BREAK / PENDING REASON CHECK ---
     let logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if (logs.length > 0 && logs[logs.length - 1].reason === "Pending") {
         const userReason = prompt("Welcome back! Reason for the break?", "Bio Break");
@@ -2084,12 +2095,16 @@ async function initStudentDashboard() {
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // 5. --- RESUME SHIFT TIMER ---
+    // 6. --- RESUME SHIFT TIMER ---
     const pausedRemaining = localStorage.getItem(key("PAUSED_SHIFT_REMAINING"));
     if (pausedRemaining && parseInt(pausedRemaining) > 0) {
         const newEnd = Date.now() + parseInt(pausedRemaining);
         localStorage.setItem(key("SHIFT_END_TS"), newEnd);
         localStorage.removeItem(key("PAUSED_SHIFT_REMAINING"));
+    } else if (!localStorage.getItem(key("SHIFT_END_TS"))) {
+        // If no timer exists, start it based on the Shift Count
+        const totalMins = (parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3) * 120;
+        localStorage.setItem(key("SHIFT_END_TS"), Date.now() + (totalMins * 60000));
     }
 
     if (!logs.length || logs[logs.length - 1].logoutTS !== null) {
@@ -2097,7 +2112,7 @@ async function initStudentDashboard() {
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // 6. --- INITIALIZE SYSTEM COMPONENTS ---
+    // 7. --- BOOTUP COMPONENTS ---
     startIdle(1800);      
     loadSubjectList();    
     setupTasks(); 
@@ -2107,17 +2122,9 @@ async function initStudentDashboard() {
     runShiftTimer();      
     uploadData();
 
-    // 7. --- CRITICAL: FORCE UNLOCK ALL BUTTONS ---
-    // This specifically targets the greyed out buttons in your image
-    const buttons = [
-        "bioBtn", 
-        "histBtn", 
-        "dayBtn", 
-        "leaveBtn",
-        "noticeBtn"
-    ];
-    
-    buttons.forEach(id => {
+    // 8. --- CRITICAL: FORCE UNLOCK ALL BUTTONS ---
+    const buttonsToUnlock = ["bioBtn", "histBtn", "dayBtn", "leaveBtn", "noticeBtn"];
+    buttonsToUnlock.forEach(id => {
         const btn = document.getElementById(id);
         if(btn) {
             btn.disabled = false;
@@ -2125,14 +2132,6 @@ async function initStudentDashboard() {
             btn.style.cursor = "pointer";
         }
     });
-
-    // Special selector for the Subject Progress button (which often uses a class or query)
-    const progressBtn = document.querySelector("button[onclick='toggleSubjectProgress()']");
-    if(progressBtn) {
-        progressBtn.disabled = false;
-        progressBtn.style.opacity = "1";
-        progressBtn.style.cursor = "pointer";
-    }
 }
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
