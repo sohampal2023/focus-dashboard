@@ -3299,28 +3299,30 @@ window.openSubjectJourney = function(subjectName, taskId) {
     
     modal.classList.remove("hidden");
 };
-// Add this inside your generateMapFromBulk function
 window.generateMapFromBulk = function() {
+    // 1. Get Values
+    const moduleName = prompt("Which Module are these sub-topics for?", "Module 1");
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
-    if (lines.length === 0) return;
+    
+    if (!moduleName || lines.length === 0) {
+        alert("Module Name and Topics are required.");
+        return;
+    }
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const uniqueKey = window.currentMapTaskId;
-    
-    // Determine the Module (Assigned or Extra)
-    const isExtra = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]").some(e => e.id == uniqueKey);
-    const moduleName = isExtra ? "Extra Work" : "Assigned Tasks";
 
+    // 2. Map Data with Module Provision
     const newMapData = lines.map((line, index) => ({
         label: line.trim(),
+        module: moduleName.trim(), // Storing the specific module name
         status: 'todo',
         completedAt: null,
-        dynamicMins: null,
-        module: moduleName // Provision to see which module this belongs to
+        dynamicMins: null
     }));
 
-    // SAVE TO SERVER IRRESPECTIVE OF DEVICE
+    // 3. Save to Firebase
     update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}/${uniqueKey}`), newMapData)
     .then(() => {
         document.getElementById('bulkInputModal').classList.add('hidden');
@@ -3378,28 +3380,16 @@ window.showByjusMap = async function(subjectName, taskId) {
     const dailyMaps = snapshot.val() || {};
     const nodes = dailyMaps[taskId] || [];
 
-    const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
-    const totalDayMins = shiftCount * 120;
-
-    // Calculate Global Counts for Shift Mapping
-    let allMapKeys = Object.keys(dailyMaps);
-    let totalGlobalTopics = 0;
-    allMapKeys.forEach(k => { totalGlobalTopics += dailyMaps[k].length; });
-
     const container = document.getElementById("mapContainer");
     container.innerHTML = "";
     
-    const moduleType = nodes[0]?.module || "Assigned Task";
-
+    // Header
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
-        <div style="display:flex; flex-direction:column; gap:5px; width:100%;">
+        <div style="display:flex; flex-direction:column; gap:4px;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="font-weight:bold; color:#38bdf8; font-size:1.1rem;">${subjectName}</span>
-                <span style="font-size:9px; background:#334155; padding:2px 8px; border-radius:10px; color:#94a3b8;">${moduleType}</span>
-            </div>
-            <div style="font-size:10px; color:#94a3b8; border-top:1px solid #1e293b; padding-top:5px; margin-top:10px;">
-                STUDIED: ${nodes.filter(n=>n.status==='done').reduce((s,n)=>s+(n.dynamicMins||0),0)}m | TARGET: ${totalDayMins}m
+                <button onclick="addNewSubTopic('${taskId}')" style="background:#16a34a; font-size:9px; padding:4px 10px; border:none; color:white; border-radius:4px;">➕ TOPIC</button>
             </div>
         </div>
     `;
@@ -3408,32 +3398,18 @@ window.showByjusMap = async function(subjectName, taskId) {
         const isDoing = node.status === 'doing';
         const isDone = node.status === 'done';
 
-        // --- RESTORED SHIFT CALCULATION ---
-        let globalPos = 0;
-        for (let key of allMapKeys) {
-            if (key === taskId) break;
-            globalPos += dailyMaps[key].length;
-        }
-        const currentGlobalIdx = globalPos + idx;
-        const shiftNum = Math.floor((currentGlobalIdx / totalGlobalTopics) * shiftCount) + 1;
-
         const row = document.createElement("div");
         row.style.cssText = "display:flex; align-items:center; margin-bottom:25px; gap:12px;";
         row.innerHTML = `
-            <div class="node-circle status-${node.status}" style="width:40px; height:40px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
-                ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:10px; color:#000; font-weight:bold;">--:--</span>' : idx+1}
+            <div class="node-circle status-${node.status}" style="width:40px; height:40px; flex-shrink:0;">
+                ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="color:#000; font-size:10px;">--:--</span>' : idx+1}
             </div>
             <div style="flex-grow:1; background:#0f172a; padding:15px; border-radius:12px; border:1px solid ${isDoing ? '#facc15' : '#1e293b'};">
-                <div style="font-weight:bold; color:#fff; font-size:13px; text-transform:uppercase;">${node.label}</div>
-                <div style="font-size:11px; margin-top:4px; font-weight:bold;">
-                    <span style="color:#94a3b8;">Shift ${shiftNum} | </span>
-                    <span style="color:#38bdf8;">${isDone ? 'Used: ' : ''}${node.dynamicMins || 0}m</span>
-                </div>
+                <div style="font-size:9px; color:#94a3b8; text-transform:uppercase; margin-bottom:3px;">${node.module}</div>
+                <div style="font-weight:bold; color:#fff; font-size:13px;">${node.label}</div>
                 <div style="margin-top:10px; display:flex; gap:8px;">
-                    ${!isDone ? 
-                        `<button onclick="handleNodeAction(${idx}, '${isDoing ? 'done' : 'start'}', ${node.dynamicMins || 0})" style="background:${isDoing ? '#16a34a' : '#0ea5e9'}; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold;">${isDoing ? 'DONE' : 'START'}</button>` 
-                        : `<span style="color:#4ade80; font-size:10px; font-weight:bold;">● COMPLETED</span>`}
-                    ${isDoing ? `<button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold;">ABORT</button>` : ''}
+                    ${!isDone ? `<button onclick="handleNodeAction(${idx}, '${isDoing ? 'done' : 'start'}', ${node.dynamicMins || 0})" style="background:${isDoing ? '#16a34a' : '#0ea5e9'}; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px;">${isDoing ? 'DONE' : 'START'}</button>` : ''}
+                    ${isDoing ? `<button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px;">ABORT</button>` : ''}
                 </div>
             </div>
         `;
@@ -3675,28 +3651,39 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
  window.finalDayEnd = async function() {
-    if(!confirm("Submit final report and clear maps?")) return;
+    if(!confirm("End Day? This will log all completed topics with their Module names.")) return;
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
     const maps = snapshot.val() || {};
 
-    // For each subject, log only the topic names that were completed
     Object.keys(maps).forEach(taskId => {
         const nodes = maps[taskId];
-        const doneNames = nodes.filter(n => n.status === 'done').map(n => n.label).join(", ");
-        const dueNames = nodes.filter(n => n.status !== 'done').map(n => n.label).join(", ");
-        
-        if (doneNames || dueNames) {
+        // Grouping logic: "Module 1: Topic A, Topic B"
+        const completedByModule = {};
+        const pendingByModule = {};
+
+        nodes.forEach(n => {
+            if (n.status === 'done') {
+                if (!completedByModule[n.module]) completedByModule[n.module] = [];
+                completedByModule[n.module].push(n.label);
+            } else {
+                if (!pendingByModule[n.module]) pendingByModule[n.module] = [];
+                pendingByModule[n.module].push(n.label);
+            }
+        });
+
+        // Log each module's work separately into the progress table
+        Object.keys(completedByModule).forEach(mod => {
             saveAutomatedSubjectProgress(
-                nodes[0].module === "Extra Work" ? `(EXTRA) ${nodes[0].label}` : nodes[0].label, 
-                doneNames || "None", 
-                dueNames || "All Clear"
+                `${currentMapSubject} [${mod}]`, 
+                completedByModule[mod].join(", "), 
+                pendingByModule[mod] ? pendingByModule[mod].join(", ") : "All Clear"
             );
-        }
+        });
     });
 
-    // Clear and Logout
+    // Final Cleanup
     localStorage.removeItem(key("DAILY_GOAL_DATE"));
     await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
     location.reload();
