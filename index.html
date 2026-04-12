@@ -3404,30 +3404,37 @@ window.openAdminBulkMap = async function(uid) {
     if (!existingMaps || Object.keys(existingMaps).length === 0) {
         mapsDiv.innerHTML = "<span style='font-size:11px; color:#64748b;'>No active journeys today</span>";
     } else {
-        // Inside openAdminBulkMap... where you loop through existingMaps:
-Object.entries(existingMaps).forEach(([taskId, nodes]) => {
-    if (Array.isArray(nodes) && nodes.length > 0) {
-        const doneCount = nodes.filter(n => n.status === 'done').length;
-        const moduleLabel = nodes[0].module || "Untitled Module";
-        const isAnyDoing = nodes.some(n => n.status === 'doing');
+        // We need the TASKS list to find the subject name associated with the taskId
+        const taskSnap = await get(ref(db, `users/${uid}/TASKS`));
+        const currentTasks = JSON.parse(taskSnap.val() || "[]");
 
-        mapsDiv.innerHTML += `
-            <div onclick="adminPeekStudentMap('${taskId}')" 
-                 style="font-size:11px; margin-bottom:10px; border-left:4px solid ${isAnyDoing ? '#facc15' : '#4ade80'}; 
-                 padding:10px; background:rgba(255,255,255,0.05); border-radius:4px; cursor:pointer; transition: 0.2s;"
-                 onmouseover="this.style.background='rgba(255,255,255,0.1)'" 
-                 onmouseout="this.style.background='rgba(255,255,255,0.05)'">
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="color:#fff; font-weight:bold;">${moduleLabel}</span>
-                    ${isAnyDoing ? '<span style="color:#facc15; font-size:9px; font-weight:bold;">● LIVE</span>' : ''}
-                </div>
-                <div style="color:#94a3b8; margin-top:4px;">
-                    Progress: ${doneCount} / ${nodes.length} Topics
-                </div>
-                <div style="font-size:9px; color:#38bdf8; margin-top:2px;">Click to view full map →</div>
-            </div>`;
-    }
-});
+        Object.entries(existingMaps).forEach(([taskId, nodes]) => {
+            if (Array.isArray(nodes) && nodes.length > 0) {
+                // Find the task in the student's task list to get the Subject Name
+                const matchingTask = currentTasks.find(t => t.id === taskId);
+                const subjectName = matchingTask ? (matchingTask.subjectOnly || "General") : "Unknown Subject";
+                
+                const doneCount = nodes.filter(n => n.status === 'done').length;
+                const moduleLabel = nodes[0].module || "Untitled Module";
+                const isAnyDoing = nodes.some(n => n.status === 'doing');
+
+                mapsDiv.innerHTML += `
+                    <div onclick="adminPeekStudentMap('${taskId}')" 
+                         style="font-size:11px; margin-bottom:10px; border-left:4px solid ${isAnyDoing ? '#facc15' : '#4ade80'}; 
+                         padding:10px; background:rgba(255,255,255,0.05); border-radius:4px; cursor:pointer; transition: 0.2s;"
+                         onmouseover="this.style.background='rgba(255,255,255,0.1)'" 
+                         onmouseout="this.style.background='rgba(255,255,255,0.05)'">
+                        <div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="color:#fff; font-weight:bold;">${subjectName} | ${moduleLabel}</span>
+                            ${isAnyDoing ? '<span style="color:#facc15; font-size:9px; font-weight:bold;">● LIVE</span>' : ''}
+                        </div>
+                        <div style="color:#94a3b8; margin-top:4px;">
+                            Progress: ${doneCount} / ${nodes.length} Topics
+                        </div>
+                        <div style="font-size:9px; color:#38bdf8; margin-top:2px;">Click to view full map →</div>
+                    </div>`;
+            }
+        });
     }
 };
 
@@ -3632,162 +3639,149 @@ window.addNewSubTopic = function(subjectName) {
     loadTasks();
 };
 let activeMapTimer = null; 
-
-/* --- 1. THE MAP RENDERER (CLEAN FINISH + TIMER DISPLAY) --- */
+/* --- 1. THE UPDATED MAP RENDERER (TOTAL GLOBAL CALCULATION) --- */
 window.showByjusMap = async function(subjectName, taskId) {
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const container = document.getElementById("mapContainer");
-    
     if(!container) return;
     
-    // Save these globally so handleNodeAction can find them easily
     window.currentMapSubject = subjectName;
     window.currentMapTaskId = taskId;
 
-    container.innerHTML = "<div style='color:#38bdf8; text-align:center; padding:20px;'>Syncing Journey...</div>";
+    container.innerHTML = "<div style='color:#38bdf8; text-align:center; padding:20px;'>Syncing Time Distribution...</div>";
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
-    // 1. Fetch latest data from Firebase
+    // 1. Fetch ALL journeys for today to do the global math
     const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
     const dailyMaps = snapshot.val() || {};
-    const nodes = dailyMaps[taskId];
+    
+    // 2. MATH: Calculate Total Subtopics and Remaining Subtopics
+    let totalSubtopicsCount = 0;
+    let remainingSubtopicsCount = 0;
+    let timeAlreadySpent = 0;
 
-    // 2. Safety Check
-    if (!nodes || !Array.isArray(nodes) || nodes.length === 0) {
-        container.innerHTML = "<div style='color:#fca5a5; padding:20px; text-align:center;'>Map data is arriving... Please wait a second.</div>";
-        return;
-    }
+    Object.values(dailyMaps).forEach(nodes => {
+        nodes.forEach(node => {
+            totalSubtopicsCount++;
+            if (node.status !== 'done') remainingSubtopicsCount++;
+            if (node.status === 'done') timeAlreadySpent += (node.dynamicMins || 0);
+        });
+    });
 
-    // 3. Header Summary (Budget vs Studied)
     const shiftCount = parseFloat(localStorage.getItem("DAILY_SHIFT_COUNT")) || 3;
     const totalDayMins = shiftCount * 120;
-    const studied = nodes.filter(n => n && n.status === 'done').reduce((s, n) => s + (n.dynamicMins || 0), 0);
+    const remainingTime = Math.max(0, totalDayMins - timeAlreadySpent);
     
+    // 3. Current Task specific nodes
+    const nodes = dailyMaps[taskId];
+    if (!nodes) {
+        container.innerHTML = "Map data arriving...";
+        return; 
+    }
+
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
         <div style="width:100%;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="font-weight:bold; color:#38bdf8; font-size:16px;">${subjectName}</span>
+                <span style="background:#1e293b; padding:2px 8px; border-radius:4px; font-size:10px; color:#facc15;">SHIFTS: ${shiftCount}</span>
             </div>
             <div style="font-size:10px; color:#94a3b8; margin-top:5px; border-top:1px solid #1e293b; padding-top:5px;">
-                PROGRESS: ${studied}m / ${totalDayMins}m
+                REMAINING: ${remainingTime}m for ${remainingSubtopicsCount} topics
             </div>
         </div>`;
 
     container.innerHTML = "";
 
-    // 4. Render each Sub-Topic Node
     nodes.forEach((node, idx) => {
-        if(!node) return;
         const isDoing = node.status === 'doing';
         const isDone = node.status === 'done';
-
-        // Stage-based Button Logic
         let actionButtons = "";
+
         if (isDone) {
-            actionButtons = `<div style="background:#1e293b; color:#38bdf8; padding:4px 8px; border-radius:4px; font-size:10px; font-weight:bold; border:1px solid #38bdf8;">
-    FINISHED @ ${node.completedAt || '--:--'}
-</div>`;
+            actionButtons = `<div style="color:#38bdf8; font-size:10px; font-weight:bold;">${node.dynamicMins}m DONE</div>`;
         } else if (isDoing) {
-            // Stage 2: User can only finish or cancel
             actionButtons = `
-                <button onclick="handleNodeAction(${idx}, 'done', ${node.dynamicMins || 0})" style="background:#16a34a; padding:6px 12px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">DONE</button>
-                <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; padding:6px 12px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">ABORT</button>
-            `;
+                <button onclick="handleNodeAction(${idx}, 'done')" style="background:#16a34a; padding:6px 12px; font-size:10px; color:white; border-radius:4px;">DONE</button>
+                <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; padding:6px 12px; font-size:10px; color:white; border-radius:4px;">ABORT</button>`;
         } else {
-            // Stage 1: Initial Start button
-            actionButtons = `
-                <button onclick="handleNodeAction(${idx}, 'start')" style="background:#0ea5e9; padding:6px 18px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">START</button>
-            `;
+            actionButtons = `<button onclick="handleNodeAction(${idx}, 'start')" style="background:#0ea5e9; padding:6px 18px; font-size:10px; color:white; border-radius:4px;">START</button>`;
         }
 
         const row = document.createElement("div");
         row.style.cssText = "display:flex; align-items:center; margin-bottom:20px; gap:12px;";
-        
         row.innerHTML = `
-            <div class="node-circle status-${node.status}" style="width:45px; height:45px; display:flex; align-items:center; justify-content:center; flex-shrink:0; border: 3px solid ${isDoing ? '#facc15' : '#1e293b'}; border-radius:50%; background:${isDone ? '#16a34a' : '#0f172a'};">
+            <div class="node-circle status-${node.status}" style="width:45px; height:45px; display:flex; align-items:center; justify-content:center; border: 3px solid ${isDoing ? '#facc15' : '#1e293b'}; border-radius:50%; background:#0f172a;">
                 ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:11px; font-weight:900; color:#facc15;">--:--</span>' : idx+1}
             </div>
-            <div style="flex-grow:1; background:#0f172a; padding:15px; border-radius:12px; border:1px solid ${isDoing ? '#facc15' : '#1e293b'}; position:relative;">
-                <div style="font-size:9px; color:#94a3b8; text-transform:uppercase; margin-bottom:2px;">${node.module || 'Topic'}</div>
-                <div style="font-weight:bold; color:#fff; font-size:13px; margin-bottom:10px;">${node.label}</div>
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <div style="font-size:11px; color:#38bdf8;">${node.dynamicMins || 0} mins</div>
+            <div style="flex-grow:1; background:#0f172a; padding:15px; border-radius:12px; border:1px solid ${isDoing ? '#facc15' : '#1e293b'};">
+                <div style="font-weight:bold; color:#fff; font-size:13px;">${node.label}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
+                    <div style="font-size:11px; color:#38bdf8;">Allocated: ${node.dynamicMins}m</div>
                     <div style="display:flex; gap:8px;">${actionButtons}</div>
                 </div>
             </div>`;
-        
         container.appendChild(row);
-
-        // Auto-Start timer if this node is active
-        if(isDoing && typeof startCountdown === "function") {
-            startCountdown(node.dynamicMins || 30);
-        }
+        if(isDoing) startCountdown(node.dynamicMins);
     });
 };
-/* --- 2. GLOBAL REDISTRIBUTION (REMAINING TIME FOCUS) --- */
-window.handleNodeAction = function(idx, action, currentAllocatedMins) {
-    // 1. Get the Task ID directly from the active window to ensure accuracy
+
+/* --- 2. UPDATED ACTION LOGIC (REDISTRIBUTE ON FINISH) --- */
+window.handleNodeAction = function(idx, action) {
     const taskId = window.currentMapTaskId; 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-
-    if (!taskId) {
-        console.error("Task ID missing. Cannot start.");
-        return;
-    }
-
-    // 2. Fetch the data
     const mapRef = ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`);
     
     get(mapRef).then((snapshot) => {
         let dailyMaps = snapshot.val() || {};
         let nodes = dailyMaps[taskId];
 
-        if (!nodes || !nodes[idx]) {
-            alert("Data Sync Error. Please close and reopen the map.");
-            return;
-        }
-
         if (action === 'start') {
-            // STOP ALL OTHER NODES (The "Two-Button" Rule)
-            Object.keys(dailyMaps).forEach(k => {
-                if(Array.isArray(dailyMaps[k])) {
-                    dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
-                }
+            // Standard start logic...
+            nodes[idx].status = 'doing';
+            localStorage.setItem("CURRENT_ACTIVE_TOPIC_TS", Date.now().toString());
+        } 
+        else if (action === 'done') {
+            const startTS = parseInt(localStorage.getItem("CURRENT_ACTIVE_TOPIC_TS")) || Date.now();
+            const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
+            
+            nodes[idx].status = 'done';
+            nodes[idx].dynamicMins = actualUsedMins;
+            nodes[idx].completedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+            // --- THE REDISTRIBUTION MATH ---
+            let totalShiftMins = (parseFloat(localStorage.getItem("DAILY_SHIFT_COUNT")) || 3) * 120;
+            let timeSpent = 0;
+            let remainingTodoNodes = [];
+
+            // Calculate spent time and find all pending nodes across ALL subjects
+            Object.keys(dailyMaps).forEach(tId => {
+                dailyMaps[tId].forEach((n, i) => {
+                    if (n.status === 'done') timeSpent += n.dynamicMins;
+                    else {
+                        remainingTodoNodes.push({ taskId: tId, nodeIdx: i });
+                        n.status = 'todo'; // Clean up any 'doing'
+                    }
+                });
             });
 
-            // START THIS NODE
-            nodes[idx].status = 'doing';
-            const startTime = Date.now();
-            
-            // Save time locally and on server
-            localStorage.setItem("CURRENT_ACTIVE_TOPIC_TS", startTime.toString());
-            update(ref(db, `users/${currentUser.uid}`), { "CURRENT_ACTIVE_TOPIC_TS": startTime });
-
-        } else if (action === 'done') {
-    const startTS = parseInt(localStorage.getItem("CURRENT_ACTIVE_TOPIC_TS")) || Date.now();
-    const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
-    
-    nodes[idx].status = 'done';
-    nodes[idx].dynamicMins = actualUsedMins;
-    
-    // CAPTURE COMPLETION TIME (e.g., 10:45 PM)
-    const now = new Date();
-    nodes[idx].completedAt = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-    localStorage.removeItem("CURRENT_ACTIVE_TOPIC_TS");
-    if(window.activeMapTimer) clearInterval(window.activeMapTimer);
-}else if (action === 'abort') {
+            let timeLeft = Math.max(0, totalShiftMins - timeSpent);
+            if (remainingTodoNodes.length > 0) {
+                let newAlloc = Math.floor(timeLeft / remainingTodoNodes.length);
+                remainingTodoNodes.forEach(item => {
+                    dailyMaps[item.taskId][item.nodeIdx].dynamicMins = newAlloc;
+                });
+            }
+            localStorage.removeItem("CURRENT_ACTIVE_TOPIC_TS");
+        } 
+        else if (action === 'abort') {
             nodes[idx].status = 'todo';
             localStorage.removeItem("CURRENT_ACTIVE_TOPIC_TS");
         }
 
-        // 3. PUSH UPDATES
         update(mapRef, dailyMaps).then(() => {
-            // Refresh the Map View immediately
-            const subTitle = document.getElementById("currentMapSubject").innerText.split('\n')[0];
-            window.showByjusMap(subTitle, taskId);
-        }).catch(e => console.error("Firebase Update Failed:", e));
+            window.showByjusMap(window.currentMapSubject, taskId);
+        });
     });
 };
 /* --- 3. OPTION TO ADD NEW SHIFT MID-DAY --- */
