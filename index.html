@@ -2801,35 +2801,7 @@ function finishTestSequence(testState, loadDashboard = false) {
     setTimeout(() => location.reload(), 5000);
   }
 }
-  /* --- ADMIN GLOBAL STATE --- */
-let currentAdminTargetUid = null; 
-
-/* --- ADMIN: OPEN JOURNEY MODAL FOR SPECIFIC STUDENT --- */
-window.openAdminBulkMap = function(uid) {
-    // We need to find the student's email to show in the prompt
-    // This is a helper to keep track of who we are editing
-    currentAdminTargetUid = uid; 
-    
-    const subjectName = prompt("Enter Subject Name for this Student's Journey:", "Power System - II");
-    if (!subjectName) return;
-
-    window.currentMapSubject = subjectName;
-    // Generate a unique ID so it doesn't overwrite other tasks
-    window.currentMapTaskId = "TASK_" + Date.now(); 
-
-    const modal = document.getElementById('bulkInputModal');
-    const title = document.getElementById('bulkTitle');
-    
-    modal.classList.remove("hidden");
-    modal.style.display = "flex";
-    modal.style.background = "rgba(2, 6, 23, 0.95)";
-    
-    title.innerText = "ADMIN: SET JOURNEY FOR STUDENT";
-    title.style.color = "#a78bfa";
-    document.getElementById('bulkTextarea').value = "";
-    document.getElementById('bulkTextarea').placeholder = "Enter sub-topics line by line...";
-};
-// --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
+ // --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
 function setupTasks() {
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const nextData = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
@@ -2939,34 +2911,22 @@ function loadTasks() {
     extras.forEach(e => renderItem(e, eList));
 }
   window.addExtra = function() {
-    let menu = "Select Subject to Request Extra Work:\n\n";
-    FIXED_SUBJECTS.forEach((sub, index) => {
-        menu += `${index + 1}. ${sub}\n`;
-    });
-    
+    let menu = "REQUEST EXTRA WORK\nSelect Subject:\n";
+    FIXED_SUBJECTS.forEach((s, i) => menu += `${i+1}. ${s}\n`);
     const choice = prompt(menu);
     if (!choice) return;
 
-    const index = parseInt(choice) - 1;
-    if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
-        alert("Invalid selection.");
-        return;
-    }
-
-    const subjectName = FIXED_SUBJECTS[index];
+    const subject = FIXED_SUBJECTS[parseInt(choice) - 1];
     const requestId = "REQ_" + Date.now();
 
-    // Push Request to Admin
-    const requestPayload = {
-        subject: subjectName,
-        status: "WAITING_FOR_ADMIN",
-        studentEmail: currentUser.email,
-        time: Date.now()
-    };
-
-    update(ref(db, `users/${currentUser.uid}/EXTRA_REQUESTS/${requestId}`), requestPayload)
-    .then(() => {
-        alert("Request Sent! Admin will now set your Module and Subtopics.");
+    // Push request to a folder the Admin can see
+    update(ref(db, `users/${currentUser.uid}/EXTRA_REQUESTS/${requestId}`), {
+        subject: subject,
+        status: "PENDING",
+        time: Date.now(),
+        email: currentUser.email
+    }).then(() => {
+        alert("Request Sent. Wait for Admin to assign topics.");
     });
 };
 function save(tasks, extras) {
@@ -3286,54 +3246,69 @@ window.openSubjectJourney = function(subjectName, taskId) {
     
     modal.classList.remove("hidden");
 };
+let currentAdminTargetUid = null; 
+window.openAdminBulkMap = function(uid) {
+    window.currentAdminTargetUid = uid; 
+    
+    // Select Subject from your Fixed List
+    let menu = "SELECT SUBJECT FOR STUDENT:\n\n";
+    FIXED_SUBJECTS.forEach((sub, i) => menu += `${i+1}. ${sub}\n`);
+    const choice = prompt(menu);
+    if (!choice) return;
+    
+    const selectedSubject = FIXED_SUBJECTS[parseInt(choice) - 1];
+    const moduleName = prompt(`Subject: ${selectedSubject}\nEnter Module Name:`, "Module 1");
+    if (!moduleName) return;
+
+    // Use a clean local variable to avoid [object HTML...] error
+    window.currentSubjectStr = selectedSubject;
+    window.currentModuleStr = moduleName;
+    window.currentMapTaskId = "TASK_" + Date.now();
+
+    const modal = document.getElementById('bulkInputModal');
+    document.getElementById('bulkTitle').innerText = `SET JOURNEY: ${selectedSubject} [${moduleName}]`;
+    document.getElementById('bulkTextarea').value = "";
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
+};
+
 window.generateMapFromBulk = function() {
-    const moduleName = prompt("Enter Module Name:", "Module 1");
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
-    
-    if (!moduleName || lines.length === 0) {
-        alert("Module and Topics are required.");
-        return;
-    }
+    if (lines.length === 0) return alert("Enter subtopics!");
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    if(data.dailyMaps && data.dailyMaps[todayKey]) {
-    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify({[new Date().toLocaleDateString()]: data.dailyMaps[todayKey]}));
-}
-    const targetUid = window.currentAdminTargetUid || currentUser.uid;
-    const uniqueTaskId = "TASK_" + Date.now();
+    const targetUid = window.currentAdminTargetUid;
 
-    // FIX: Explicitly use window.currentMapSubject string to avoid [object HTML...]
-    const subjectTitle = String(window.currentMapSubject);
-    const summary = lines.slice(0, 3).join(", ") + (lines.length > 3 ? "..." : "");
-    const detailedName = `${subjectTitle} [${moduleName}]: ${summary}`;
+    // Detailed Name for the Dashboard Row
+    const summary = lines.slice(0, 2).join(", ") + (lines.length > 2 ? "..." : "");
+    const detailedName = `${window.currentSubjectStr} | ${window.currentModuleStr}: ${summary}`;
 
     const newMapData = lines.map(line => ({
         label: line.trim(),
-        module: moduleName.trim(),
+        module: window.currentModuleStr,
         status: 'todo',
         completedAt: null,
         dynamicMins: 30 
     }));
 
+    // Update Firebase: Push to Map and update the Student's Task List
     get(ref(db, `users/${targetUid}/TASKS`)).then((snapshot) => {
         let currentTasks = JSON.parse(snapshot.val() || "[]");
         currentTasks.push({
-            id: uniqueTaskId,
+            id: window.currentMapTaskId,
             name: detailedName,
-            done: false,
-            comment: "",
-            due: ""
+            subjectOnly: window.currentSubjectStr, // Store original subject for table logic
+            done: false
         });
 
         const updates = {};
-        updates[`users/${targetUid}/dailyMaps/${todayKey}/${uniqueTaskId}`] = newMapData;
+        updates[`users/${targetUid}/dailyMaps/${todayKey}/${window.currentMapTaskId}`] = newMapData;
         updates[`users/${targetUid}/TASKS`] = JSON.stringify(currentTasks);
 
         update(ref(db), updates).then(() => {
-            alert("Journey Pushed Successfully.");
+            alert("Journey Assigned Successfully.");
             document.getElementById('bulkInputModal').classList.add('hidden');
-            window.currentAdminTargetUid = null;
         });
     });
 };
@@ -3674,41 +3649,49 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
  window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will log all completed topics with their Module names.")) return;
+    if(!confirm("Submit Day End and Log Progress?")) return;
 
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-    const maps = snapshot.val() || {};
+    const todayStr = new Date().toLocaleDateString();
+    const todayKey = todayStr.replace(/\//g, "-");
+    const snapshot = await get(ref(db, `users/${currentUser.uid}`));
+    const data = snapshot.val() || {};
+    
+    const tasks = JSON.parse(data.TASKS || "[]");
+    const maps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
 
-    Object.keys(maps).forEach(taskId => {
-        const nodes = maps[taskId];
-        // Grouping logic: "Module 1: Topic A, Topic B"
-        const completedByModule = {};
-        const pendingByModule = {};
+    // Grouping Logic: Ensure only 1 row per unique subject
+    const tableConsolidation = {};
 
-        nodes.forEach(n => {
-            if (n.status === 'done') {
-                if (!completedByModule[n.module]) completedByModule[n.module] = [];
-                completedByModule[n.module].push(n.label);
-            } else {
-                if (!pendingByModule[n.module]) pendingByModule[n.module] = [];
-                pendingByModule[n.module].push(n.label);
+    tasks.forEach(t => {
+        if (t.done && maps[t.id]) {
+            const sub = t.subjectOnly || t.name.split(" | ")[0];
+            if (!tableConsolidation[sub]) {
+                tableConsolidation[sub] = { covered: [], uncovered: [] };
             }
-        });
 
-        // Log each module's work separately into the progress table
-        Object.keys(completedByModule).forEach(mod => {
-            saveAutomatedSubjectProgress(
-                `${currentMapSubject} [${mod}]`, 
-                completedByModule[mod].join(", "), 
-                pendingByModule[mod] ? pendingByModule[mod].join(", ") : "All Clear"
-            );
-        });
+            maps[t.id].forEach(node => {
+                if (node.status === 'done') {
+                    tableConsolidation[sub].covered.push(`[${node.module}] ${node.label}`);
+                } else {
+                    tableConsolidation[sub].uncovered.push(`[${node.module}] ${node.label}`);
+                }
+            });
+        }
     });
 
-    // Final Cleanup
+    // Save to Subject Wise Progress Table
+    for (const sub in tableConsolidation) {
+        saveAutomatedSubjectProgress(
+            sub,
+            tableConsolidation[sub].covered.join(", ") || "None",
+            tableConsolidation[sub].uncovered.join(", ") || "All Clear"
+        );
+    }
+
+    // Cleanup and Logout
     localStorage.removeItem(key("DAILY_GOAL_DATE"));
     await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    await update(ref(db, `users/${currentUser.uid}`), { TASKS: "[]", EXTRA: "[]" });
     location.reload();
 };
  window.loadTasks = function() {
