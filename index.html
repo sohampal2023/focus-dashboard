@@ -463,7 +463,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
       <button id="leaveBtn" onclick="requestLeave()">Request Leave</button>
       <button id="bioBtn" onclick="bioBreak()" disabled>Bio Break</button>
       <button id="histBtn" onclick="toggleHistory()" disabled>History</button>
-      <button id="subProgBtn" onclick="toggleSubjectProgress()" disabled>📘 Subject Progress</button>
+      <button onclick="toggleSubjectProgress()" disabled>📘 Subject Progress</button>
       
       <button id="dayBtn" onclick="openDayEnd()" disabled>Day End</button>
   </div>
@@ -1577,21 +1577,14 @@ window.renderAdminSelectedSubject = function() {
         return;
     }
 
-    const rows = window.currentAdminSubjectData[subject].slice().reverse();
+    const rows = window.currentAdminSubjectData[subject].slice().reverse(); // Newest first
     
     let html = "";
     rows.forEach(row => {
-        // Highlight if it's a journey-based entry
-        const isJourney = row.covered.includes("[Module");
-        const rowStyle = isJourney ? `style="background: rgba(56, 189, 248, 0.05);"` : "";
-
         html += `
-        <tr ${rowStyle}>
+        <tr>
             <td style="color:#94a3b8">${row.date}</td>
-            <td style="white-space:pre-wrap;">
-                ${isJourney ? `<span style="color:#38bdf8; font-weight:bold;">📍 JOURNEY:</span><br>` : ""}
-                ${row.covered}
-            </td>
+            <td style="white-space:pre-wrap;">${row.covered}</td>
             <td style="white-space:pre-wrap; color:#fca5a5">${row.uncovered}</td>
         </tr>`;
     });
@@ -2049,198 +2042,93 @@ async function loadNotices() {
         console.error("Notice load error:", e);
     }
 }
-/* --- UPDATED STUDENT INITIALIZATION --- */
-/* --- REPAIRED STUDENT INITIALIZATION --- */
 async function initStudentDashboard() {
-    const studentView = document.getElementById("studentView");
-    const controls = document.getElementById("studentControls");
-    const taskBox = document.getElementById("taskBox");
-    const logBox = document.getElementById("logBox");
-    const syncStatus = document.getElementById("syncStatus");
+    // 1. --- UI VISIBILITY ---
+    document.getElementById("studentView").classList.remove("hidden");
+    document.getElementById("taskBox")?.classList.remove("hidden");
+    document.getElementById("logBox")?.classList.remove("hidden");
+    document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
+    document.getElementById("loginBtn").classList.add("hidden");
+    document.getElementById("logoutBtn").classList.remove("hidden");
+    document.getElementById("studentControls").classList.remove("hidden");
 
-    // 1. UNLOCK BUTTONS IMMEDIATELY (Fixes "Buttons not working")
-    if (studentView) studentView.classList.remove("hidden");
-    if (controls) controls.classList.remove("hidden");
-    if (taskBox) taskBox.classList.remove("hidden");
-    if (logBox) logBox.classList.remove("hidden");
+    // 2. --- DOWNLOAD DATA & LEAVE BALANCE ---
+    const serverData = await downloadData(currentUser.uid);
+    const leaveDisplay = document.querySelector("button[onclick='requestLeave()']");
+    if (leaveDisplay) {
+        leaveDisplay.innerText = `Leave Bal: ${serverData?.leaveBalance || 0}`;
+    }
 
-    const allButtons = document.querySelectorAll(".sidebar button, #studentControls button");
-    allButtons.forEach(btn => {
-        btn.disabled = false;
-        btn.style.opacity = "1";
+    if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
+        location.reload(); 
+        return; 
+    }
+
+    // 3. --- SHIFT PROMPT ---
+    const todayStr = new Date().toLocaleDateString();
+    let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
+
+    if (!goalDate || goalDate !== todayStr) {
+        let askedShifts = prompt("Enter number of shifts for today (2 hours each):", "3");
+        if (!askedShifts || isNaN(askedShifts)) askedShifts = "3"; 
+        localStorage.setItem(key("DAILY_SHIFT_COUNT"), askedShifts);
+        localStorage.setItem(key("DAILY_GOAL_DATE"), todayStr);
+        await update(ref(db, `users/${currentUser.uid}`), { dailyShiftTarget: askedShifts, dailyGoalDate: todayStr, penalty: 0 });
+    }
+
+    // 4. --- BIO BREAK REASON CHECK ---
+    let logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    if (logs.length > 0 && logs[logs.length - 1].reason === "Pending") {
+        const userReason = prompt("Welcome back! Provide reason for previous break:", "Bio Break");
+        logs[logs.length - 1].reason = userReason || "Bio Break";
+        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
+
+    // 5. --- SHIFT TIMER RESUME ---
+    const pausedRemaining = localStorage.getItem(key("PAUSED_SHIFT_REMAINING"));
+    if (pausedRemaining && parseInt(pausedRemaining) > 0) {
+        localStorage.setItem(key("SHIFT_END_TS"), Date.now() + parseInt(pausedRemaining));
+        localStorage.removeItem(key("PAUSED_SHIFT_REMAINING"));
+    } else if (!localStorage.getItem(key("SHIFT_END_TS"))) {
+        const totalMins = (parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3) * 120;
+        localStorage.setItem(key("SHIFT_END_TS"), Date.now() + (totalMins * 60000));
+    }
+
+    // 6. --- COMPONENT START ---
+    startIdle(1800);      
+    loadSubjectList();    
+    setupTasks(); 
+    loadTasks();          
+    renderLogs();         
+    updateProgress();     
+    runShiftTimer();      
+    uploadData();
+
+    // 7. --- THE "HARD UNLOCK" FOR ALL BUTTONS ---
+    const buttonsToUnlock = [
+        "bioBtn", "histBtn", "dayBtn", "noticeBtn", "refreshBtn", "leaveBtn"
+    ];
+    
+    buttonsToUnlock.forEach(id => {
+        const btn = document.getElementById(id);
+        if(btn) {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
+            btn.style.filter = "none";
+        }
     });
 
-    try {
-        if (syncStatus) syncStatus.innerText = "📥 Syncing...";
-
-        // 2. Fetch fresh data
-        const serverData = await downloadData(currentUser.uid);
-        if (!serverData) return;
-
-        const today = new Date().toLocaleDateString();
-        const serverGoalDate = serverData.dailyGoalDate;
-
-        // 3. HANDLE NEW DAY / RESET STATE
-        if (!serverGoalDate || serverGoalDate.startsWith("RESET") || serverGoalDate !== today) {
-            
-            // Clear local shift memory
-            localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
-            localStorage.removeItem(key("SHIFT_END_TS"));
-            localStorage.removeItem(key("CURRENT_SHIFT_LABEL"));
-
-            // Prompt for shifts
-            let shifts = prompt("New Day! Enter total shifts for today:", "1") || "1";
-            
-            localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
-            localStorage.setItem(key("DAILY_GOAL_DATE"), today);
-
-            // Sync to Firebase
-            await update(ref(db, `users/${currentUser.uid}`), { 
-                dailyGoalDate: today,
-                dailyShiftTarget: shifts,
-                currentShiftLabel: "No Active Shift",
-                // Ensure TASKS are preserved from Day End
-                TASKS: serverData.TASKS || "[]" 
-            });
-        } else {
-            localStorage.setItem(key("DAILY_SHIFT_COUNT"), serverData.dailyShiftTarget || "1");
-        }
-
-        // 4. RE-RENDER UI (Fixes "Subject not showing")
-        loadSubjectList();
-        await loadTasks();   // This will now see the subjects from serverData.TASKS
-        updateProgress();    
-        renderLogs();        
-        runShiftTimer();     
-
-        document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
-        if (syncStatus) syncStatus.innerText = "✅ Synced";
-
-    } catch (error) {
-        console.error("Dashboard Error:", error);
-        if (syncStatus) syncStatus.innerText = "⚠️ Error - Check Console";
-    }
-}
-
-/* --- REPAIRED TASK LOADER --- */
-async function loadTasks() {
-    const tList = document.getElementById("taskList");
-    const eList = document.getElementById("extraList");
-    if (!tList || !eList) return;
-
-    // Pull from LocalStorage (filled by downloadData)
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-
-    tList.innerHTML = "";
-    eList.innerHTML = "";
-
-    if (tasks.length === 0) {
-        tList.innerHTML = "<div style='color:#64748b;'>No Assigned Subjects found.</div>";
-    }
-
-    // Helper to draw the task row
-    const draw = (item, list, isExtra) => {
-        const div = document.createElement("div");
-        div.className = "task-item"; // Use your existing CSS or inline
-        div.style.cssText = "display:flex; align-items:center; margin-bottom:10px; padding:12px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
-        
-        div.innerHTML = `
-            <input type="checkbox" ${item.done ? 'checked' : ''} style="margin-right:12px;">
-            <span style="color:${item.done ? '#64748b' : '#e5e7eb'}">
-                <strong>${item.name}</strong> ${item.target ? `<br><small style="color:#38bdf8">${item.target}</small>` : ''}
-            </span>
-        `;
-        
-        // Checkbox Logic
-        div.querySelector('input').onchange = (e) => {
-            item.done = e.target.checked;
-            if (item.done) {
-                item.comment = prompt("Work details?", "Done") || "Done";
-                saveAutomatedSubjectProgress(item.name, item.comment, "-");
-            }
-            localStorage.setItem(isExtra ? key("EXTRA") : key("TASKS"), JSON.stringify(isExtra ? extras : tasks));
-            uploadData();
-            updateProgress();
-        };
-
-        list.appendChild(div);
-    };
-
-    tasks.forEach(t => draw(t, tList, false));
-    extras.forEach(e => draw(e, eList, true));
-}
-
-/* --- UPDATED DAY END (CLEAN RESET) --- */
-window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will sync all tasks and reset shifts globally.")) return;
-
-    try {
-        const nextDayTasks = [];
-        for (let i = 0; i < 7; i++) {
-            const sub = document.getElementById("nd_sub_" + i)?.value;
-            const top = document.getElementById("nd_top_" + i)?.value.trim();
-            if(sub && sub !== "") { 
-                nextDayTasks.push({ 
-                    id: "task_" + Date.now() + i, 
-                    name: sub, 
-                    target: top || "General Study", 
-                    done: false 
-                }); 
-            }
-        }
-
-        const p = calculate();
-
-        // 🔥 THE GLOBAL RESET PAYLOAD
-        const globalReset = {
-            TASKS: JSON.stringify(nextDayTasks), // Move tomorrow's tasks to current
-            EXTRA: "[]",
-            PENALTY: "0",
-            dailyGoalDate: "RESET_" + Date.now(), // Force shift prompt on next login
-            dailyShiftTarget: "", // Wipe the shift count
-            currentShiftLabel: "No Active Shift"
-        };
-
-        await update(ref(db, `users/${currentUser.uid}`), globalReset);
-
-        // Wipe local device memory
-        localStorage.clear(); 
-        
-        const reportHTML = `
-            <div class='card' style='text-align:center; padding:40px;'>
-                <h1 style='color:#38bdf8;'>${p.percent}%</h1>
-                <p>Day Summary Saved</p>
-                <button onclick='dismissReportLock()' style='background:#22c55e; color:white; padding:15px; width:100%; border:none; border-radius:8px; cursor:pointer;'>
-                    START NEW DAY / LOGIN
-                </button>
-            </div>`;
-            
-        localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
-        
-        signOut(auth).then(() => location.reload());
-
-    } catch (e) {
-        alert("Day End Failed: " + e.message);
-    }
-};
-// Helper to recalculate time based on shifts
-async function redistributeTimeForNewDay(shifts) {
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const totalMins = shifts * 120;
-    
-    const snap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-    if (snap.exists()) {
-        let maps = snap.val();
-        let allPending = [];
-        Object.keys(maps).forEach(k => {
-            maps[k].forEach((n, i) => { if(n.status === 'todo') allPending.push({k, i}); });
-        });
-        
-        if (allPending.length > 0) {
-            const perTask = Math.floor(totalMins / allPending.length);
-            allPending.forEach(p => { maps[p.k][p.i].dynamicMins = perTask; });
-            await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), maps);
+    // --- SPECIFIC FIX FOR THE SUBJECT PROGRESS BUTTON ---
+    // This finds the button even if it has no ID by searching for the text "Subject Progress"
+    const allButtons = document.getElementsByTagName("button");
+    for (let btn of allButtons) {
+        if (btn.innerText.includes("Subject Progress") || btn.getAttribute("onclick")?.includes("toggleSubjectProgress")) {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
+            btn.style.filter = "none"; // Removes any "greyed out" CSS filter
+            btn.classList.remove("disabled"); // Removes any CSS class that might be blocking it
         }
     }
 }
@@ -2536,30 +2424,21 @@ window.loadSubjectList = function() {
 
 /* --- HELPER: AUTOMATED SUBJECT LOGGING --- */
 window.saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
-    // 1. Get current table from local
-    let subjectData = JSON.parse(localStorage.getItem(SUBJECT_TABLE_KEY()) || "{}");
-    
+    const subjectData = getSubjectData(); 
     if(!subjectData[subject]) subjectData[subject] = [];
     
-    // 2. Add new entry
+    // Check if entry for today already exists to prevent duplicate rows for the same action
     subjectData[subject].push({
-        id: Date.now(),
+        id: Date.now(), 
         date: new Date().toLocaleDateString(),
         covered: covered || "-",
         uncovered: uncovered || "-"
     });
     
-    // 3. Save to Local and Firebase
-    localStorage.setItem(SUBJECT_TABLE_KEY(), JSON.stringify(subjectData));
-    
-    if (currentUser) {
-        update(ref(db, `users/${currentUser.uid}`), {
-            SUBJECT_WISE_TABLE: JSON.stringify(subjectData)
-        }).then(() => {
-            console.log("Subject Progress Updated on Server");
-        });
-    }
+    saveSubjectData(subjectData); 
+    uploadData(); // Sync to Firebase
 };
+
 /* --- UI: RENDER SUBJECT TABLE --- */
 window.renderSubjectTable = function(subject) {
     const tbody = document.getElementById("subjectTableBody");
@@ -3024,6 +2903,65 @@ function setupTasks() {
   document.getElementById("logBox").classList.remove("hidden");
   document.getElementById("reportBox").classList.add("hidden");
 }
+function loadTasks() {
+    const tList = document.getElementById("taskList");
+    const eList = document.getElementById("extraList");
+    if (!tList || !eList) return;
+    tList.innerHTML = "";
+    eList.innerHTML = "";
+
+    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    const today = new Date().toLocaleDateString();
+
+    const renderItem = (item, listRef) => {
+        const container = document.createElement("div");
+        container.style.marginBottom = "8px";
+        const cleanName = item.name.replace(/'/g, "\\'");
+        
+        // --- UNIQUE ID LOGIC ---
+        // If item has no ID (old data), fallback to name, but new items will use timestamps
+        const taskId = item.id || cleanName; 
+
+        let mapBtnHtml = "";
+        if (!item.name.startsWith("MOCK TEST:")) {
+            // Check if a map exists for this SPECIFIC task ID
+            if (dailyMaps[today] && dailyMaps[today][taskId]) {
+                mapBtnHtml = `<button onclick="showByjusMap('${cleanName}', '${taskId}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#0ea5e9; border:none; color:white; border-radius:4px;">🗺 MAP</button>`;
+            } else {
+                mapBtnHtml = `<button onclick="openSubjectJourney('${cleanName}', '${taskId}')" style="width:auto; padding:2px 8px; font-size:10px; margin-left:10px; background:#334155; border:none; color:white; border-radius:4px;">+ SET JOURNEY</button>`;
+            }
+        }
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = item.done;
+        if (item.name.startsWith("MOCK TEST:")) cb.disabled = true;
+
+        const label = document.createElement("span");
+        label.innerHTML = ` ${item.name} ${mapBtnHtml}`;
+
+        cb.onchange = () => {
+            if (cb.checked) {
+                const remark = prompt(`Completed: ${item.name}. Details?`, " ");
+                const dueVal = prompt(`Pending topics?`, " ");
+                item.comment = remark || "-";
+                item.due = dueVal || "-";
+                saveAutomatedSubjectProgress(item.name, item.comment, item.due);
+            }
+            item.done = cb.checked;
+            save(tasks, extras);
+            loadTasks();
+        };
+
+        container.append(cb, label);
+        listRef.append(container);
+    };
+
+    tasks.forEach(t => renderItem(t, tList));
+    extras.forEach(e => renderItem(e, eList));
+}
   window.addExtra = function() {
     let menu = "Select Subject for Extra Work:\n\n";
     FIXED_SUBJECTS.forEach((sub, index) => {
@@ -3034,23 +2972,26 @@ function setupTasks() {
     if (!choice) return;
 
     const index = parseInt(choice) - 1;
-    if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) return;
+    if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
+        alert("Invalid selection.");
+        return;
+    }
 
     const subjectName = FIXED_SUBJECTS[index];
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     
-    // 🔥 UNIQUE ID: Using Date.now() prevents "ticking one ticks all"
+    // Using Date.now() as ID allows multiple entries of the same subject
     extras.push({ 
-        id: "extra_" + Date.now(), 
         name: subjectName, 
         done: false, 
         comment: "", 
-        due: "" 
+        due: "",
+        id: Date.now() 
     });
     
     localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-    uploadData(); // Sync to server
-    loadTasks();  // Refresh UI
+    uploadData();
+    loadTasks();
 };
 function save(tasks, extras) {
   localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
@@ -3370,91 +3311,85 @@ window.openSubjectJourney = function(subjectName, taskId) {
     modal.classList.remove("hidden");
 };
 window.generateMapFromBulk = function() {
-    const moduleName = prompt("Module Name?", "Module 1");
+    // 1. Get Values
+    const moduleName = prompt("Which Module are these sub-topics for?", "Module 1");
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
     
-    if (!moduleName || lines.length === 0) return;
+    if (!moduleName || lines.length === 0) {
+        alert("Module Name and Topics are required.");
+        return;
+    }
 
-    const today = new Date().toLocaleDateString();
-    const todayKey = today.replace(/\//g, "-");
-    const taskId = String(window.currentMapTaskId); // This is now the Subject Name
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    const uniqueKey = window.currentMapTaskId;
 
-    const nodesArray = lines.map((line) => ({
+    // 2. Map Data with Module Provision
+    const newMapData = lines.map((line, index) => ({
         label: line.trim(),
-        module: moduleName.trim(),
+        module: moduleName.trim(), // Storing the specific module name
         status: 'todo',
         completedAt: null,
-        dynamicMins: 0 
+        dynamicMins: 30 // Set a default base time for redistribution
     }));
 
-    // 1. Update Local Storage for instant UI change
-    let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    if (!localMaps[today]) localMaps[today] = {};
-    localMaps[today][taskId] = nodesArray;
-    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
-
-    // 2. Push to Firebase Cloud using Subject Name as key
+    // 3. Fix: Create an Object payload for the update function
+    // Firebase update() requires { key: value } pair
     const updatePayload = {};
-    updatePayload[taskId] = nodesArray;
+    updatePayload[uniqueKey] = newMapData;
 
+    // 4. Save to Firebase
     update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), updatePayload)
     .then(() => {
         document.getElementById('bulkInputModal').classList.add('hidden');
-        loadTasks(); 
-        showByjusMap(taskId, taskId);
+        loadTasks();
+        showByjusMap(currentMapSubject, uniqueKey);
     })
-    .catch((error) => alert("Cloud Error: " + error.message));
+    .catch((error) => {
+        console.error("Firebase Update Error:", error);
+        alert("Failed to save Journey: " + error.message);
+    });
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
-window.addNewSubTopic = async function(taskId) {
-    const newTopicName = prompt("Enter new sub-topic name:");
-    if (!newTopicName) return;
+window.addNewSubTopic = function(subjectName) {
+    const newTopic = prompt("Enter new sub-topic name:");
+    if (!newTopic) return;
 
     const today = new Date().toLocaleDateString();
-    const todayKey = today.replace(/\//g, "-");
+    let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
     
-    try {
-        const snap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        let dailyMaps = snap.exists() ? snap.val() : {};
-        
-        // Add the new node
-        if (!dailyMaps[taskId]) dailyMaps[taskId] = [];
-        dailyMaps[taskId].push({
-            label: newTopicName.trim(),
-            module: "Added Extra",
-            status: 'todo',
-            completedAt: null,
-            dynamicMins: 0
+    if (!dailyMaps[today][subjectName]) dailyMaps[today][subjectName] = [];
+
+    // Add new topic
+    dailyMaps[today][subjectName].push({
+        id: Date.now(), label: newTopic.trim(), status: 'todo', completedAt: null, history: []
+    });
+
+    // Re-calculate the even distribution base
+    let totalGlobalTopics = 0;
+    Object.keys(dailyMaps[today]).forEach(s => { totalGlobalTopics += dailyMaps[today][s].length; });
+    const newBase = Math.floor((shiftCount * 120) / totalGlobalTopics);
+
+    // Apply to all TODO nodes globally
+    Object.keys(dailyMaps[today]).forEach(s => {
+        dailyMaps[today][s].forEach(n => {
+            if (n.status === 'todo') {
+                const oldVal = n.dynamicMins || 0; 
+                // Only push to history and update if the new base is different from current
+                if (oldVal !== 0 && oldVal !== newBase) {
+                    if (!n.history) n.history = [];
+                    n.history.push(oldVal);
+                }
+                n.dynamicMins = newBase;
+            }
         });
+    });
 
-        // RE-CALCULATE ALL TODO NODES GLOBALLY
-        const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
-        const totalBudget = shiftCount * 120;
-        
-        let spent = 0;
-        let pending = [];
-
-        Object.keys(dailyMaps).forEach(k => {
-            dailyMaps[k].forEach((n, i) => {
-                if(n.status === 'done') spent += (n.dynamicMins || 0);
-                else pending.push({k, i});
-            });
-        });
-
-        if (pending.length > 0) {
-            const evenShare = Math.floor((totalBudget - spent) / pending.length);
-            pending.forEach(p => {
-                dailyMaps[p.k][p.i].dynamicMins = Math.max(5, evenShare);
-            });
-        }
-
-        await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps);
-        showByjusMap(currentMapSubject, taskId);
-
-    } catch (e) {
-        alert("Add Topic Failed: " + e.message);
-    }
+    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
+    uploadData();
+    showByjusMap(subjectName);
+    loadTasks();
 };
 let activeMapTimer = null; 
 
@@ -3462,119 +3397,73 @@ let activeMapTimer = null;
 window.showByjusMap = async function(subjectName, taskId) {
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const container = document.getElementById("mapContainer");
-    
-    container.innerHTML = "<div style='color:#38bdf8; text-align:center;'>🔌 Syncing Journey...</div>";
+    container.innerHTML = "<div style='color:#38bdf8;'>Loading Server Data...</div>";
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
-    // 1. Fetch live data from Firebase
     const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
     const dailyMaps = snapshot.val() || {};
     const nodes = dailyMaps[taskId] || [];
 
-    // 2. Calculate Global Time Budget
     const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
-    const totalDayMins = shiftCount * 120; // 2 hours per shift
-    
+    const totalDayMins = shiftCount * 120;
     let totalGlobalTopics = 0;
-    Object.keys(dailyMaps).forEach(k => { 
-        totalGlobalTopics += dailyMaps[k].length; 
-    });
+    Object.keys(dailyMaps).forEach(k => { totalGlobalTopics += dailyMaps[k].length; });
 
-    // 3. Initial Allocation Logic (If dynamicMins is 0 or missing)
-    const defaultAllocation = totalGlobalTopics > 0 ? Math.floor(totalDayMins / totalGlobalTopics) : 30;
-
-    // 4. Calculate Progress for Header
-    const studied = nodes.filter(n => n.status === 'done').reduce((s, n) => s + (n.dynamicMins || 0), 0);
-    
+    const studied = nodes.filter(n=>n.status==='done').reduce((s,n)=>s+(n.dynamicMins||0), 0);
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
         <div style="width:100%;">
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:bold; color:#38bdf8; font-size:1.1rem;">${subjectName}</span>
-                <button onclick="addNewSubTopic('${taskId}')" style="background:#16a34a; font-size:10px; border-radius:4px; border:none; color:white; padding:4px 10px; width:auto;">+ TOPIC</button>
+            <div style="display:flex; justify-content:space-between;">
+                <span style="font-weight:bold; color:#38bdf8;">${subjectName}</span>
+                <button onclick="addNewSubTopic('${taskId}')" style="background:#16a34a; font-size:9px; border-radius:4px; border:none; color:white; padding:4px 8px;">➕ TOPIC</button>
             </div>
-            <div style="font-size:10px; color:#94a3b8; margin-top:8px; border-top:1px solid #1e293b; padding-top:8px; display:flex; justify-content:space-between;">
-                <span>STUDIED: <b>${studied}m</b></span>
-                <span>REMAIN: <b>${totalDayMins - studied}m</b></span>
-                <span>BUDGET: <b>${totalDayMins}m</b></span>
+            <div style="font-size:10px; color:#94a3b8; margin-top:5px; border-top:1px solid #1e293b; padding-top:5px;">
+                STUDIED: ${studied}m | REMAIN: ${totalDayMins - studied}m | BUDGET: ${totalDayMins}m
             </div>
         </div>`;
 
     container.innerHTML = "";
-    
-    // 5. Render Nodes
     nodes.forEach((node, idx) => {
         const isDoing = node.status === 'doing';
         const isDone = node.status === 'done';
-        
-        // Ensure we don't show "0m" for upcoming tasks
-        const displayMins = (node.dynamicMins && node.dynamicMins > 0) ? node.dynamicMins : defaultAllocation;
 
-        // Calculate Shift Number for this specific node
+        // Calculate Shift
         let globalPos = 0;
-        const keys = Object.keys(dailyMaps);
-        for (let k of keys) { 
-            if(k === taskId) break; 
-            globalPos += dailyMaps[k].length; 
-        }
-        const shiftNum = Math.floor(((globalPos + idx) / (totalGlobalTopics || 1)) * shiftCount) + 1;
+        for (let k of Object.keys(dailyMaps)) { if(k===taskId) break; globalPos += dailyMaps[k].length; }
+        const shiftNum = Math.floor(((globalPos + idx) / totalGlobalTopics) * shiftCount) + 1;
 
         const row = document.createElement("div");
-        row.style.cssText = "display:flex; align-items:center; margin-bottom:20px; gap:12px; position:relative;";
-        
+        row.style.cssText = "display:flex; align-items:center; margin-bottom:25px; gap:12px;";
         row.innerHTML = `
-            <div class="node-circle status-${node.status}" style="width:42px; height:42px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:14px; border: 3px solid #1e293b;">
-                ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:10px; font-weight:900;">--:--</span>' : idx + 1}
+            <div class="node-circle status-${node.status}" style="width:40px; height:40px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:10px; color:#000;">--:--</span>' : idx+1}
             </div>
-            <div style="flex-grow:1; background:#0f172a; padding:12px 16px; border-radius:12px; border:1px solid ${isDoing ? '#facc15' : '#1e293b'}; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
-                <div style="display:flex; justify-content:space-between; align-items:start;">
-                    <div>
-                        <div style="font-size:9px; color:#38bdf8; text-transform:uppercase; letter-spacing:0.5px; font-weight:800;">${node.module || 'MODULE 1'}</div>
-                        <div style="font-weight:bold; color:#fff; font-size:14px; margin:2px 0;">${node.label}</div>
-                    </div>
-                    <div style="text-align:right;">
-                         <div style="font-size:10px; color:#94a3b8;">Shift ${shiftNum}</div>
-                         <div style="font-size:12px; font-weight:bold; color:${isDone ? '#4ade80' : '#38bdf8'};">
-                            ${isDone ? 'Used: ' : ''}${displayMins}m
-                         </div>
-                    </div>
+            <div style="flex-grow:1; background:#0f172a; padding:15px; border-radius:12px; border:1px solid ${isDoing ? '#facc15' : '#1e293b'};">
+                <div style="font-size:9px; color:#94a3b8; text-transform:uppercase;">${node.module}</div>
+                <div style="font-weight:bold; color:#fff; font-size:13px;">${node.label}</div>
+                <div style="font-size:11px; margin-top:4px; font-weight:bold;">
+                    <span style="color:#94a3b8;">Shift ${shiftNum} | </span>
+                    <span style="color:#38bdf8;">${isDone ? 'Used: ' : ''}${node.dynamicMins || 0}m</span>
                 </div>
-                
                 <div style="margin-top:10px; display:flex; gap:8px;">
-                    ${!isDone ? `
-                        <button onclick="handleNodeAction(${idx}, '${isDoing ? 'done' : 'start'}', ${displayMins})" 
-                                style="background:${isDoing ? '#16a34a' : '#0ea5e9'}; padding:6px 14px; font-size:11px; color:white; border:none; border-radius:6px; flex-grow:1; font-weight:bold;">
-                            ${isDoing ? 'FINISH TOPIC' : 'START STUDYING'}
-                        </button>` : 
-                        `<div style="font-size:10px; color:#4ade80; font-weight:bold;">✓ Completed at ${node.completedAt || 'N/A'}</div>`
-                    }
-                    ${isDoing ? `
-                        <button onclick="handleNodeAction(${idx}, 'abort')" 
-                                style="background:#334155; padding:6px 14px; font-size:11px; color:white; border:none; border-radius:6px; width:auto;">
-                            PAUSE
-                        </button>` : ''
-                    }
+                    ${!isDone ? `<button onclick="handleNodeAction(${idx}, '${isDoing ? 'done' : 'start'}', ${node.dynamicMins || 0})" style="background:${isDoing ? '#16a34a' : '#0ea5e9'}; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px;">${isDoing ? 'DONE' : 'START'}</button>` : ''}
+                    ${isDoing ? `<button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px;">ABORT</button>` : ''}
                 </div>
             </div>`;
-            
         container.appendChild(row);
-        if(isDoing) startCountdown(displayMins);
+        if(isDoing) startCountdown(node.dynamicMins || 30);
     });
 };
 /* --- 2. GLOBAL REDISTRIBUTION (REMAINING TIME FOCUS) --- */
-window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
-    const today = new Date().toLocaleDateString();
-    const todayKey = today.replace(/\//g, "-");
+
+window.handleNodeAction = function(idx, action, currentAllocatedMins) {
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const uniqueKey = window.currentMapTaskId;
 
-    try {
-        // 1. Pull Fresh Data from Cloud (Ignore Local memory)
-        const snapshot = await get(ref(db, `users/${currentUser.uid}`));
-        if (!snapshot.exists()) return;
-        
-        const userData = snapshot.val();
-        let dailyMaps = userData.dailyMaps ? userData.dailyMaps[todayKey] : {};
-        let nodes = dailyMaps[uniqueKey] || [];
+    // Fetch fresh from server to ensure multi-device sync
+    get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`)).then((snapshot) => {
+        let dailyMaps = snapshot.val() || {};
+        let nodes = dailyMaps[uniqueKey];
 
         if (action === 'start') {
             Object.keys(dailyMaps).forEach(k => {
@@ -3582,57 +3471,38 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
             });
             nodes[idx].status = 'doing';
             localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
-        } 
-
-        else if (action === 'done') {
+        } else if (action === 'done') {
             const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
-            const actualUsed = startTS ? Math.max(1, Math.floor((Date.now() - startTS) / 60000)) : 1;
-            
+            const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
             nodes[idx].status = 'done';
-            nodes[idx].dynamicMins = actualUsed; 
-            nodes[idx].completedAt = new Date().toLocaleTimeString(); 
+            nodes[idx].dynamicMins = actualUsedMins;
+            nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-            // 2. THE EXACT MATH: 
-            // Budget comes directly from the shift you entered at login
-            const shiftCount = parseFloat(userData.dailyShiftTarget) || 1;
-            const totalDailyBudget = shiftCount * 120; 
-            
-            let totalSpentToday = 0;
-            let pendingNodes = [];
-
-            Object.keys(dailyMaps).forEach(subj => {
-                dailyMaps[subj].forEach((node, nIdx) => {
-                    if (node.status === 'done') totalSpentToday += (node.dynamicMins || 0);
-                    else if (node.status === 'todo') pendingNodes.push({ subj, nIdx });
-                });
+            // Redistribution logic (Simplified for Server Sync)
+            const diff = currentAllocatedMins - actualUsedMins;
+            let pending = [];
+            Object.keys(dailyMaps).forEach(k => {
+                dailyMaps[k].forEach((n, i) => { if(n.status === 'todo') pending.push({k, i}); });
             });
-
-            const remainingBudget = totalDailyBudget - totalSpentToday;
-
-            if (pendingNodes.length > 0) {
-                // No overtime, no stretching. Total remaining / nodes.
-                let exactShare = Math.floor(remainingBudget / pendingNodes.length);
-                pendingNodes.forEach(p => {
-                    dailyMaps[p.subj][p.nIdx].dynamicMins = Math.max(1, exactShare);
+            if(pending.length > 0) {
+                const adj = diff / pending.length;
+                pending.forEach(p => {
+                    let t = dailyMaps[p.k][p.i];
+                    t.dynamicMins = Math.max(5, Math.round((t.dynamicMins || currentAllocatedMins) + adj));
                 });
             }
-            
             if(activeMapTimer) clearInterval(activeMapTimer);
-            localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
-        } 
-
-        else if (action === 'abort') {
+        } else if (action === 'abort') {
             nodes[idx].status = 'todo';
             if(activeMapTimer) clearInterval(activeMapTimer);
         }
 
-        await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps);
-        showByjusMap(currentMapSubject, uniqueKey);
-        loadTasks();
-
-    } catch (e) {
-        alert("Sync Error: " + e.message);
-    }
+        // Push back to Server
+        update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps).then(() => {
+            showByjusMap(currentMapSubject, uniqueKey);
+            loadTasks();
+        });
+    });
 };
 /* --- 3. OPTION TO ADD NEW SHIFT MID-DAY --- */
 window.extendShiftDirectly = function() {
@@ -3672,6 +3542,7 @@ window.extendShiftDirectly = function() {
 function startCountdown(targetMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
     
+    // FETCH THE PERSISTENT TIMESTAMP
     const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
     if (!startTS) return;
 
@@ -3682,17 +3553,12 @@ function startCountdown(targetMins) {
         const remaining = durationMs - elapsed;
         const timerEl = document.getElementById("miniTimer");
 
-        if (!timerEl) {
-            clearInterval(activeMapTimer);
-            return;
-        }
+        // If user closes map, interval keeps running in background, 
+        // but we stop trying to update the HTML element.
+        if (!timerEl) return; 
 
         if (remaining <= 0) {
-            // Show over-time in red
-            const overTime = Math.abs(remaining);
-            const om = Math.floor(overTime / 60000);
-            const os = Math.floor((overTime % 60000) / 1000);
-            timerEl.innerText = `+${om}:${String(os).padStart(2, '0')}`;
+            timerEl.innerText = "OVER";
             timerEl.style.color = "#ef4444";
             return;
         }
@@ -3700,7 +3566,6 @@ function startCountdown(targetMins) {
         const m = Math.floor(remaining / 60000);
         const s = Math.floor((remaining % 60000) / 1000);
         timerEl.innerText = `${m}:${String(s).padStart(2, '0')}`;
-        timerEl.style.color = "#000"; 
     }, 1000);
 }
 window.startNewShift = function() {
@@ -3821,37 +3686,43 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     saveSubjectData(subjectData); 
     uploadData(); 
 };
-window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will sync tasks to all devices.")) return;
+ window.finalDayEnd = async function() {
+    if(!confirm("End Day? This will log all completed topics with their Module names.")) return;
 
-    try {
-        const nextDayTasks = [];
-        for (let i = 0; i < 7; i++) {
-            const sub = document.getElementById("nd_sub_" + i)?.value;
-            const top = document.getElementById("nd_top_" + i)?.value.trim();
-            if(sub && sub !== "") { 
-                nextDayTasks.push({ 
-                    id: "task_" + Date.now() + i, 
-                    name: sub, 
-                    target: top || "General Study", 
-                    done: false 
-                }); 
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    const maps = snapshot.val() || {};
+
+    Object.keys(maps).forEach(taskId => {
+        const nodes = maps[taskId];
+        // Grouping logic: "Module 1: Topic A, Topic B"
+        const completedByModule = {};
+        const pendingByModule = {};
+
+        nodes.forEach(n => {
+            if (n.status === 'done') {
+                if (!completedByModule[n.module]) completedByModule[n.module] = [];
+                completedByModule[n.module].push(n.label);
+            } else {
+                if (!pendingByModule[n.module]) pendingByModule[n.module] = [];
+                pendingByModule[n.module].push(n.label);
             }
-        }
-
-        // 🔥 IMPORTANT: Overwrite 'TASKS' on server and clear 'dailyGoalDate'
-        await update(ref(db, `users/${currentUser.uid}`), {
-            TASKS: JSON.stringify(nextDayTasks),
-            EXTRA: "[]",
-            dailyGoalDate: "RESET" // Wiping this forces the Shift prompt on next login
         });
 
-        localStorage.clear(); 
-        signOut(auth).then(() => location.reload());
+        // Log each module's work separately into the progress table
+        Object.keys(completedByModule).forEach(mod => {
+            saveAutomatedSubjectProgress(
+                `${currentMapSubject} [${mod}]`, 
+                completedByModule[mod].join(", "), 
+                pendingByModule[mod] ? pendingByModule[mod].join(", ") : "All Clear"
+            );
+        });
+    });
 
-    } catch (e) {
-        alert("Day End Failed: " + e.message);
-    }
+    // Final Cleanup
+    localStorage.removeItem(key("DAILY_GOAL_DATE"));
+    await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    location.reload();
 };
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
