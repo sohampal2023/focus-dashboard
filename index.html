@@ -2047,43 +2047,53 @@ async function loadNotices() {
     }
 }
 window.initStudentDashboard = function() {
-    // 🔥 NEW: Check for the daily budget/shift count as soon as the dashboard loads
+    // 1. Force the Shift Prompt immediately
     askDailyBudget();
 
+    // 2. Wake up the UI containers
     const studentView = document.getElementById("studentView");
     const studentControls = document.getElementById("studentControls");
-    const taskBox = document.getElementById("taskBox");
-    const logBox = document.getElementById("logBox");
-
     if(studentView) studentView.classList.remove("hidden");
     if(studentControls) studentControls.classList.remove("hidden");
-    if(taskBox) taskBox.classList.remove("hidden");
-    if(logBox) logBox.classList.remove("hidden");
     
-    document.getElementById("loginBtn")?.classList.add("hidden");
-    document.getElementById("logoutBtn")?.classList.remove("hidden");
+    // 3. 🔥 HARD UNLOCK ALL BUTTONS (Fixes your screenshot)
+    const buttonsToEnable = [
+        "bioBtn", "histBtn", "dayBtn", 
+        "leaveBtn", "noticeBtn"
+    ];
+    
+    buttonsToEnable.forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
+            btn.style.filter = "none";
+        }
+    });
 
-    // Start real-time sync
+    // Handle the "Subject Progress" button specifically (it doesn't have an ID in your HTML)
+    const allSidebarBtns = document.querySelectorAll(".sidebar button");
+    allSidebarBtns.forEach(btn => {
+        btn.disabled = false;
+        btn.style.opacity = "1";
+    });
+
+    // 4. Start Real-time Sync
     const userRef = ref(db, `users/${currentUser.uid}`);
+    if (window.studentUnsubscribe) window.studentUnsubscribe();
+    
     window.studentUnsubscribe = onValue(userRef, (snapshot) => {
         const data = snapshot.val() || {};
-        const todayDate = new Date().toLocaleDateString();
-        const todayKey = todayDate.replace(/\//g, "-");
-
         localStorage.setItem(key("TASKS"), data.TASKS || "[]");
         
-        // Ensure shift count is synced from Admin or previous prompt
-        if(data.DAILY_SHIFT_COUNT) {
-            localStorage.setItem("DAILY_SHIFT_COUNT", data.DAILY_SHIFT_COUNT);
-        }
-
-        if (typeof window.loadTasks === "function") {
-            window.loadTasks();
-        }
+        if (typeof window.loadTasks === "function") window.loadTasks();
         
-        // Update Shift UI
+        // Update Shift Timer Display
         const shiftLabel = document.getElementById("currentShiftLabel");
         if (shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
+        
+        document.getElementById("syncStatus").innerText = "Live & Unlocked";
     });
 
     startIdle(1800);
