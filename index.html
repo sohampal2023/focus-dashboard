@@ -3965,63 +3965,83 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("End Day? This clears all subjects and maps for a fresh start tomorrow.")) return;
+    if(!confirm("End Day? This will move pending subtopics to 'Due' and clear your board.")) return;
 
     const todayStr = new Date().toLocaleDateString();
     const todayKey = todayStr.replace(/\//g, "-");
     
-    // 1. Fetch data to log progress
+    // 1. Fetch current data from Firebase
     const snapshot = await get(ref(db, `users/${currentUser.uid}`));
-    const data = snapshot.val() || {};
+    if (!snapshot.exists()) return;
+
+    const data = snapshot.val();
     const tasks = JSON.parse(data.TASKS || "[]");
     const maps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
 
-    // 2. Group by subject for the Subject Wise Progress Table
-    const summary = {}; 
-    tasks.forEach(t => {
-        const sub = t.subjectOnly || "General";
-        if (!summary[sub]) summary[sub] = { covered: [], uncovered: [] };
-        if (maps[t.id]) {
-            maps[t.id].forEach(node => {
-                if (node.status === 'done') summary[sub].covered.push(node.label);
-                else summary[sub].uncovered.push(node.label);
+    // 2. Process Subjects: Separate Covered vs Due
+    const subjectReport = {}; 
+
+    tasks.forEach(task => {
+        // Use subjectOnly as the key (e.g., "IoT")
+        const subName = task.subjectOnly || "General";
+        
+        if (!subjectReport[subName]) {
+            subjectReport[subName] = { covered: [], due: [] };
+        }
+
+        // Check the map nodes associated with this taskId
+        if (maps && maps[task.id]) {
+            maps[task.id].forEach(node => {
+                if (node.status === 'done') {
+                    subjectReport[subName].covered.push(node.label);
+                } else {
+                    // This covers 'todo', 'doing', or 'aborted' work
+                    subjectReport[subName].due.push(node.label);
+                }
             });
         }
     });
 
-    // 3. Save to Progress Table
-    for (const s in summary) {
-        saveAutomatedSubjectProgress(s, summary[s].covered.join(", "), summary[s].uncovered.join(", "));
+    // 3. Save to Subject Wise Progress Table (Automated Logging)
+    for (const sub in subjectReport) {
+        const coveredText = subjectReport[sub].covered.length > 0 
+            ? subjectReport[sub].covered.join(", ") 
+            : "None";
+            
+        const dueText = subjectReport[sub].due.length > 0 
+            ? subjectReport[sub].due.join(", ") 
+            : "None";
+
+        // Avoid logging empty rows if no work was even attempted for a subject
+        if (coveredText !== "None" || dueText !== "None") {
+            saveAutomatedSubjectProgress(sub, coveredText, dueText);
+        }
     }
 
-    // 4. THE HARD CLEAR (Wipes everything from Firebase)
+    // 4. PREPARE THE CLEANUP (Firebase update)
     const updates = {};
     updates[`users/${currentUser.uid}/TASKS`] = "[]";
     updates[`users/${currentUser.uid}/EXTRA`] = "[]";
-    updates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null; // 🔥 DELETE THE MAPS
-    updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; // Forces shift prompt tomorrow
-    updates[`users/${currentUser.uid}/CURRENT_SHIFT_LABEL`] = "No Shift Active";
+    updates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null; 
+    updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; 
     updates[`users/${currentUser.uid}/SHIFT_END_TS`] = null;
+    updates[`users/${currentUser.uid}/CURRENT_SHIFT_LABEL`] = "No Shift Active";
 
     try {
         await update(ref(db), updates);
 
-        // 5. Clear Local Storage
+        // 5. Local Storage Cleanup
         localStorage.removeItem("DAILY_GOAL_DATE");
         localStorage.removeItem("DAILY_SHIFT_COUNT");
         localStorage.setItem(key("TASKS"), "[]");
         localStorage.setItem(key("EXTRA"), "[]");
-        localStorage.removeItem(MAP_STORAGE_KEY()); 
+        localStorage.removeItem(MAP_STORAGE_KEY());
 
-        alert("Day End Successful. Journey Cleared.");
-        
-        // Generate Report and Lock Screen
-        const reportHTML = `...`; // (Keep your existing report HTML logic here)
-        localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
-        
-        location.reload();
+        // 6. Final UI Lock (Optional: Redirect or show report)
+        alert("Board Cleared. Progress saved to Subject Table.");
+        location.reload(); 
     } catch (err) {
-        alert("Clear failed: " + err.message);
+        alert("Cleanup Error: " + err.message);
     }
 };
  window.loadTasks = function() {
