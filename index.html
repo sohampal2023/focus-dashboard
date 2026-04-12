@@ -3302,7 +3302,7 @@ window.openSubjectJourney = function(subjectName, taskId) {
     modal.classList.remove("hidden");
 };
 window.generateMapFromBulk = function() {
-    const moduleName = prompt("Enter Module Name (e.g., Module 1):", "Module 1");
+    const moduleName = prompt("Enter Module Name:", "Module 1");
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
     
@@ -3313,12 +3313,11 @@ window.generateMapFromBulk = function() {
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const targetUid = window.currentAdminTargetUid || currentUser.uid;
-    const uniqueTaskId = window.currentMapTaskId || ("TASK_" + Date.now());
+    const uniqueTaskId = "TASK_" + Date.now();
 
-    // Construct detailed display name for the Dashboard
-    // Format: SUBJECT | MODULE | Topic1, Topic2...
-    const subtopicSummary = lines.slice(0, 3).join(", ") + (lines.length > 3 ? "..." : "");
-    const detailedTaskName = `${window.currentMapSubject} [${moduleName}]: ${subtopicSummary}`;
+    // Create detailed name: SUBJECT [MODULE]: Topic1, Topic2...
+    const summary = lines.slice(0, 3).join(", ") + (lines.length > 3 ? "..." : "");
+    const detailedName = `${window.currentMapSubject} [${moduleName}]: ${summary}`;
 
     const newMapData = lines.map(line => ({
         label: line.trim(),
@@ -3328,32 +3327,22 @@ window.generateMapFromBulk = function() {
         dynamicMins: 30 
     }));
 
-    // 1. Create the Map Data object
-    const mapPayload = {};
-    mapPayload[uniqueTaskId] = newMapData;
-
-    // 2. Fetch current TASKS to add this new detailed entry
     get(ref(db, `users/${targetUid}/TASKS`)).then((snapshot) => {
         let currentTasks = JSON.parse(snapshot.val() || "[]");
-        
-        // Add the new entry with the detailed name
         currentTasks.push({
             id: uniqueTaskId,
-            name: detailedTaskName,
+            name: detailedName,
             done: false,
             comment: "",
             due: ""
         });
 
-        const finalUpdate = {
-            [`dailyMaps/${todayKey}/${uniqueTaskId}`]: newMapData,
-            "TASKS": JSON.stringify(currentTasks)
-        };
+        const updates = {};
+        updates[`users/${targetUid}/dailyMaps/${todayKey}/${uniqueTaskId}`] = newMapData;
+        updates[`users/${targetUid}/TASKS`] = JSON.stringify(currentTasks);
 
-        // Push everything to Firebase in one go for instant sync
-        update(ref(db, `users/${targetUid}`), finalUpdate)
-        .then(() => {
-            alert("Success: Detailed Journey pushed to Dashboard.");
+        update(ref(db), updates).then(() => {
+            alert("Journey Pushed Successfully.");
             document.getElementById('bulkInputModal').classList.add('hidden');
             window.currentAdminTargetUid = null;
         });
@@ -3732,6 +3721,78 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     localStorage.removeItem(key("DAILY_GOAL_DATE"));
     await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
     location.reload();
+};
+  window.loadTasks = function() {
+    const tList = document.getElementById("taskList");
+    const eList = document.getElementById("extraList");
+    if (!tList || !eList) return;
+    
+    tList.innerHTML = "";
+    eList.innerHTML = "";
+
+    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    const today = new Date().toLocaleDateString();
+
+    const renderItem = (item, listRef) => {
+        const container = document.createElement("div");
+        container.style.cssText = "background:#0f172a; border:1px solid #1e293b; padding:10px; border-radius:8px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between;";
+        
+        const cleanName = item.name.replace(/'/g, "\\'");
+        const taskId = item.id || cleanName; 
+
+        // Task Info Wrapper
+        const infoWrapper = document.createElement("div");
+        infoWrapper.style.cssText = "display:flex; align-items:center; gap:10px; flex-grow:1;";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = item.done;
+        cb.style.transform = "scale(1.2)";
+
+        const label = document.createElement("span");
+        label.style.cssText = "font-size:13px; color:#e2e8f0; font-weight:500; line-height:1.4;";
+        label.innerText = item.name;
+
+        // Check for Map existence
+        let mapBtnHtml = "";
+        if (dailyMaps[today] && dailyMaps[today][taskId]) {
+            mapBtnHtml = `<button onclick="showByjusMap('${cleanName}', '${taskId}')" style="width:auto; padding:4px 10px; font-size:10px; background:#0ea5e9; border:none; color:white; border-radius:4px; font-weight:bold; cursor:pointer;">🗺 MAP</button>`;
+        }
+
+        cb.onchange = () => {
+            if (cb.checked) {
+                const remark = prompt(`Completed: ${item.name}. Details?`, "Done");
+                const dueVal = prompt(`Pending topics?`, "None");
+                item.comment = remark || "-";
+                item.due = dueVal || "-";
+                saveAutomatedSubjectProgress(item.name, item.comment, item.due);
+            }
+            item.done = cb.checked;
+            save(tasks, extras);
+            loadTasks();
+        };
+
+        infoWrapper.append(cb, label);
+        container.append(infoWrapper);
+        
+        // Add Map button if it exists
+        if(mapBtnHtml) {
+            const btnSpan = document.createElement("span");
+            btnSpan.innerHTML = mapBtnHtml;
+            container.append(btnSpan);
+        }
+
+        listRef.append(container);
+    };
+
+    if(tasks.length === 0 && extras.length === 0) {
+        tList.innerHTML = "<div style='color:#64748b; font-size:12px; text-align:center; padding:20px;'>No tasks assigned by Admin yet.</div>";
+    }
+
+    tasks.forEach(t => renderItem(t, tList));
+    extras.forEach(e => renderItem(e, eList));
 };
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
