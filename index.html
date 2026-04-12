@@ -3299,18 +3299,16 @@ let currentAdminTargetUid = null;
 window.openAdminBulkMap = async function(uid) {
     window.currentAdminTargetUid = uid;
     
-    // 1. Fetch live data for this specific student to show on the screen
+    // 1. Fetch live data
     const snap = await get(ref(db, `users/${uid}`));
-    const data = snap.val() || {};
+    const data = snapshotExists(snap) ? snap.val() : {};
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     
     const existingMaps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
     const extraRequests = data.EXTRA_REQUESTS || {};
     
-    // Create Dropdown Options
     let subjectOptions = FIXED_SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join("");
 
-    // Create the Floating Control Center
     const controlCenter = document.createElement("div");
     controlCenter.id = "adminControlCenter";
     controlCenter.className = "modal-overlay";
@@ -3319,65 +3317,72 @@ window.openAdminBulkMap = async function(uid) {
             
             <div style="border-right:1px solid #334155; padding-right:20px;">
                 <h3 style="color:#8b5cf6; margin-top:0;">ASSIGN NEW JOURNEY</h3>
-                
                 <label style="font-size:11px; color:#94a3b8;">Subject:</label>
                 <select id="admSub" style="width:100%; padding:8px; margin-bottom:10px; background:#020617; color:white; border:1px solid #334155; border-radius:6px;">
                     ${subjectOptions}
                 </select>
-
                 <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
                     <input id="admMod" type="text" placeholder="Module #" style="width:100%; padding:8px; background:#020617; color:white; border:1px solid #334155; border-radius:6px;">
                     <input id="admChap" type="text" placeholder="Chapter Name" style="width:100%; padding:8px; background:#020617; color:white; border:1px solid #334155; border-radius:6px;">
                 </div>
-
                 <label style="font-size:11px; color:#94a3b8;">Subtopics (One per line):</label>
                 <textarea id="admTopics" rows="10" style="width:100%; padding:10px; background:#020617; color:white; border:1px solid #334155; border-radius:6px; font-family:monospace; font-size:12px;"></textarea>
-                
                 <button onclick="saveAdminJourney()" style="background:#22c55e; margin-top:15px; font-weight:800;">MANUAL SAVE & PUSH</button>
             </div>
 
             <div style="overflow-y:auto; max-height:500px;">
                 <h3 style="color:#38bdf8; margin-top:0;">LIVE MONITOR & REQUESTS</h3>
-                
                 <div style="background:#1e293b; padding:10px; border-radius:8px; margin-bottom:15px;">
                     <h4 style="margin:0 0 5px 0; font-size:12px; color:#facc15;">PENDING EXTRA REQUESTS</h4>
-                    <div id="admReqList">${Object.keys(extraRequests).length ? "" : "<span style='font-size:11px; color:#64748b;'>No requests</span>"}</div>
+                    <div id="admReqList"></div>
                 </div>
-
                 <div style="background:#0f172a; padding:10px; border-radius:8px;">
                     <h4 style="margin:0 0 5px 0; font-size:12px; color:#4ade80;">ACTIVE TODAY'S MAPS</h4>
                     <div id="admMapsList"></div>
                 </div>
-
                 <button onclick="document.getElementById('adminControlCenter').remove()" style="background:#334155; margin-top:20px;">CLOSE WINDOW</button>
             </div>
         </div>
     `;
     document.body.appendChild(controlCenter);
 
-    // Populate Requests
+    // --- REPAIR: Safe Population logic ---
     const reqDiv = document.getElementById("admReqList");
-    Object.entries(extraRequests).forEach(([id, req]) => {
-        reqDiv.innerHTML += `
-            <div style="font-size:12px; padding:5px; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center;">
-                <span>${req.subject}</span>
-                <button onclick="fillFromRequest('${req.subject}', '${id}')" style="width:auto; padding:2px 8px; font-size:10px; background:#0ea5e9;">ASSIGN</button>
-            </div>
-        `;
-    });
+    if (Object.keys(extraRequests).length === 0) {
+        reqDiv.innerHTML = "<span style='font-size:11px; color:#64748b;'>No requests</span>";
+    } else {
+        Object.entries(extraRequests).forEach(([id, req]) => {
+            reqDiv.innerHTML += `
+                <div style="font-size:12px; padding:5px; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center;">
+                    <span>${req.subject}</span>
+                    <button onclick="fillFromRequest('${req.subject}', '${id}')" style="width:auto; padding:2px 8px; font-size:10px; background:#0ea5e9;">ASSIGN</button>
+                </div>`;
+        });
+    }
 
-    // Populate Active Maps
     const mapsDiv = document.getElementById("admMapsList");
-    Object.entries(existingMaps).forEach(([taskId, nodes]) => {
-        const done = nodes.filter(n => n.status === 'done').length;
-        mapsDiv.innerHTML += `
-            <div style="font-size:11px; margin-bottom:8px; border-left:2px solid #4ade80; padding-left:8px;">
-                <div style="color:#fff; font-weight:bold;">${nodes[0].module}</div>
-                <div style="color:#94a3b8;">Progress: ${done}/${nodes.length} Topics</div>
-            </div>
-        `;
-    });
+    if (!existingMaps || Object.keys(existingMaps).length === 0) {
+        mapsDiv.innerHTML = "<span style='font-size:11px; color:#64748b;'>No active journeys today</span>";
+    } else {
+        Object.entries(existingMaps).forEach(([taskId, nodes]) => {
+            // FIX: Ensure nodes array is valid and not empty before accessing index [0]
+            if (Array.isArray(nodes) && nodes.length > 0) {
+                const doneCount = nodes.filter(n => n.status === 'done').length;
+                const moduleLabel = nodes[0].module || "Unknown Module";
+                mapsDiv.innerHTML += `
+                    <div style="font-size:11px; margin-bottom:8px; border-left:2px solid #4ade80; padding-left:8px;">
+                        <div style="color:#fff; font-weight:bold;">${moduleLabel}</div>
+                        <div style="color:#94a3b8;">Progress: ${doneCount}/${nodes.length} Topics</div>
+                    </div>`;
+            }
+        });
+    }
 };
+
+// Helper function to check if snap exists (standard Firebase compat)
+function snapshotExists(snap) {
+    try { return snap.exists(); } catch(e) { return snap !== null; }
+}
  window.fillFromRequest = function(subject, reqId) {
     document.getElementById("admSub").value = subject;
     document.getElementById("admMod").focus();
