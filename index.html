@@ -3250,65 +3250,87 @@ let currentAdminTargetUid = null;
 window.openAdminBulkMap = function(uid) {
     window.currentAdminTargetUid = uid; 
     
-    // Select Subject from your Fixed List
-    let menu = "SELECT SUBJECT FOR STUDENT:\n\n";
+    // 1. SELECT SUBJECT (Dropdown via Prompt)
+    let menu = "--- STEP 1: SELECT SUBJECT ---\n\n";
     FIXED_SUBJECTS.forEach((sub, i) => menu += `${i+1}. ${sub}\n`);
     const choice = prompt(menu);
     if (!choice) return;
-    
     const selectedSubject = FIXED_SUBJECTS[parseInt(choice) - 1];
-    const moduleName = prompt(`Subject: ${selectedSubject}\nEnter Module Name:`, "Module 1");
-    if (!moduleName) return;
 
-    // Use a clean local variable to avoid [object HTML...] error
+    // 2. ENTER MODULE & CHAPTER
+    const moduleNum = prompt(`Subject: ${selectedSubject}\nEnter Module Number (e.g., Module 1):`, "Module 1");
+    if (!moduleNum) return;
+
+    const chapterName = prompt(`Enter Chapter/Topic Name:`, "Introduction");
+    if (!chapterName) return;
+
+    // Store these in global window variables for the generator to use
     window.currentSubjectStr = selectedSubject;
-    window.currentModuleStr = moduleName;
+    window.currentModuleStr = moduleNum;
+    window.currentChapterStr = chapterName;
     window.currentMapTaskId = "TASK_" + Date.now();
 
+    // 3. OPEN THE SUBTOPIC WINDOW
     const modal = document.getElementById('bulkInputModal');
-    document.getElementById('bulkTitle').innerText = `SET JOURNEY: ${selectedSubject} [${moduleName}]`;
-    document.getElementById('bulkTextarea').value = "";
+    const title = document.getElementById('bulkTitle');
+    const textarea = document.getElementById('bulkTextarea');
+
     modal.classList.remove("hidden");
     modal.style.display = "flex";
+    
+    title.innerHTML = `
+        <div style="font-size:14px; color:#94a3b8;">Assigning to Student ID: ${uid.substring(0,6)}</div>
+        <div style="color:#38bdf8;">${selectedSubject}</div>
+        <div style="font-size:16px; color:#facc15;">${moduleNum}: ${chapterName}</div>
+    `;
+    
+    textarea.value = "";
+    textarea.placeholder = "Enter sub-topics line by line (the student will see these in the map)...";
 };
 
 window.generateMapFromBulk = function() {
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
-    if (lines.length === 0) return alert("Enter subtopics!");
+    
+    if (lines.length === 0) {
+        alert("Please enter at least one subtopic.");
+        return;
+    }
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const targetUid = window.currentAdminTargetUid;
 
-    // Detailed Name for the Dashboard Row
-    const summary = lines.slice(0, 2).join(", ") + (lines.length > 2 ? "..." : "");
-    const detailedName = `${window.currentSubjectStr} | ${window.currentModuleStr}: ${summary}`;
+    // Detailed name for the Dashboard: "Subject | Module: Chapter (Subtopics...)"
+    const subSummary = lines.slice(0, 2).join(", ") + (lines.length > 2 ? "..." : "");
+    const detailedDashboardName = `${window.currentSubjectStr} | ${window.currentModuleStr}: ${window.currentChapterStr} (${subSummary})`;
 
     const newMapData = lines.map(line => ({
         label: line.trim(),
-        module: window.currentModuleStr,
+        module: `${window.currentModuleStr}: ${window.currentChapterStr}`, // Combined for map view
         status: 'todo',
         completedAt: null,
         dynamicMins: 30 
     }));
 
-    // Update Firebase: Push to Map and update the Student's Task List
+    // Save Map and Task simultaneously to Student's ID
     get(ref(db, `users/${targetUid}/TASKS`)).then((snapshot) => {
         let currentTasks = JSON.parse(snapshot.val() || "[]");
+        
         currentTasks.push({
             id: window.currentMapTaskId,
-            name: detailedName,
-            subjectOnly: window.currentSubjectStr, // Store original subject for table logic
+            name: detailedDashboardName,
+            subjectOnly: window.currentSubjectStr, // For 1-row-per-subject end of day logic
             done: false
         });
 
-        const updates = {};
-        updates[`users/${targetUid}/dailyMaps/${todayKey}/${window.currentMapTaskId}`] = newMapData;
-        updates[`users/${targetUid}/TASKS`] = JSON.stringify(currentTasks);
+        const finalUpdate = {};
+        finalUpdate[`users/${targetUid}/dailyMaps/${todayKey}/${window.currentMapTaskId}`] = newMapData;
+        finalUpdate[`users/${targetUid}/TASKS`] = JSON.stringify(currentTasks);
 
-        update(ref(db), updates).then(() => {
-            alert("Journey Assigned Successfully.");
+        update(ref(db), finalUpdate).then(() => {
+            alert("Journey successfully pushed to student dashboard.");
             document.getElementById('bulkInputModal').classList.add('hidden');
+            window.currentAdminTargetUid = null;
         });
     });
 };
