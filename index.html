@@ -3403,7 +3403,7 @@ window.saveAdminJourney = async function() {
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const targetUid = window.currentAdminTargetUid;
 
-    // Create detailed UI text
+    // Create detailed text for student dashboard
     const displayLabel = `${sub} | ${mod}: ${chap} (${lines.slice(0,2).join(", ")}...)`;
 
     const newMapData = lines.map(line => ({
@@ -3413,11 +3413,11 @@ window.saveAdminJourney = async function() {
         dynamicMins: 30
     }));
 
-    // 1. Fetch student's current TASKS
+    // 1. Fetch current tasks
     const taskSnap = await get(ref(db, `users/${targetUid}/TASKS`));
     let currentTasks = JSON.parse(taskSnap.val() || "[]");
 
-    // 2. Add the new manual entry
+    // 2. Add the new entry
     currentTasks.push({
         id: taskId,
         name: displayLabel,
@@ -3425,21 +3425,25 @@ window.saveAdminJourney = async function() {
         done: false
     });
 
-    // 3. Prepare Batch Update
+    // 3. ATOMIC BATCH UPDATE (CRITICAL FOR SYNC)
+    // This pushes the Map and the Task List simultaneously
     const updates = {};
     updates[`users/${targetUid}/dailyMaps/${todayKey}/${taskId}`] = newMapData;
     updates[`users/${targetUid}/TASKS`] = JSON.stringify(currentTasks);
     
-    // If this was from a request, clear the request
+    // Clear request if it exists
     if (window.currentRequestId) {
         updates[`users/${targetUid}/EXTRA_REQUESTS/${window.currentRequestId}`] = null;
     }
 
-    await update(ref(db), updates);
-    
-    alert("SUCCESS: Journey saved and pushed manually.");
-    document.getElementById('adminControlCenter').remove();
-    window.currentRequestId = null;
+    try {
+        await update(ref(db), updates);
+        alert("SUCCESS: Journey saved manually. Student dashboard updated.");
+        document.getElementById('adminControlCenter').remove();
+        window.currentRequestId = null;
+    } catch (err) {
+        alert("Save Failed: " + err.message);
+    }
 };
 window.generateMapFromBulk = function() {
     const text = document.getElementById('bulkTextarea').value;
@@ -3596,20 +3600,21 @@ window.showByjusMap = async function(subjectName, taskId) {
     });
 };
 /* --- 2. GLOBAL REDISTRIBUTION (REMAINING TIME FOCUS) --- */
-
 window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const uniqueKey = window.currentMapTaskId;
 
-    // Fetch fresh from server to ensure multi-device sync
     get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`)).then((snapshot) => {
         let dailyMaps = snapshot.val() || {};
         let nodes = dailyMaps[uniqueKey];
 
-        // CRITICAL FIX: Check if nodes exist before doing anything
+        // LOGIC GUARD: If data is missing, don't crash
         if (!nodes || !nodes[idx]) {
-            console.error("Map data not found for this task.");
-            alert("Syncing Map data... please try again in a second.");
+            console.warn("Sync delay detected.");
+            // Force a 500ms delay and try one more time before alerting the user
+            setTimeout(() => {
+                location.reload(); 
+            }, 500);
             return;
         }
 
@@ -3628,7 +3633,7 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
             nodes[idx].dynamicMins = actualUsedMins;
             nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-            // Redistribution logic
+            // Auto-redistribution
             const diff = currentAllocatedMins - actualUsedMins;
             let pending = [];
             Object.keys(dailyMaps).forEach(k => {
@@ -3640,22 +3645,15 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
                 const adj = diff / pending.length;
                 pending.forEach(p => {
                     let t = dailyMaps[p.k][p.i];
-                    t.dynamicMins = Math.max(5, Math.round((t.dynamicMins || currentAllocatedMins) + adj));
+                    if(t) t.dynamicMins = Math.max(5, Math.round((t.dynamicMins || currentAllocatedMins) + adj));
                 });
             }
             if(activeMapTimer) clearInterval(activeMapTimer);
-        } else if (action === 'abort') {
-            nodes[idx].status = 'todo';
-            if(activeMapTimer) clearInterval(activeMapTimer);
         }
 
-        // Push back to Server
         update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps).then(() => {
             showByjusMap(currentMapSubject, uniqueKey);
-            if(window.loadTasks) window.loadTasks();
         });
-    }).catch(err => {
-        console.error("Action Error:", err);
     });
 };
 /* --- 3. OPTION TO ADD NEW SHIFT MID-DAY --- */
