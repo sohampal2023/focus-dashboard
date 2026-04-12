@@ -3541,54 +3541,82 @@ window.showByjusMap = async function(subjectName, taskId) {
     });
 };
 /* --- 2. GLOBAL REDISTRIBUTION (REMAINING TIME FOCUS) --- */
-
-window.handleNodeAction = function(idx, action, currentAllocatedMins) {
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
+    const today = new Date().toLocaleDateString();
+    const todayKey = today.replace(/\//g, "-");
     const uniqueKey = window.currentMapTaskId;
 
-    // Fetch fresh from server to ensure multi-device sync
-    get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`)).then((snapshot) => {
+    try {
+        // 1. Fetch Fresh Data
+        const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
         let dailyMaps = snapshot.val() || {};
         let nodes = dailyMaps[uniqueKey];
 
         if (action === 'start') {
+            // Reset any other "doing" nodes to "todo" globally
             Object.keys(dailyMaps).forEach(k => {
                 dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
             });
             nodes[idx].status = 'doing';
             localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
+
         } else if (action === 'done') {
             const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
-            const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
+            // Calculate actual minutes taken
+            const actualUsedMins = startTS ? Math.max(1, Math.floor((Date.now() - startTS) / 60000)) : currentAllocatedMins;
+            
             nodes[idx].status = 'done';
-            nodes[idx].dynamicMins = actualUsedMins;
-            nodes[idx].completedAt = new Date().toLocaleTimeString();
+            nodes[idx].dynamicMins = actualUsedMins; // Record actual time taken
+            nodes[idx].completedAt = new Date().toLocaleTimeString(); // Record completion IST time
 
-            // Redistribution logic (Simplified for Server Sync)
-            const diff = currentAllocatedMins - actualUsedMins;
-            let pending = [];
-            Object.keys(dailyMaps).forEach(k => {
-                dailyMaps[k].forEach((n, i) => { if(n.status === 'todo') pending.push({k, i}); });
+            // --- GLOBAL REDISTRIBUTION ---
+            const savedMins = currentAllocatedMins - actualUsedMins;
+            let pendingNodes = [];
+
+            // Find every "todo" node across ALL subjects
+            Object.keys(dailyMaps).forEach(subjKey => {
+                dailyMaps[subjKey].forEach((node, nodeIdx) => {
+                    if (node.status === 'todo') {
+                        pendingNodes.push({ sKey: subjKey, nIdx: nodeIdx });
+                    }
+                });
             });
-            if(pending.length > 0) {
-                const adj = diff / pending.length;
-                pending.forEach(p => {
-                    let t = dailyMaps[p.k][p.i];
-                    t.dynamicMins = Math.max(5, Math.round((t.dynamicMins || currentAllocatedMins) + adj));
+
+            // If we saved time or went over, split the difference among remaining nodes
+            if (pendingNodes.length > 0) {
+                const adjustment = savedMins / pendingNodes.length;
+                pendingNodes.forEach(target => {
+                    let tNode = dailyMaps[target.sKey][target.nIdx];
+                    let currentVal = tNode.dynamicMins || currentAllocatedMins;
+                    tNode.dynamicMins = Math.max(5, Math.round(currentVal + adjustment));
                 });
             }
+
             if(activeMapTimer) clearInterval(activeMapTimer);
+            localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
+
         } else if (action === 'abort') {
             nodes[idx].status = 'todo';
             if(activeMapTimer) clearInterval(activeMapTimer);
+            localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
         }
 
-        // Push back to Server
-        update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps).then(() => {
-            showByjusMap(currentMapSubject, uniqueKey);
-            loadTasks();
-        });
-    });
+        // 2. Save to Firebase
+        await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps);
+
+        // 3. Update Local Storage for sidebar consistency
+        let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+        localMaps[today] = dailyMaps;
+        localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
+
+        // 4. Refresh UI
+        showByjusMap(currentMapSubject, uniqueKey);
+        loadTasks();
+
+    } catch (e) {
+        console.error("Action Error:", e);
+        alert("Failed to update status. Check connection.");
+    }
 };
 /* --- 3. OPTION TO ADD NEW SHIFT MID-DAY --- */
 window.extendShiftDirectly = function() {
@@ -3628,7 +3656,6 @@ window.extendShiftDirectly = function() {
 function startCountdown(targetMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
     
-    // FETCH THE PERSISTENT TIMESTAMP
     const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
     if (!startTS) return;
 
@@ -3639,12 +3666,17 @@ function startCountdown(targetMins) {
         const remaining = durationMs - elapsed;
         const timerEl = document.getElementById("miniTimer");
 
-        // If user closes map, interval keeps running in background, 
-        // but we stop trying to update the HTML element.
-        if (!timerEl) return; 
+        if (!timerEl) {
+            clearInterval(activeMapTimer);
+            return;
+        }
 
         if (remaining <= 0) {
-            timerEl.innerText = "OVER";
+            // Show over-time in red
+            const overTime = Math.abs(remaining);
+            const om = Math.floor(overTime / 60000);
+            const os = Math.floor((overTime % 60000) / 1000);
+            timerEl.innerText = `+${om}:${String(os).padStart(2, '0')}`;
             timerEl.style.color = "#ef4444";
             return;
         }
@@ -3652,6 +3684,7 @@ function startCountdown(targetMins) {
         const m = Math.floor(remaining / 60000);
         const s = Math.floor((remaining % 60000) / 1000);
         timerEl.innerText = `${m}:${String(s).padStart(2, '0')}`;
+        timerEl.style.color = "#000"; 
     }, 1000);
 }
 window.startNewShift = function() {
