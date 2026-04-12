@@ -2918,73 +2918,57 @@ function loadTasks() {
     tList.innerHTML = "";
     eList.innerHTML = "";
 
-    // 1. Get current data from storage
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+    
+    // Get the local map data
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
-    
-    // Normalize the dailyMaps for easier lookup (ensuring we match the date key)
     const currentDayMaps = dailyMaps[today] || {};
 
     const renderItem = (item, listRef) => {
         const container = document.createElement("div");
-        container.style.cssText = "display:flex; align-items:center; margin-bottom:10px; padding:8px; background:#0f172a; border-radius:8px; border:1px solid #1e293b;";
+        container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
         
         const cleanName = item.name.replace(/'/g, "\\'");
-        
-        // CRITICAL FIX: Ensure taskId is always a string and matches the generator logic
         const taskId = String(item.id || cleanName); 
 
-        // 2. Check if a map exists for this SPECIFIC task ID on the server/local
+        // Button Logic: Check if Map exists for this specific ID
         let mapBtnHtml = "";
-        const isMock = item.name.startsWith("MOCK TEST:");
-
-        if (!isMock) {
-            // If the ID exists in our map storage for today, show MAP. Otherwise, show SET.
+        if (!item.name.startsWith("MOCK TEST:")) {
             if (currentDayMaps[taskId]) {
-                mapBtnHtml = `
-                    <button onclick="showByjusMap('${cleanName}', '${taskId}')" 
-                        style="width:auto; padding:4px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:800; cursor:pointer;">
-                        🗺 VIEW MAP
-                    </button>`;
+                mapBtnHtml = `<button onclick="showByjusMap('${cleanName}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold;">🗺 VIEW MAP</button>`;
             } else {
-                mapBtnHtml = `
-                    <button onclick="openSubjectJourney('${cleanName}', '${taskId}')" 
-                        style="width:auto; padding:4px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px; font-weight:600; cursor:pointer;">
-                        + SET JOURNEY
-                    </button>`;
+                mapBtnHtml = `<button onclick="openSubjectJourney('${cleanName}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px;">+ SET JOURNEY</button>`;
             }
         }
 
         const cb = document.createElement("input");
         cb.type = "checkbox";
-        cb.style.marginRight = "12px";
         cb.checked = item.done;
-        if (isMock) cb.disabled = true;
+        cb.style.marginRight = "10px";
 
         const label = document.createElement("span");
-        label.style.fontSize = "14px";
-        label.style.fontWeight = "500";
         label.innerText = item.name;
+        label.style.fontSize = "13px";
 
         cb.onchange = () => {
+            item.done = cb.checked;
             if (cb.checked) {
-                const remark = prompt(`Completed: ${item.name}. Details?`, " ");
-                const dueVal = prompt(`Pending topics?`, " ");
-                item.comment = remark || "-";
-                item.due = dueVal || "-";
-                // Only save to subject progress if it's not a journey (journey handles its own logging)
+                const rem = prompt("Details?", " ");
+                const due = prompt("Pending?", " ");
+                item.comment = rem || "-";
+                item.due = due || "-";
                 if (!currentDayMaps[taskId]) {
                     saveAutomatedSubjectProgress(item.name, item.comment, item.due);
                 }
             }
-            item.done = cb.checked;
             save(tasks, extras);
-            loadTasks(); // Re-render to update UI
+            loadTasks();
         };
 
-        container.append(cb, label, document.createRange().createContextualFragment(mapBtnHtml));
+        container.append(cb, label);
+        container.insertAdjacentHTML('beforeend', mapBtnHtml);
         listRef.append(container);
     };
 
@@ -3349,29 +3333,41 @@ window.generateMapFromBulk = function() {
         return;
     }
 
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const uniqueKey = window.currentMapTaskId;
+    const today = new Date().toLocaleDateString();
+    const todayKey = today.replace(/\//g, "-");
+    const uniqueKey = String(window.currentMapTaskId);
 
-    // Create the array of nodes
-    const nodesArray = lines.map((line, index) => ({
+    const nodesArray = lines.map((line) => ({
         label: line.trim(),
         module: moduleName.trim(),
         status: 'todo',
         completedAt: null,
-        dynamicMins: 0 // Initialize at 0
+        dynamicMins: 0 
     }));
 
-    // Wrap in an object to satisfy Firebase update requirements
+    // 1. Update Local Storage immediately so the sidebar button changes
+    let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    if (!localMaps[today]) localMaps[today] = {};
+    localMaps[today][uniqueKey] = nodesArray;
+    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
+
+    // 2. Update Firebase
     const updatePayload = {};
     updatePayload[uniqueKey] = nodesArray;
 
     update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), updatePayload)
     .then(() => {
         document.getElementById('bulkInputModal').classList.add('hidden');
-        loadTasks();
+        
+        // 3. Refresh the Task List so "Set Journey" becomes "View Map"
+        loadTasks(); 
+        
+        // 4. Open the Map
         showByjusMap(currentMapSubject, uniqueKey);
     })
-    .catch(err => alert("Sync Error: " + err.message));
+    .catch((error) => {
+        alert("Sync Error: " + error.message);
+    });
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
 window.addNewSubTopic = function(subjectName) {
