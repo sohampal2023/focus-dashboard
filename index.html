@@ -3736,35 +3736,38 @@ window.extendShiftDirectly = function() {
     showByjusMap(currentMapSubject);
     alert(`Success! Goal updated to ${newTotal} shifts. Time redistributed.`);
 };
-function startCountdown(targetMins) {
-    if (activeMapTimer) clearInterval(activeMapTimer);
-    
-    // FETCH THE PERSISTENT TIMESTAMP
-    const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
-    if (!startTS) return;
+let activeMapTimer = null;
 
-    const durationMs = targetMins * 60 * 1000;
+window.startCountdown = function(allocatedMins) {
+    if (activeMapTimer) clearInterval(activeMapTimer);
+
+    // Get the start time we saved when "START" was pressed
+    const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS"))) || Date.now();
+    const totalSecs = allocatedMins * 60;
 
     activeMapTimer = setInterval(() => {
-        const elapsed = Date.now() - startTS;
-        const remaining = durationMs - elapsed;
-        const timerEl = document.getElementById("miniTimer");
+        const elapsedSecs = Math.floor((Date.now() - startTS) / 1000);
+        const remainingSecs = totalSecs - elapsedSecs;
 
-        // If user closes map, interval keeps running in background, 
-        // but we stop trying to update the HTML element.
-        if (!timerEl) return; 
+        // Find the timer element in the Map UI
+        const timerDisplay = document.getElementById("miniTimer");
 
-        if (remaining <= 0) {
-            timerEl.innerText = "OVER";
-            timerEl.style.color = "#ef4444";
+        if (!timerDisplay) {
+            // If the element isn't found yet (rendering delay), just keep waiting
             return;
         }
 
-        const m = Math.floor(remaining / 60000);
-        const s = Math.floor((remaining % 60000) / 1000);
-        timerEl.innerText = `${m}:${String(s).padStart(2, '0')}`;
+        if (remainingSecs <= 0) {
+            timerDisplay.innerText = "OVER!";
+            timerDisplay.style.color = "#ef4444";
+            return;
+        }
+
+        const m = Math.floor(remainingSecs / 60);
+        const s = remainingSecs % 60;
+        timerDisplay.innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
     }, 1000);
-}
+};
 window.startNewShift = function() {
     const shiftNum = prompt("Enter Shift Number (1, 2, 3, or 4):");
     
