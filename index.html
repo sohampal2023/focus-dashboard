@@ -3517,24 +3517,30 @@ window.showByjusMap = async function(subjectName, taskId) {
 window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
     const today = new Date().toLocaleDateString();
     const todayKey = today.replace(/\//g, "-");
-    const uniqueKey = window.currentMapTaskId;
+    const uniqueKey = window.currentMapTaskId; // This is the Subject/Task ID
 
     try {
+        // 1. Fetch Fresh Data from Firebase to ensure multi-device sync
         const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
         if (!snapshot.exists()) return;
         
         let dailyMaps = snapshot.val();
         let nodes = dailyMaps[uniqueKey];
 
+        // --- CASE 1: START STUDYING ---
         if (action === 'start') {
-            // Logic to set 'doing' and reset others (same as before)
+            // Stop any other active "doing" node in any subject
             Object.keys(dailyMaps).forEach(k => {
                 dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
             });
+            
             nodes[idx].status = 'doing';
+            // Save Start Time locally to calculate duration later
             localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
+        } 
 
-        } else if (action === 'done') {
+        // --- CASE 2: FINISH TOPIC (The Math Part) ---
+        else if (action === 'done') {
             const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
             const actualUsed = startTS ? Math.max(1, Math.floor((Date.now() - startTS) / 60000)) : 1;
             
@@ -3542,51 +3548,67 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
             nodes[idx].dynamicMins = actualUsed; 
             nodes[idx].completedAt = new Date().toLocaleTimeString(); 
 
-            // --- GLOBAL EVEN REDISTRIBUTION ---
+            // --- GLOBAL SMART REDISTRIBUTION ---
             const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
-            const totalDailyBudget = shiftCount * 120;
+            const totalDailyBudget = shiftCount * 120; // Total goal in minutes
             
-            // 1. Calculate time already spent today across all maps
-            let timeSpent = 0;
+            let totalSpentToday = 0;
             let pendingNodes = [];
 
+            // Calculate time spent across ALL subjects today
             Object.keys(dailyMaps).forEach(subj => {
                 dailyMaps[subj].forEach((node, nIdx) => {
                     if (node.status === 'done') {
-                        timeSpent += (node.dynamicMins || 0);
+                        totalSpentToday += (node.dynamicMins || 0);
                     } else if (node.status === 'todo') {
                         pendingNodes.push({ subj, nIdx });
                     }
                 });
             });
 
-            // 2. Distribute remaining budget evenly
-            const remainingBudget = totalDailyBudget - timeSpent;
+            const remainingBudget = totalDailyBudget - totalSpentToday;
+
             if (pendingNodes.length > 0) {
-                const evenShare = Math.max(5, Math.floor(remainingBudget / pendingNodes.length));
+                // Calculate even share
+                let evenShare = Math.floor(remainingBudget / pendingNodes.length);
+                
                 pendingNodes.forEach(p => {
-                    dailyMaps[p.subj][p.nIdx].dynamicMins = evenShare;
+                    let finalAllocated = evenShare;
+                    
+                    // 🛑 THE CAP: Prevent "Bad Math" inflation
+                    // Max 90 mins, Min 15 mins
+                    if (finalAllocated > 90) finalAllocated = 90; 
+                    if (finalAllocated < 15) finalAllocated = 15;
+                    
+                    dailyMaps[p.subj][p.nIdx].dynamicMins = finalAllocated;
                 });
             }
 
             if(activeMapTimer) clearInterval(activeMapTimer);
             localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
+        } 
 
-        } else if (action === 'abort') {
+        // --- CASE 3: ABORT / PAUSE ---
+        else if (action === 'abort') {
             nodes[idx].status = 'todo';
             if(activeMapTimer) clearInterval(activeMapTimer);
+            localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
         }
 
-        // Save to Server and Local
+        // --- FINAL SYNC: Update Cloud and Local Storage ---
+        // This ensures the update reflects on your phone and PC simultaneously
         await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps);
+        
         let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
         localMaps[today] = dailyMaps;
         localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
 
+        // Refresh the Map UI and Task List
         showByjusMap(currentMapSubject, uniqueKey);
         loadTasks();
 
     } catch (e) {
+        console.error("handleNodeAction Error:", e);
         alert("Sync Error: " + e.message);
     }
 };
@@ -3778,80 +3800,60 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("CONFIRM DAY END:\n\nSubmit report and prepare tasks for tomorrow?")) return;
+    if(!confirm("CONFIRM GLOBAL DAY END:\n\nThis will end the day for this account on ALL devices. Continue?")) return;
 
     try {
-        // 1. Collect the New Tasks from the dropdowns
+        // 1. Collect Next Day Tasks from Dropdowns
         const nextDayTasks = [];
         for (let i = 0; i < 7; i++) {
             const sub = document.getElementById("nd_sub_" + i)?.value;
             const top = document.getElementById("nd_top_" + i)?.value.trim();
-            
             if(sub && sub !== "") { 
                 nextDayTasks.push({ 
                     id: "task_" + Date.now() + i, 
                     name: sub, 
                     target: top || "General Study", 
-                    done: false,
-                    comment: "",
-                    due: ""
+                    done: false 
                 }); 
             }
         }
 
-        // 2. Fallback: If no subjects were selected, provide default tasks
-        if (nextDayTasks.length === 0) {
-            nextDayTasks.push(
-                { id: "t1", name: "Study", target: "Daily Goal", done: false },
-                { id: "t2", name: "Revision", target: "Daily Goal", done: false }
-            );
-        }
-
-        // 3. Calculate Final Performance for History
+        // 2. Final Stats
         const p = calculate();
         const todayStr = new Date().toLocaleDateString();
-        const todayKey = todayStr.replace(/\//g, "-");
-        
-        // 4. 🔥 THE CORE FIX: Sync to Firebase
-        // We overwrite the TASKS path with our new selection and clear EXTRAS
-        await update(ref(db, `users/${currentUser.uid}`), {
+
+        // 3. 🔥 CLOUD UPDATE: This affects all devices
+        const globalReset = {
             TASKS: JSON.stringify(nextDayTasks),
             EXTRA: "[]",
             PENALTY: "0",
-            DAILY_TIMEOUTS: "0",
-            IDLE_STRIKES: "0",
-            dailyGoalDate: "" // This triggers the "New Day" shift prompt on next login
-        });
+            dailyGoalDate: "COMPLETED_" + todayStr, // Mark as completed for the server
+            lastSyncDevice: navigator.userAgent // Tracking
+        };
 
-        // 5. Update LocalStorage so the UI stays in sync
+        // Update Firebase
+        await update(ref(db, `users/${currentUser.uid}`), globalReset);
+
+        // 4. Local Cleanup
         localStorage.setItem(key("TASKS"), JSON.stringify(nextDayTasks));
         localStorage.setItem(key("EXTRA"), "[]");
-        localStorage.removeItem(key("LOGS"));
-        localStorage.removeItem(key("NEXT_TASKS"));
-
-        // 6. Generate the Report View
+        
+        // 5. Show Report
         const reportHTML = `
-            <div style="padding:20px; text-align:center;">
-                <div class="card" style="background:#1e1b4b; padding:40px;">
-                    <h2 style="color:#38bdf8;">DAY COMPLETED</h2>
-                    <div style="font-size:60px; font-weight:800; color:#4ade80;">${p.percent}%</div>
-                    <p style="color:#cbd5e1;">Your tasks for tomorrow have been assigned.</p>
-                    <button onclick="dismissReportLock()" style="width:100%; background:#22c55e; color:white; padding:15px; border:none; border-radius:8px; cursor:pointer; font-weight:bold; margin-top:20px;">
-                        LOGIN TO NEW SESSION
-                    </button>
-                </div>
+            <div class="card" style="text-align:center; padding:40px; background:#020617;">
+                <h1 style="color:#38bdf8;">${p.percent}%</h1>
+                <h2 style="color:white;">DAY ENDED SUCCESSFULLY</h2>
+                <p style="color:#94a3b8;">Account synced across all devices.</p>
+                <button onclick="dismissReportLock()" style="background:#22c55e; color:white; padding:15px; width:100%; border:none; border-radius:8px; cursor:pointer; font-weight:bold; margin-top:20px;">
+                    START NEW DAY
+                </button>
             </div>`;
 
         localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
-
-        // 7. Logout and Refresh
-        signOut(auth).then(() => {
-            location.reload(); 
-        });
+        signOut(auth).then(() => location.reload());
 
     } catch (e) {
-        console.error("Day End Sync Error:", e);
-        alert("Failed to save end-of-day data: " + e.message);
+        alert("Global Sync Failed: " + e.message);
     }
 };
 // --- ATTACH TO WINDOW ---
