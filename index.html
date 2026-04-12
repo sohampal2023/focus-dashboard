@@ -3370,45 +3370,70 @@ window.generateMapFromBulk = function() {
     });
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
-window.addNewSubTopic = function(subjectName) {
-    const newTopic = prompt("Enter new sub-topic name:");
-    if (!newTopic) return;
+window.addNewSubTopic = async function(taskId) {
+    const newTopicName = prompt("Enter new sub-topic name:");
+    if (!newTopicName) return;
 
+    // 1. Setup Keys (Match the hyphenated format used in generateMapFromBulk)
     const today = new Date().toLocaleDateString();
-    let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
+    const todayKey = today.replace(/\//g, "-");
     
-    if (!dailyMaps[today][subjectName]) dailyMaps[today][subjectName] = [];
+    try {
+        // 2. Fetch fresh data from Firebase
+        const snap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+        let dailyMaps = snap.exists() ? snap.val() : {};
+        
+        if (!dailyMaps[taskId]) {
+            alert("Error: Subject Journey not found.");
+            return;
+        }
 
-    // Add new topic
-    dailyMaps[today][subjectName].push({
-        id: Date.now(), label: newTopic.trim(), status: 'todo', completedAt: null, history: []
-    });
+        // 3. Create the new node
+        const newNode = {
+            label: newTopicName.trim(),
+            module: "Added Topic",
+            status: 'todo',
+            completedAt: null,
+            dynamicMins: 0 // Will be calculated below
+        };
 
-    // Re-calculate the even distribution base
-    let totalGlobalTopics = 0;
-    Object.keys(dailyMaps[today]).forEach(s => { totalGlobalTopics += dailyMaps[today][s].length; });
-    const newBase = Math.floor((shiftCount * 120) / totalGlobalTopics);
+        // 4. Add to the array
+        dailyMaps[taskId].push(newNode);
 
-    // Apply to all TODO nodes globally
-    Object.keys(dailyMaps[today]).forEach(s => {
-        dailyMaps[today][s].forEach(n => {
-            if (n.status === 'todo') {
-                const oldVal = n.dynamicMins || 0; 
-                // Only push to history and update if the new base is different from current
-                if (oldVal !== 0 && oldVal !== newBase) {
-                    if (!n.history) n.history = [];
-                    n.history.push(oldVal);
+        // 5. Global Re-balancing (Evenly distribute remaining shift time)
+        const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
+        const totalDayMins = shiftCount * 120;
+        
+        let totalNodes = 0;
+        Object.keys(dailyMaps).forEach(k => { totalNodes += dailyMaps[k].length; });
+        
+        const newAllocatedMins = Math.floor(totalDayMins / (totalNodes || 1));
+
+        // Update all TODO nodes with the new time budget
+        Object.keys(dailyMaps).forEach(k => {
+            dailyMaps[k].forEach(node => {
+                if (node.status === 'todo') {
+                    node.dynamicMins = newAllocatedMins;
                 }
-                n.dynamicMins = newBase;
-            }
+            });
         });
-    });
 
-    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
-    uploadData();
-    showByjusMap(subjectName);
-    loadTasks();
+        // 6. Save to Firebase
+        await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps);
+
+        // 7. Update Local Storage so Sidebar Syncs
+        let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+        localMaps[today] = dailyMaps;
+        localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
+
+        // 8. Refresh the UI
+        showByjusMap(currentMapSubject, taskId);
+        alert("Topic added and time redistributed!");
+
+    } catch (e) {
+        console.error("Add Topic Error:", e);
+        alert("Failed to add topic: " + e.message);
+    }
 };
 let activeMapTimer = null; 
 
