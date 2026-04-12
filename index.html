@@ -3782,7 +3782,7 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
 };
 window.finalDayEnd = async function() {
     // 1. --- FINAL CONFIRMATION ---
-    if(!confirm("Submit Daily Report? \n- Completed Topics -> Saved to Progress\n- Extra Work -> Cleared\n- Map -> Reset\n- Undone Tasks -> Kept for Tomorrow")) return;
+    if(!confirm("Submit Daily Report? \n- Completed Topics -> Saved to History\n- Extra Work -> Cleared\n- Map -> Reset for Tomorrow\n- Undone Tasks -> Kept in Sidebar")) return;
 
     const today = new Date().toLocaleDateString();
     const todayKey = today.replace(/\//g, "-");
@@ -3807,29 +3807,44 @@ window.finalDayEnd = async function() {
             }
         }
 
-        // 3. --- CLEANUP SERVER DATA ---
-        // Wipe the maps from the server so they don't show up tomorrow
+        // 3. --- CLEANUP SERVER JOURNEYS ---
+        // We delete today's maps so they don't reappear tomorrow
         await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
 
         // 4. --- CLEANUP LOCAL STORAGE ---
         // Clear Extra Work completely
         localStorage.setItem(key("EXTRA"), "[]");
         
-        // Filter Assigned Tasks: Keep ONLY the ones that were NOT checked
+        // Filter Assigned Tasks: Keep only the ones that were NOT finished
         const currentTasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
         const tasksToCarryForward = currentTasks.filter(t => t.done === false);
+        
+        // If everything was done, we keep the default "Study" and "Revise" so the sidebar isn't empty
+        if (tasksToCarryForward.length === 0) {
+            tasksToCarryForward.push(
+                { name: "Study", done: false, comment: "", due: "" },
+                { name: "Revise", done: false, comment: "", due: "" }
+            );
+        }
         localStorage.setItem(key("TASKS"), JSON.stringify(tasksToCarryForward));
 
-        // 5. --- RESET DAILY COUNTERS ---
+        // 5. --- RESET DAILY MARKERS ---
         localStorage.removeItem(key("DAILY_GOAL_DATE"));
         localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
         localStorage.removeItem(key("SHIFT_END_TS"));
         localStorage.removeItem(MAP_STORAGE_KEY());
         localStorage.setItem(key("PENALTY"), "0");
+        localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
+        localStorage.setItem(key("IDLE_STRIKES"), "0");
 
-        // 6. --- FINAL PUSH TO SERVER ---
-        // Ensure the server knows about the remaining tasks before we logout
-        await uploadData();
+        // 6. --- FINAL SYNC TO SERVER ---
+        // This is crucial: we update the server with the NEW task list before logging out
+        await update(ref(db, `users/${currentUser.uid}`), {
+            TASKS: JSON.stringify(tasksToCarryForward),
+            EXTRA: "[]",
+            PENALTY: "0",
+            DAILY_TIMEOUTS: "0"
+        });
 
         // 7. --- GENERATE REPORT & LOCK ---
         const p = calculate();
@@ -3845,8 +3860,10 @@ window.finalDayEnd = async function() {
 
         // 8. --- LOGOUT ---
         setTimeout(() => {
-            signOut(auth).then(() => location.reload());
-        }, 1000);
+            signOut(auth).then(() => {
+                location.reload(); 
+            });
+        }, 1500);
 
     } catch (e) {
         console.error("Day End Error:", e);
