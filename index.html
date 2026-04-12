@@ -3454,12 +3454,22 @@ window.showByjusMap = function(subjectName, taskId) {
 window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     const today = new Date().toLocaleDateString();
     let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    let nodes = dailyMaps[today][currentMapSubject];
+    
+    // --- CRITICAL: USE UNIQUE TASK ID KEY ---
+    const uniqueKey = window.currentMapTaskId;
+    if (!uniqueKey || !dailyMaps[today] || !dailyMaps[today][uniqueKey]) {
+        console.error("Task ID not found in mapping.");
+        return;
+    }
+    
+    let nodes = dailyMaps[today][uniqueKey];
 
     if (action === 'start') {
-        // Ensure only one task is active across all subjects
-        Object.keys(dailyMaps[today]).forEach(s => {
-            dailyMaps[today][s].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
+        // Ensure only one task is active across ALL subjects globally
+        Object.keys(dailyMaps[today]).forEach(key => {
+            dailyMaps[today][key].forEach(n => { 
+                if(n.status === 'doing') n.status = 'todo'; 
+            });
         });
         nodes[idx].status = 'doing';
         localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
@@ -3473,19 +3483,51 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
         nodes[idx].dynamicMins = actualUsedMins; 
         nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-        // Redistribution logic...
+        // 1. CHECK FOR FULL JOURNEY COMPLETION (AUTO-TICK SIDEBAR)
+        const allFinished = nodes.every(n => n.status === 'done');
+        
+        if (allFinished) {
+            let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+            let extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+            
+            // Logic: Tick only the row that matches THIS specific Unique ID
+            const tickRow = (list) => {
+                list.forEach(t => {
+                    // Match by ID if exists, fallback to name for older tasks
+                    if ((t.id && String(t.id) === String(uniqueKey)) || t.name === currentMapSubject) {
+                        t.done = true;
+                    }
+                });
+            };
+
+            tickRow(tasks);
+            tickRow(extras);
+            
+            localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
+            localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+
+            // Log Final Completion to Subject Progress Table
+            const totalTime = nodes.reduce((s, n) => s + (n.dynamicMins || 0), 0);
+            saveAutomatedSubjectProgress(currentMapSubject, `Completed (${totalTime}m)`, "None - All Clear");
+        }
+
+        // 2. GLOBAL REDISTRIBUTION LOGIC
         let pending = [];
         Object.keys(dailyMaps[today]).forEach(subKey => {
-            dailyMaps[today][subKey].forEach((n, i) => { if (n.status === 'todo') pending.push({ sub: subKey, index: i }); });
+            dailyMaps[today][subKey].forEach((n, i) => { 
+                if (n.status === 'todo') pending.push({ key: subKey, index: i }); 
+            });
         });
 
         if (pending.length > 0 && difference !== 0) {
             const adj = difference / pending.length;
             pending.forEach(p => {
-                let target = dailyMaps[today][p.sub][p.index];
+                let target = dailyMaps[today][p.key][p.index];
                 if (!target.history) target.history = [];
                 const oldVal = target.dynamicMins || currentAllocatedMins;
                 const newVal = Math.max(5, Math.round(oldVal + adj));
+                
+                // Only strike and update if time actually changed
                 if (newVal !== Math.round(oldVal)) {
                     target.history.push(Math.round(oldVal));
                     target.dynamicMins = newVal;
@@ -3497,17 +3539,18 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
         localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
 
     } else if (action === 'abort') {
-        // RESET STATE
         nodes[idx].status = 'todo';
         if(activeMapTimer) clearInterval(activeMapTimer);
         localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
     }
 
-    dailyMaps[today][currentMapSubject] = nodes;
+    // Save update back to unique key
+    dailyMaps[today][uniqueKey] = nodes;
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
+    
     uploadData();
-    showByjusMap(currentMapSubject);
-    loadTasks();
+    showByjusMap(currentMapSubject, uniqueKey); // Re-render with ID
+    loadTasks(); // Update sidebar ticks
 };
 /* --- 3. OPTION TO ADD NEW SHIFT MID-DAY --- */
 window.extendShiftDirectly = function() {
