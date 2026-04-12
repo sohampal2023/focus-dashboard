@@ -2047,57 +2047,91 @@ async function loadNotices() {
     }
 }
 window.initStudentDashboard = function() {
-    // 1. Force the Shift Prompt immediately
+  window.askDailyBudget = async function() {
     askDailyBudget();
-
-    // 2. Wake up the UI containers
+    // 1. FORCE UI VISIBILITY (Wakes up the dashboard immediately)
     const studentView = document.getElementById("studentView");
     const studentControls = document.getElementById("studentControls");
+    const taskBox = document.getElementById("taskBox");
+    const logBox = document.getElementById("logBox");
+
     if(studentView) studentView.classList.remove("hidden");
     if(studentControls) studentControls.classList.remove("hidden");
+    if(taskBox) taskBox.classList.remove("hidden");
+    if(logBox) logBox.classList.remove("hidden");
     
-    // 3. 🔥 HARD UNLOCK ALL BUTTONS (Fixes your screenshot)
-    const buttonsToEnable = [
-        "bioBtn", "histBtn", "dayBtn", 
-        "leaveBtn", "noticeBtn"
-    ];
-    
-    buttonsToEnable.forEach(id => {
-        const btn = document.getElementById(id);
-        if (btn) {
-            btn.disabled = false;
-            btn.style.opacity = "1";
-            btn.style.cursor = "pointer";
-            btn.style.filter = "none";
-        }
-    });
+    // Toggle login/logout buttons
+    document.getElementById("loginBtn")?.classList.add("hidden");
+    document.getElementById("logoutBtn")?.classList.remove("hidden");
 
-    // Handle the "Subject Progress" button specifically (it doesn't have an ID in your HTML)
-    const allSidebarBtns = document.querySelectorAll(".sidebar button");
-    allSidebarBtns.forEach(btn => {
+    // 2. HARD UNLOCK: Keep all sidebar buttons active 24/7
+    const sidebarButtons = document.querySelectorAll(".sidebar button");
+    sidebarButtons.forEach(btn => {
         btn.disabled = false;
         btn.style.opacity = "1";
+        btn.style.cursor = "pointer";
+        btn.style.filter = "none";
     });
 
-    // 4. Start Real-time Sync
-    const userRef = ref(db, `users/${currentUser.uid}`);
+    // 3. CLEANUP: Prevent duplicate listeners
     if (window.studentUnsubscribe) window.studentUnsubscribe();
-    
+
+    // 4. START REAL-TIME LIVE SYNC
+    const userRef = ref(db, `users/${currentUser.uid}`);
     window.studentUnsubscribe = onValue(userRef, (snapshot) => {
-        const data = snapshot.val() || {};
-        localStorage.setItem(key("TASKS"), data.TASKS || "[]");
-        
-        if (typeof window.loadTasks === "function") window.loadTasks();
-        
-        // Update Shift Timer Display
-        const shiftLabel = document.getElementById("currentShiftLabel");
-        if (shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
-        
-        document.getElementById("syncStatus").innerText = "Live & Unlocked";
+        try {
+            const data = snapshot.val() || {};
+            const todayDate = new Date().toLocaleDateString();
+            const todayKey = todayDate.replace(/\//g, "-");
+
+            // --- A. Sync Tasks to LocalStorage ---
+            localStorage.setItem(key("TASKS"), data.TASKS || "[]");
+            localStorage.setItem(key("EXTRA"), data.EXTRA || "[]");
+            
+            // --- B. Sync Daily Maps (For the MAP Button) ---
+            // This allows the student to see the '🗺 MAP' button immediately after Admin assignment
+            if (data.dailyMaps && data.dailyMaps[todayKey]) {
+                const mapStorage = {};
+                mapStorage[todayDate] = data.dailyMaps[todayKey];
+                localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(mapStorage));
+            }
+
+            // --- C. Trigger UI Render (Instant update across devices) ---
+            if (typeof window.loadTasks === "function") {
+                window.loadTasks();
+            }
+
+            // --- D. Sync Status Indicators ---
+            const shiftLabel = document.getElementById("currentShiftLabel");
+            if (shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
+            
+            const timeoutDisp = document.getElementById("timeoutCounter");
+            if (timeoutDisp) timeoutDisp.innerText = "Timeouts: " + (data.DAILY_TIMEOUTS || 0);
+
+            // --- E. Handle Admin Warnings ---
+            if (data.activeAlert) {
+                const msgEl = document.getElementById("rejectedMsg");
+                if(msgEl) msgEl.innerText = "Admin: " + data.activeAlert;
+                document.getElementById("rejectedPopup")?.classList.remove("hidden");
+            } else {
+                document.getElementById("rejectedPopup")?.classList.add("hidden");
+            }
+
+            document.getElementById("syncStatus").innerText = "Real-time Active";
+
+        } catch (err) {
+            console.error("Critical Sync Error:", err);
+            document.getElementById("syncStatus").innerText = "Sync Error - Check Console";
+        }
+    }, (error) => {
+        console.error("Firebase Read Error:", error);
+        document.getElementById("syncStatus").innerText = "Offline";
     });
 
+    // 5. Start Watchdog Session
     startIdle(1800);
 };
+
   window.askDailyBudget = async function() {
     const todayStr = new Date().toLocaleDateString();
     
