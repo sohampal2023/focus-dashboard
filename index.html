@@ -2050,7 +2050,7 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // 1. Core UI setup
+    // 1. Basic UI Visibility
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox")?.classList.remove("hidden");
     document.getElementById("logBox")?.classList.remove("hidden");
@@ -2059,10 +2059,10 @@ async function initStudentDashboard() {
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 2. Fetch Core Data (Logs, Tasks, etc.)
+    // 2. Download Core Data (Tasks/Logs)
     const serverData = await downloadData(currentUser.uid);
     
-    // 3. MULTI-DEVICE FIX: Sync Journeys from Firebase to Local Storage
+    // 3. 🔥 THE FIX: Sync Journeys from Cloud to Local Storage
     const today = new Date().toLocaleDateString();
     const todayKey = today.replace(/\//g, "-");
     
@@ -2072,25 +2072,20 @@ async function initStudentDashboard() {
             let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
             localMaps[today] = mapSnap.val();
             localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
+            console.log("Cloud Journeys Synced Successfully");
         }
     } catch (e) {
-        console.error("Multi-device Map Sync Failed", e);
+        console.error("Map Sync Error:", e);
     }
 
-    // 4. Initialize Dashboard Components
+    // 4. Initialize Components
     loadSubjectList();
     setupTasks(); 
-    loadTasks(); // This now uses the synced cloud data
+    loadTasks(); // Sidebar will now see the Cloud Journeys
     updateProgress();
     runShiftTimer();
     
-    // Safety check for lockout
-    if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
-        location.reload(); 
-        return; 
-    }
-
-    // Unlock all student action buttons
+    // Unlock action buttons
     const buttonsToUnlock = ["bioBtn", "histBtn", "dayBtn", "noticeBtn", "leaveBtn"];
     buttonsToUnlock.forEach(id => {
         const btn = document.getElementById(id);
@@ -2099,6 +2094,12 @@ async function initStudentDashboard() {
             btn.style.opacity = "1";
         }
     });
+
+    // Handle Lockout
+    if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
+        location.reload(); 
+        return; 
+    }
 }
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
@@ -2882,25 +2883,24 @@ function loadTasks() {
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     
-    // Check local storage (synced with cloud in initStudentDashboard)
+    // Check local storage (now synced with Cloud)
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
     const currentDayMaps = dailyMaps[today] || {};
 
     const renderItem = (item, listRef) => {
         const container = document.createElement("div");
-        container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
+        container.style.cssText = "display:flex; align-items:center; margin-bottom:10px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
         
         const cleanName = item.name.replace(/'/g, "\\'");
-        const taskId = String(item.id || cleanName); // Strict string matching
+        const taskId = String(item.id || cleanName); 
 
         let mapBtnHtml = "";
         if (!item.name.startsWith("MOCK TEST:")) {
-            // Check if this taskId exists in the Cloud-Synced DailyMaps
             if (currentDayMaps[taskId]) {
-                mapBtnHtml = `<button onclick="showByjusMap('${cleanName}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold; cursor:pointer;">🗺 VIEW MAP</button>`;
+                mapBtnHtml = `<button onclick="showByjusMap('${cleanName}', '${taskId}')" style="width:auto; padding:6px 14px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold; cursor:pointer;">🗺 VIEW MAP</button>`;
             } else {
-                mapBtnHtml = `<button onclick="openSubjectJourney('${cleanName}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px; cursor:pointer;">+ SET JOURNEY</button>`;
+                mapBtnHtml = `<button onclick="openSubjectJourney('${cleanName}', '${taskId}')" style="width:auto; padding:6px 14px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px; cursor:pointer;">+ SET JOURNEY</button>`;
             }
         }
 
@@ -3281,7 +3281,7 @@ window.generateMapFromBulk = function() {
     const lines = text.split('\n').filter(l => l.trim() !== "");
     
     if (!moduleName || lines.length === 0) {
-        alert("Module Name and Topics are required.");
+        alert("Module and Topics are required.");
         return;
     }
 
@@ -3297,24 +3297,24 @@ window.generateMapFromBulk = function() {
         dynamicMins: 0 
     }));
 
-    // 1. Update Local Storage for immediate UI change
+    // 1. Save Locally for instant UI update
     let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     if (!localMaps[today]) localMaps[today] = {};
     localMaps[today][uniqueKey] = nodesArray;
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
 
-    // 2. Push to Firebase Cloud
+    // 2. Save to Cloud
     const updatePayload = {};
     updatePayload[uniqueKey] = nodesArray;
 
     update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), updatePayload)
     .then(() => {
         document.getElementById('bulkInputModal').classList.add('hidden');
-        loadTasks(); // Update button to "View Map"
-        showByjusMap(currentMapSubject, uniqueKey); // Open journey
+        loadTasks(); // Instantly changes button to "VIEW MAP"
+        showByjusMap(currentMapSubject, uniqueKey); 
     })
     .catch((error) => {
-        alert("Cloud Sync Error: " + error.message);
+        alert("Cloud Error: " + error.message);
     });
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
