@@ -2047,52 +2047,61 @@ async function loadNotices() {
     }
 }
 window.initStudentDashboard = function() {
-    document.getElementById("studentView").classList.remove("hidden");
-    document.getElementById("studentControls").classList.remove("hidden");
+    // 1. Force UI elements to show immediately to prevent black screen
+    const studentView = document.getElementById("studentView");
+    const studentControls = document.getElementById("studentControls");
+    if(studentView) studentView.classList.remove("hidden");
+    if(studentControls) studentControls.classList.remove("hidden");
+    
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
 
-    // 1. HARD UNLOCK: Ensure sidebar buttons from your screenshot never disable
+    // 2. HARD UNLOCK: Force all sidebar buttons to be clickable
     const sidebarButtons = document.querySelectorAll(".sidebar button");
     sidebarButtons.forEach(btn => {
         btn.disabled = false;
         btn.style.opacity = "1";
         btn.style.cursor = "pointer";
-        btn.style.filter = "none";
     });
 
+    // 3. Clean up any old listeners to prevent memory leaks/crashes
     if (window.studentUnsubscribe) window.studentUnsubscribe();
 
+    // 4. START LIVE SYNC
     const userRef = ref(db, `users/${currentUser.uid}`);
     window.studentUnsubscribe = onValue(userRef, (snapshot) => {
-        const data = snapshot.val() || {};
-        
-        // Update LocalStorage so loadTasks() UI helper works
-        if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
-        if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
-        
-        // Redraw the tasks (Student will now see Subject + Module + Topics)
-        loadTasks(); 
+        try {
+            const data = snapshot.val() || {};
+            
+            // Safety: Update LocalStorage with defaults if data is missing
+            localStorage.setItem(key("TASKS"), data.TASKS || "[]");
+            localStorage.setItem(key("EXTRA"), data.EXTRA || "[]");
+            
+            // 5. Trigger the UI Render
+            if (typeof loadTasks === "function") {
+                loadTasks();
+            } else {
+                console.error("Critical: loadTasks function not found!");
+            }
 
-        // Sync Shift UI (Timer and Label)
-        if(data.CURRENT_SHIFT_LABEL) {
-            document.getElementById("currentShiftLabel").innerText = data.CURRENT_SHIFT_LABEL;
-        }
-        
-        // Sync Watchdog Timeout Counter
-        document.getElementById("timeoutCounter").innerText = "Timeouts: " + (data.DAILY_TIMEOUTS || 0);
-        
-        // Handle Active Alerts/Warnings
-        if (data.activeAlert) {
-            document.getElementById("rejectedMsg").innerText = "Admin: " + data.activeAlert;
-            document.getElementById("rejectedPopup").classList.remove("hidden");
-        } else {
-            document.getElementById("rejectedPopup").classList.add("hidden");
-        }
+            // Sync Shift and Watchdog UI
+            const shiftLabel = document.getElementById("currentShiftLabel");
+            if(shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
+            
+            const timeoutDisp = document.getElementById("timeoutCounter");
+            if(timeoutDisp) timeoutDisp.innerText = "Timeouts: " + (data.DAILY_TIMEOUTS || 0);
 
-        document.getElementById("syncStatus").innerText = "Real-time Active";
+            document.getElementById("syncStatus").innerText = "Real-time Synced";
+        } catch (err) {
+            console.error("Dashboard Sync Error:", err);
+            document.getElementById("syncStatus").innerText = "Sync Error - Check Console";
+        }
+    }, (error) => {
+        console.error("Firebase Read Error:", error);
+        alert("Database connection lost. Please refresh.");
     });
 
+    // Start local timer
     startIdle(1800);
 };
 window.dismissFeedback = async function() {
