@@ -1,3 +1,5 @@
+
+Conversation with Gemini
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -253,12 +255,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     0% { transform: translate(-50%, -100%) scale(0.5); opacity:0; } 
     100% { transform: translate(-50%, 0) scale(1); opacity:1; } 
 }
-/* Add this exactly as shown */
-.hidden { 
-    display: none !important; 
-    visibility: hidden !important; 
-    opacity: 0 !important;
-}
+
 /* --- FEEDBACK & LEAVE DASHBOARD BOXES --- */
 .feedback-box {
     border: 1px solid #a855f7; background: #2e1065; color: #e9d5ff;
@@ -555,24 +552,9 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         </div>
     </div>
 </div>
-  <div id="studentView" class="hidden">
-        
-        <div id="adminFeedbackBox" class="feedback-box hidden">...</div>
-        <div id="leaveDashboardBox" class="hidden">...</div>
-        <div id="noticeBoardBox" class="card hidden">...</div>
-        <div id="historyBox" class="card hidden">...</div>
-        <div id="subjectProgressBox" class="card hidden">...</div>
 
-        <div id="taskBox" class="card hidden">
-             </div>
-
-        <div id="logBox" class="card hidden">...</div>
-        <div id="nextDayBox" class="card hidden">...</div>
-        <div id="reportBox" class="card hidden">...</div>
-
-    </div> 
-    <div id="adminBox" class="card hidden">...</div>
-</div>
+<div id="studentView">
+    
     <div id="adminFeedbackBox" class="feedback-box hidden">
         <h3 style="margin:0 0 5px 0; color:#fff">Admin Daily Review</h3>
         <div id="adminFeedbackText" style="font-style:italic"></div>
@@ -719,7 +701,8 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     </div>
 
     <div id="nextDayBox" class="card hidden">
-      
+      <h3>Enter Next Day Tasks</h3>
+      <div id="nextInputs"></div>
       <button onclick="finalDayEnd()">Submit Day End</button>
     </div>
 
@@ -790,6 +773,79 @@ const FIXED_SUBJECTS = [
   "GOVT_SCIENCE",
   "GOVT_ENGLISH"
 ];
+
+onAuthStateChanged(auth, async (user) => {
+    // -------------------------------------------------------------------
+    // 🔒 CHECK FOR LOCKED REPORT FIRST (FIXED LAYOUT)
+    // -------------------------------------------------------------------
+    const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
+    
+   if (lockedReport) {
+
+    // Reset everything safely
+    document.body.innerHTML = `
+      <div style="
+        min-height:100vh;
+        display:flex;
+        justify-content:center;
+        align-items:center;
+        background:#020617;
+        padding:20px;
+      ">
+        <div style="width:100%;max-width:520px">
+          ${lockedReport}
+          <div style="margin-top:15px;text-align:center">
+            <button 
+              onclick="dismissReportLock()" 
+              style="
+                padding:12px 20px;
+                background:#0ea5e9;
+                border:none;
+                border-radius:8px;
+                color:white;
+                font-size:14px;
+                cursor:pointer;
+              ">
+              Login & Start New Day
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+    return;
+}
+
+    // -------------------------------------------------------------------
+    // NORMAL FLOW (Reset Layout if not locked)
+    // -------------------------------------------------------------------
+    // Reset Grid Layout
+    document.querySelector(".app").style.display = "grid"; 
+    document.querySelector(".main").style.width = "auto";
+    document.querySelector(".main").style.display = "block"; // Reset from flex
+
+    const sidebar = document.querySelector(".sidebar");
+    if(sidebar) sidebar.classList.remove("hidden");
+
+    if (user) {
+        currentUser = user;
+        document.getElementById("syncStatus").innerText = "Session Restored";
+
+        if (user.email === ADMIN_EMAIL) {
+            initAdminDashboard();
+        } else {
+            initStudentDashboard();
+        }
+    } else {
+        currentUser = null;
+        document.getElementById("statusBox").innerText = "Logged out";
+        document.getElementById("loginBtn").classList.remove("hidden");
+        document.getElementById("logoutBtn").classList.add("hidden");
+        
+        document.getElementById("studentView").classList.add("hidden");
+        document.getElementById("reportBox").classList.add("hidden");
+    }
+});
+
 // --- GLOBAL VARIABLES ---
 let currentUser = null; 
 let currentMapSubject = "";
@@ -803,32 +859,7 @@ let dailyTimeouts = 0;
 let lastApprovedState = false; 
 const ADMIN_EMAIL = "admin@study.com";
 let currentAdminSubjectData = {}; // Stores the loaded student's subject data
-async function saveSubjectWiseProgress(tasks) {
 
-  const snap = await get(ref(db, `users/${currentUser.uid}/SUBJECT_WISE_TABLE`));
-  let table = snap.exists() ? JSON.parse(snap.val()) : {};
-
-  const today = new Date().toLocaleDateString();
-
-  tasks.forEach(task => {
-
-    const subject = task.subject || "General";
-
-    if (!table[subject]) table[subject] = [];
-
-    table[subject].push({
-      id: Date.now() + Math.random(),
-      date: today,
-      covered: task.done ? task.name : "",
-      uncovered: !task.done ? task.name : ""
-    });
-
-  });
-
-  await update(ref(db, `users/${currentUser.uid}`), {
-    SUBJECT_WISE_TABLE: JSON.stringify(table)
-  });
-}
 // --- NEW KEY FOR SUBJECT PROGRESS ---
 const SUBJECT_TABLE_KEY = () => key("SUBJECT_WISE_TABLE");
 let activeMapData = {}; 
@@ -1184,10 +1215,6 @@ function startAdminListener() {
                         <button style="background:#0891b2; margin-top:4px;" onclick="resetLeaveBalance('${uid}')">Reset Balance (6)</button>
                         <button style="background:#0ea5e9; margin-top:4px;" onclick="sendNotice('${uid}')">📢 Notice</button>
                         <button style="background:#1e40af; margin-top:4px;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
-                        <button style="background:#8b5cf6; margin-top:4px;" 
-    onclick="openAdminBulkMap('${uid}')">
-    🗺 Set Journey
-</button>
 
                         <button
                           style="background:#991b1b; margin-top:4px"
@@ -1552,15 +1579,23 @@ window.renderAdminSelectedSubject = function() {
         return;
     }
 
-    const rows = window.currentAdminSubjectData[subject].slice().reverse(); // Newest first
+    // Sort newest to oldest
+    const rows = window.currentAdminSubjectData[subject].slice().reverse(); 
     
     let html = "";
     rows.forEach(row => {
+        // Detect if entry contains Journey/Module identifiers
+        const isJourney = row.covered.includes("[") && row.covered.includes("]");
+        const rowBg = isJourney ? "background: rgba(56, 189, 248, 0.05);" : "";
+
         html += `
-        <tr>
+        <tr style="${rowBg}">
             <td style="color:#94a3b8">${row.date}</td>
-            <td style="white-space:pre-wrap;">${row.covered}</td>
-            <td style="white-space:pre-wrap; color:#fca5a5">${row.uncovered}</td>
+            <td style="white-space:pre-wrap; text-align:left;">
+                ${isJourney ? `<span style="color:#38bdf8; font-size:10px; font-weight:bold;">📍 JOURNEY LOG</span><br>` : ""}
+                ${row.covered}
+            </td>
+            <td style="white-space:pre-wrap; color:#fca5a5; text-align:left;">${row.uncovered}</td>
         </tr>`;
     });
     
@@ -2017,7 +2052,96 @@ async function loadNotices() {
         console.error("Notice load error:", e);
     }
 }
+async function initStudentDashboard() {
+    // 1. --- UI VISIBILITY ---
+    document.getElementById("studentView").classList.remove("hidden");
+    document.getElementById("taskBox")?.classList.remove("hidden");
+    document.getElementById("logBox")?.classList.remove("hidden");
+    document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
+    document.getElementById("loginBtn").classList.add("hidden");
+    document.getElementById("logoutBtn").classList.remove("hidden");
+    document.getElementById("studentControls").classList.remove("hidden");
 
+    // 2. --- DOWNLOAD DATA & LEAVE BALANCE ---
+    const serverData = await downloadData(currentUser.uid);
+    const leaveDisplay = document.querySelector("button[onclick='requestLeave()']");
+    if (leaveDisplay) {
+        leaveDisplay.innerText = `Leave Bal: ${serverData?.leaveBalance || 0}`;
+    }
+
+    if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
+        location.reload(); 
+        return; 
+    }
+
+    // 3. --- SHIFT PROMPT ---
+    const todayStr = new Date().toLocaleDateString();
+    let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
+
+    if (!goalDate || goalDate !== todayStr) {
+        let askedShifts = prompt("Enter number of shifts for today (2 hours each):", "3");
+        if (!askedShifts || isNaN(askedShifts)) askedShifts = "3"; 
+        localStorage.setItem(key("DAILY_SHIFT_COUNT"), askedShifts);
+        localStorage.setItem(key("DAILY_GOAL_DATE"), todayStr);
+        await update(ref(db, `users/${currentUser.uid}`), { dailyShiftTarget: askedShifts, dailyGoalDate: todayStr, penalty: 0 });
+    }
+
+    // 4. --- BIO BREAK REASON CHECK ---
+    let logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    if (logs.length > 0 && logs[logs.length - 1].reason === "Pending") {
+        const userReason = prompt("Welcome back! Provide reason for previous break:", "Bio Break");
+        logs[logs.length - 1].reason = userReason || "Bio Break";
+        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
+
+    // 5. --- SHIFT TIMER RESUME ---
+    const pausedRemaining = localStorage.getItem(key("PAUSED_SHIFT_REMAINING"));
+    if (pausedRemaining && parseInt(pausedRemaining) > 0) {
+        localStorage.setItem(key("SHIFT_END_TS"), Date.now() + parseInt(pausedRemaining));
+        localStorage.removeItem(key("PAUSED_SHIFT_REMAINING"));
+    } else if (!localStorage.getItem(key("SHIFT_END_TS"))) {
+        const totalMins = (parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3) * 120;
+        localStorage.setItem(key("SHIFT_END_TS"), Date.now() + (totalMins * 60000));
+    }
+
+    // 6. --- COMPONENT START ---
+    startIdle(1800);      
+    loadSubjectList();    
+    setupTasks(); 
+    loadTasks();          
+    renderLogs();         
+    updateProgress();     
+    runShiftTimer();      
+    uploadData();
+
+    // 7. --- THE "HARD UNLOCK" FOR ALL BUTTONS ---
+    const buttonsToUnlock = [
+        "bioBtn", "histBtn", "dayBtn", "noticeBtn", "refreshBtn", "leaveBtn"
+    ];
+    
+    buttonsToUnlock.forEach(id => {
+        const btn = document.getElementById(id);
+        if(btn) {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
+            btn.style.filter = "none";
+        }
+    });
+
+    // --- SPECIFIC FIX FOR THE SUBJECT PROGRESS BUTTON ---
+    // This finds the button even if it has no ID by searching for the text "Subject Progress"
+    const allButtons = document.getElementsByTagName("button");
+    for (let btn of allButtons) {
+        if (btn.innerText.includes("Subject Progress") || btn.getAttribute("onclick")?.includes("toggleSubjectProgress")) {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
+            btn.style.filter = "none"; // Removes any "greyed out" CSS filter
+            btn.classList.remove("disabled"); // Removes any CSS class that might be blocking it
+        }
+    }
+}
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
     document.getElementById("adminFeedbackBox").classList.add("hidden");
@@ -2739,7 +2863,7 @@ function finishTestSequence(testState, loadDashboard = false) {
     setTimeout(() => location.reload(), 5000);
   }
 }
- // --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
+// --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
 function setupTasks() {
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
   const nextData = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
@@ -2849,23 +2973,35 @@ function loadTasks() {
     extras.forEach(e => renderItem(e, eList));
 }
   window.addExtra = function() {
-    let menu = "REQUEST EXTRA WORK\nSelect Subject:\n";
-    FIXED_SUBJECTS.forEach((s, i) => menu += `${i+1}. ${s}\n`);
+    let menu = "Select Subject for Extra Work:\n\n";
+    FIXED_SUBJECTS.forEach((sub, index) => {
+        menu += `${index + 1}. ${sub}\n`;
+    });
+    
     const choice = prompt(menu);
     if (!choice) return;
 
-    const subject = FIXED_SUBJECTS[parseInt(choice) - 1];
-    const requestId = "REQ_" + Date.now();
+    const index = parseInt(choice) - 1;
+    if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
+        alert("Invalid selection.");
+        return;
+    }
 
-    // Push request to a folder the Admin can see
-    update(ref(db, `users/${currentUser.uid}/EXTRA_REQUESTS/${requestId}`), {
-        subject: subject,
-        status: "PENDING",
-        time: Date.now(),
-        email: currentUser.email
-    }).then(() => {
-        alert("Request Sent. Wait for Admin to assign topics.");
+    const subjectName = FIXED_SUBJECTS[index];
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+    
+    // Using Date.now() as ID allows multiple entries of the same subject
+    extras.push({ 
+        name: subjectName, 
+        done: false, 
+        comment: "", 
+        due: "",
+        id: Date.now() 
     });
+    
+    localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
+    uploadData();
+    loadTasks();
 };
 function save(tasks, extras) {
   localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
@@ -2916,29 +3052,55 @@ function getAccuracyRemark(acc) {
 
 
 // --- DAY END ---
+
 window.openDayEnd = function() {
+  clearInterval(idleTimer);
+  const idleBox = document.getElementById("idleBox");
+  if(idleBox) idleBox.classList.add("hidden");
+  
+  const nextInputs = document.getElementById("nextInputs");
+  
+  // 1. Generate Options for the Dropdown
+  let optionsHtml = `<option value="">Select Subject</option>`;
+  FIXED_SUBJECTS.forEach(sub => {
+    optionsHtml += `<option value="${sub}">${sub}</option>`;
+  });
 
-  const nextDayBox = document.getElementById("nextDayBox");
-  const reportBox = document.getElementById("reportBox");
+  nextInputs.innerHTML = `
+    <div style="margin-bottom:15px; color:#cbd5e1; font-size:13px; text-align:center">
+      Enter your plan for tomorrow. <br>
+      <span style="color:#facc15">Subject</span> is mandatory. <span style="color:#38bdf8">Topic</span> is your target.
+    </div>
+  `;
+  
+  // 2. Render Dropdowns instead of Text Inputs
+  for (let i = 0; i < 7; i++) {
+    nextInputs.innerHTML += `
+      <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:10px; margin-bottom:8px;">
+        
+        <select class="nextInput" id="nd_sub_${i}" style="margin:0; cursor:pointer; background:#0f172a; border:1px solid #334155; color:#e5e7eb;">
+           ${optionsHtml}
+        </select>
 
-  if (!nextDayBox || !reportBox) {
-    console.error("DayEnd UI elements not found");
-    return;
+        <input class="nextInput" id="nd_top_${i}" placeholder="Target Topic (e.g. Unit 1)" style="margin:0">
+      </div>
+    `;
   }
 
-  nextDayBox.classList.remove("hidden");
-  reportBox.classList.remove("hidden");
-
-  nextDayBox.innerHTML = `
-    <h3>Confirm Day End</h3>
-    <button onclick="finalDayEnd()">Submit Day End</button>
-  `;
-
-};
+  document.getElementById("nextDayBox").classList.remove("hidden");
+}
 function finalDayEnd() {
     if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
 
-   
+    // 1. Save Next Day Tasks
+    const next = [];
+    for (let i = 0; i < 7; i++) {
+        const sub = document.getElementById("nd_sub_" + i).value.trim();
+        const top = document.getElementById("nd_top_" + i).value.trim();
+        if(sub) { next.push({ subject: sub, topic: top }); }
+    }
+    localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
+
     // 2. Calculate Stats & Time
     const p = calculate();
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
@@ -3158,270 +3320,43 @@ window.openSubjectJourney = function(subjectName, taskId) {
     
     modal.classList.remove("hidden");
 };
-let currentAdminTargetUid = null; 
-window.openAdminBulkMap = async function(uid) {
-    window.currentAdminTargetUid = uid;
-    
-    // 1. Fetch live data
-    const snap = await get(ref(db, `users/${uid}`));
-    const data = snapshotExists(snap) ? snap.val() : {};
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    
-    const existingMaps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
-    const extraRequests = data.EXTRA_REQUESTS || {};
-    
-    let subjectOptions = FIXED_SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join("");
-
-    const controlCenter = document.createElement("div");
-    controlCenter.id = "adminControlCenter";
-    controlCenter.className = "modal-overlay";
-    controlCenter.innerHTML = `
-        <div class="modal-content" style="width:850px; display:grid; grid-template-columns:1fr 1fr; gap:20px; border:2px solid #8b5cf6;">
-            
-            <div style="border-right:1px solid #334155; padding-right:20px;">
-                <h3 style="color:#8b5cf6; margin-top:0;">ASSIGN NEW JOURNEY</h3>
-                <label style="font-size:11px; color:#94a3b8;">Subject:</label>
-                <select id="admSub" style="width:100%; padding:8px; margin-bottom:10px; background:#020617; color:white; border:1px solid #334155; border-radius:6px;">
-                    ${subjectOptions}
-                </select>
-                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
-                    <input id="admMod" type="text" placeholder="Module #" style="width:100%; padding:8px; background:#020617; color:white; border:1px solid #334155; border-radius:6px;">
-                    <input id="admChap" type="text" placeholder="Chapter Name" style="width:100%; padding:8px; background:#020617; color:white; border:1px solid #334155; border-radius:6px;">
-                </div>
-                <label style="font-size:11px; color:#94a3b8;">Subtopics (One per line):</label>
-                <textarea id="admTopics" rows="10" style="width:100%; padding:10px; background:#020617; color:white; border:1px solid #334155; border-radius:6px; font-family:monospace; font-size:12px;"></textarea>
-                <button onclick="saveAdminJourney()" style="background:#22c55e; margin-top:15px; font-weight:800;">MANUAL SAVE & PUSH</button>
-            </div>
-
-            <div style="overflow-y:auto; max-height:500px;">
-                <h3 style="color:#38bdf8; margin-top:0;">LIVE MONITOR & REQUESTS</h3>
-                <div style="background:#1e293b; padding:10px; border-radius:8px; margin-bottom:15px;">
-                    <h4 style="margin:0 0 5px 0; font-size:12px; color:#facc15;">PENDING EXTRA REQUESTS</h4>
-                    <div id="admReqList"></div>
-                </div>
-                <div style="background:#0f172a; padding:10px; border-radius:8px;">
-                    <h4 style="margin:0 0 5px 0; font-size:12px; color:#4ade80;">ACTIVE TODAY'S MAPS</h4>
-                    <div id="admMapsList"></div>
-                </div>
-                <button onclick="document.getElementById('adminControlCenter').remove()" style="background:#334155; margin-top:20px;">CLOSE WINDOW</button>
-            </div>
-        </div>
-    `;
-    document.body.appendChild(controlCenter);
-
-    // --- REPAIR: Safe Population logic ---
-    const reqDiv = document.getElementById("admReqList");
-    if (Object.keys(extraRequests).length === 0) {
-        reqDiv.innerHTML = "<span style='font-size:11px; color:#64748b;'>No requests</span>";
-    } else {
-        Object.entries(extraRequests).forEach(([id, req]) => {
-    if (!req) return;
-    reqDiv.innerHTML += `
-        <div id="req_${id}" style="font-size:12px; padding:10px; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center; background:#1e293b; margin-bottom:5px; border-radius:4px;">
-            <span style="color:#fff; font-weight:bold;">${req.subject}</span>
-            <div style="display:flex; gap:5px;">
-                <button onclick="fillFromRequest('${req.subject}', '${id}')" style="width:auto; padding:4px 10px; font-size:10px; background:#22c55e; border:none; color:white; border-radius:4px; cursor:pointer;">ASSIGN</button>
-                <button onclick="rejectRequest('${id}')" style="width:auto; padding:4px 10px; font-size:10px; background:#dc2626; border:none; color:white; border-radius:4px; cursor:pointer;">REJECT</button>
-            </div>
-        </div>`;
-});
-    }
-
-    const mapsDiv = document.getElementById("admMapsList");
-    if (!existingMaps || Object.keys(existingMaps).length === 0) {
-        mapsDiv.innerHTML = "<span style='font-size:11px; color:#64748b;'>No active journeys today</span>";
-    } else {
-        // We need the TASKS list to find the subject name associated with the taskId
-        const taskSnap = await get(ref(db, `users/${uid}/TASKS`));
-        const currentTasks = JSON.parse(taskSnap.val() || "[]");
-
-        Object.entries(existingMaps).forEach(([taskId, nodes]) => {
-            if (Array.isArray(nodes) && nodes.length > 0) {
-                // Find the task in the student's task list to get the Subject Name
-                const matchingTask = currentTasks.find(t => t.id === taskId);
-                const subjectName = matchingTask ? (matchingTask.subjectOnly || "General") : "Unknown Subject";
-                
-                const doneCount = nodes.filter(n => n.status === 'done').length;
-                const moduleLabel = nodes[0].module || "Untitled Module";
-                const isAnyDoing = nodes.some(n => n.status === 'doing');
-
-                mapsDiv.innerHTML += `
-                    <div onclick="adminPeekStudentMap('${taskId}')" 
-                         style="font-size:11px; margin-bottom:10px; border-left:4px solid ${isAnyDoing ? '#facc15' : '#4ade80'}; 
-                         padding:10px; background:rgba(255,255,255,0.05); border-radius:4px; cursor:pointer; transition: 0.2s;"
-                         onmouseover="this.style.background='rgba(255,255,255,0.1)'" 
-                         onmouseout="this.style.background='rgba(255,255,255,0.05)'">
-                        <div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="color:#fff; font-weight:bold;">${subjectName} | ${moduleLabel}</span>
-                            ${isAnyDoing ? '<span style="color:#facc15; font-size:9px; font-weight:bold;">● LIVE</span>' : ''}
-                        </div>
-                        <div style="color:#94a3b8; margin-top:4px;">
-                            Progress: ${doneCount} / ${nodes.length} Topics
-                        </div>
-                        <div style="font-size:9px; color:#38bdf8; margin-top:2px;">Click to view full map →</div>
-                    </div>`;
-            }
-        });
-    }
-};
-
-// Helper function to check if snap exists (standard Firebase compat)
-function snapshotExists(snap) {
-    try { return snap.exists(); } catch(e) { return snap !== null; }
-}
- window.fillFromRequest = function(subject, reqId) {
-    document.getElementById("admSub").value = subject;
-    document.getElementById("admMod").focus();
-    // Store request ID to delete it after manual save
-    window.currentRequestId = reqId;
-};
-window.adminPeekStudentMap = async function(taskId) {
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const targetUid = window.currentAdminTargetUid;
-    
-    const snap = await get(ref(db, `users/${targetUid}/dailyMaps/${todayKey}/${taskId}`));
-    const nodes = snap.val();
-
-    if (!nodes) return alert("Could not load map details.");
-
-    const peekModal = document.createElement("div");
-    peekModal.id = "adminPeekModal";
-    peekModal.className = "modal-overlay";
-    peekModal.style.zIndex = "1001"; // Higher than the control center
-    peekModal.innerHTML = `
-        <div class="modal-content" style="width:500px; max-height:80vh; overflow-y:auto; border:2px solid #38bdf8; background:#020617;">
-            <h3 style="color:#38bdf8; margin-top:0;">MAP DETAILS: ${nodes[0].module}</h3>
-            <div id="peekContent"></div>
-            <button onclick="document.getElementById('adminPeekModal').remove()" style="background:#334155; margin-top:20px;">CLOSE PEEK</button>
-        </div>
-    `;
-    document.body.appendChild(peekModal);
-
-    const content = document.getElementById("peekContent");
-    nodes.forEach((node, idx) => {
-        const statusColor = node.status === 'done' ? '#4ade80' : (node.status === 'doing' ? '#facc15' : '#64748b');
-        content.innerHTML += `
-            <div style="display:flex; align-items:center; gap:10px; padding:8px; border-bottom:1px solid #1e293b;">
-                <div style="width:10px; height:10px; border-radius:50%; background:${statusColor};"></div>
-                <div style="flex:1;">
-                    <div style="color:#fff; font-size:12px; font-weight:bold;">${node.label}</div>
-                    <div style="color:#94a3b8; font-size:10px;">
-                        ${node.status === 'done' ? `Taken: ${node.dynamicMins}m | End: ${node.completedAt}` : `Allocated: ${node.dynamicMins}m`}
-                    </div>
-                </div>
-            </div>`;
-    });
-};
-window.rejectRequest = async function(reqId) {
-    if(!confirm("Are you sure you want to reject this request?")) return;
-    
-    const targetUid = window.currentAdminTargetUid;
-    // Remove from Firebase immediately
-    await remove(ref(db, `users/${targetUid}/EXTRA_REQUESTS/${reqId}`));
-    
-    // Remove from the Admin UI instantly
-    const el = document.getElementById(`req_${reqId}`);
-    if(el) el.remove();
-    
-    alert("Request Rejected & Cleared.");
-};
-window.saveAdminJourney = async function() {
-    const sub = document.getElementById("admSub").value; // The Subject Name
-    const mod = document.getElementById("admMod").value || "Module 1";
-    const chap = document.getElementById("admChap").value || "General";
-    const topics = document.getElementById("admTopics").value;
-    const lines = topics.split('\n').filter(l => l.trim() !== "");
-
-    if (!lines.length) return alert("Enter subtopics!");
-
-    const taskId = "TASK_" + Date.now();
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const targetUid = window.currentAdminTargetUid;
-
-    // --- FIX: Formatting the Display Name to include Subject ---
-    const displayLabel = `${sub} | ${mod}: ${chap}`;
-
-    const newMapData = lines.map(line => ({
-        label: line.trim(),
-        module: `${mod}: ${chap}`, // Keeps context inside the map
-        status: 'todo',
-        dynamicMins: 30
-    }));
-
-    // Fetch current tasks to append
-    const taskSnap = await get(ref(db, `users/${targetUid}/TASKS`));
-    let currentTasks = JSON.parse(taskSnap.val() || "[]");
-    
-    // Push the new task with subjectOnly for end-of-day grouping
-    currentTasks.push({ 
-        id: taskId, 
-        name: displayLabel, 
-        subjectOnly: sub, 
-        done: false 
-    });
-
-    // --- BATCH UPDATE: Instant Sync ---
-    const updates = {};
-    updates[`users/${targetUid}/dailyMaps/${todayKey}/${taskId}`] = newMapData;
-    updates[`users/${targetUid}/TASKS`] = JSON.stringify(currentTasks);
-    
-    if (window.currentRequestId) {
-        updates[`users/${targetUid}/EXTRA_REQUESTS/${window.currentRequestId}`] = null;
-    }
-
-    try {
-        await update(ref(db), updates);
-        alert(`SUCCESS: ${sub} Journey Pushed.`);
-        document.getElementById('adminControlCenter').remove();
-        window.currentRequestId = null; 
-    } catch(e) {
-        alert("Sync Error: " + e.message);
-    }
-};
 window.generateMapFromBulk = function() {
+    // 1. Get Values from inputs
+    const moduleName = prompt("Which Module are these sub-topics for?", "Module 1");
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
     
-    if (lines.length === 0) {
-        alert("Please enter at least one subtopic.");
+    if (!moduleName || lines.length === 0) {
+        alert("Module Name and Topics are required.");
         return;
     }
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const targetUid = window.currentAdminTargetUid;
+    const uniqueKey = String(window.currentMapTaskId); // Ensure taskId is a string key
 
-    // Detailed name for the Dashboard: "Subject | Module: Chapter (Subtopics...)"
-    const subSummary = lines.slice(0, 2).join(", ") + (lines.length > 2 ? "..." : "");
-    const detailedDashboardName = `${window.currentSubjectStr} | ${window.currentModuleStr}: ${window.currentChapterStr} (${subSummary})`;
-
-    const newMapData = lines.map(line => ({
+    // 2. Create the Node Data Array
+    const nodesArray = lines.map((line) => ({
         label: line.trim(),
-        module: `${window.currentModuleStr}: ${window.currentChapterStr}`, // Combined for map view
+        module: moduleName.trim(), 
         status: 'todo',
         completedAt: null,
-        dynamicMins: 30 
+        dynamicMins: 0 // Initialize at zero; rebalancing happens on "Start"
     }));
 
-    // Save Map and Task simultaneously to Student's ID
-    get(ref(db, `users/${targetUid}/TASKS`)).then((snapshot) => {
-        let currentTasks = JSON.parse(snapshot.val() || "[]");
-        
-        currentTasks.push({
-            id: window.currentMapTaskId,
-            name: detailedDashboardName,
-            subjectOnly: window.currentSubjectStr, // For 1-row-per-subject end of day logic
-            done: false
-        });
+    // 3. FIX: Create the Payload Object (Firebase update requires Object, not Array)
+    const updatePayload = {};
+    updatePayload[uniqueKey] = nodesArray;
 
-        const finalUpdate = {};
-        finalUpdate[`users/${targetUid}/dailyMaps/${todayKey}/${window.currentMapTaskId}`] = newMapData;
-        finalUpdate[`users/${targetUid}/TASKS`] = JSON.stringify(currentTasks);
-
-        update(ref(db), finalUpdate).then(() => {
-            alert("Journey successfully pushed to student dashboard.");
-            document.getElementById('bulkInputModal').classList.add('hidden');
-            window.currentAdminTargetUid = null;
-        });
+    // 4. Save to Firebase path: users/uid/dailyMaps/date/taskId
+    update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), updatePayload)
+    .then(() => {
+        document.getElementById('bulkInputModal').classList.add('hidden');
+        loadTasks(); // Refresh the main dashboard buttons
+        showByjusMap(currentMapSubject, uniqueKey); // Open the newly created map
+    })
+    .catch((error) => {
+        console.error("Firebase Update Error:", error);
+        alert("Sync Error: " + error.message);
     });
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
@@ -3466,148 +3401,157 @@ window.addNewSubTopic = function(subjectName) {
     loadTasks();
 };
 let activeMapTimer = null; 
-/* --- 1. THE UPDATED MAP RENDERER (TOTAL GLOBAL CALCULATION) --- */
+
+/* --- 1. THE MAP RENDERER (CLEAN FINISH + TIMER DISPLAY) --- */
 window.showByjusMap = async function(subjectName, taskId) {
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const container = document.getElementById("mapContainer");
-    if(!container) return;
     
-    window.currentMapSubject = subjectName;
-    window.currentMapTaskId = taskId;
-
-    container.innerHTML = "<div style='color:#38bdf8; text-align:center; padding:20px;'>Syncing Time Distribution...</div>";
+    container.innerHTML = "<div style='color:#38bdf8; text-align:center;'>🔌 Syncing Journey...</div>";
     document.getElementById("byjusMapBox").classList.remove("hidden");
 
-    // 1. Fetch ALL journeys for today to do the global math
+    // 1. Fetch live data from Firebase
     const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
     const dailyMaps = snapshot.val() || {};
-    
-    // 2. MATH: Calculate Total Subtopics and Remaining Subtopics
-    let totalSubtopicsCount = 0;
-    let remainingSubtopicsCount = 0;
-    let timeAlreadySpent = 0;
+    const nodes = dailyMaps[taskId] || [];
 
-    Object.values(dailyMaps).forEach(nodes => {
-        nodes.forEach(node => {
-            totalSubtopicsCount++;
-            if (node.status !== 'done') remainingSubtopicsCount++;
-            if (node.status === 'done') timeAlreadySpent += (node.dynamicMins || 0);
-        });
+    // 2. Calculate Global Time Budget
+    const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
+    const totalDayMins = shiftCount * 120; // 2 hours per shift
+    
+    let totalGlobalTopics = 0;
+    Object.keys(dailyMaps).forEach(k => { 
+        totalGlobalTopics += dailyMaps[k].length; 
     });
 
-    const shiftCount = parseFloat(localStorage.getItem("DAILY_SHIFT_COUNT")) || 3;
-    const totalDayMins = shiftCount * 120;
-    const remainingTime = Math.max(0, totalDayMins - timeAlreadySpent);
-    
-    // 3. Current Task specific nodes
-    const nodes = dailyMaps[taskId];
-    if (!nodes) {
-        container.innerHTML = "Map data arriving...";
-        return; 
-    }
+    // 3. Initial Allocation Logic (If dynamicMins is 0 or missing)
+    const defaultAllocation = totalGlobalTopics > 0 ? Math.floor(totalDayMins / totalGlobalTopics) : 30;
 
+    // 4. Calculate Progress for Header
+    const studied = nodes.filter(n => n.status === 'done').reduce((s, n) => s + (n.dynamicMins || 0), 0);
+    
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
         <div style="width:100%;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:bold; color:#38bdf8; font-size:16px;">${subjectName}</span>
-                <span style="background:#1e293b; padding:2px 8px; border-radius:4px; font-size:10px; color:#facc15;">SHIFTS: ${shiftCount}</span>
+                <span style="font-weight:bold; color:#38bdf8; font-size:1.1rem;">${subjectName}</span>
+                <button onclick="addNewSubTopic('${taskId}')" style="background:#16a34a; font-size:10px; border-radius:4px; border:none; color:white; padding:4px 10px; width:auto;">+ TOPIC</button>
             </div>
-            <div style="font-size:10px; color:#94a3b8; margin-top:5px; border-top:1px solid #1e293b; padding-top:5px;">
-                REMAINING: ${remainingTime}m for ${remainingSubtopicsCount} topics
+            <div style="font-size:10px; color:#94a3b8; margin-top:8px; border-top:1px solid #1e293b; padding-top:8px; display:flex; justify-content:space-between;">
+                <span>STUDIED: <b>${studied}m</b></span>
+                <span>REMAIN: <b>${totalDayMins - studied}m</b></span>
+                <span>BUDGET: <b>${totalDayMins}m</b></span>
             </div>
         </div>`;
 
     container.innerHTML = "";
-
+    
+    // 5. Render Nodes
     nodes.forEach((node, idx) => {
         const isDoing = node.status === 'doing';
         const isDone = node.status === 'done';
-        let actionButtons = "";
+        
+        // Ensure we don't show "0m" for upcoming tasks
+        const displayMins = (node.dynamicMins && node.dynamicMins > 0) ? node.dynamicMins : defaultAllocation;
 
-        if (isDone) {
-            actionButtons = `<div style="color:#38bdf8; font-size:10px; font-weight:bold;">${node.dynamicMins}m DONE</div>`;
-        } else if (isDoing) {
-            actionButtons = `
-                <button onclick="handleNodeAction(${idx}, 'done')" style="background:#16a34a; padding:6px 12px; font-size:10px; color:white; border-radius:4px;">DONE</button>
-                <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; padding:6px 12px; font-size:10px; color:white; border-radius:4px;">ABORT</button>`;
-        } else {
-            actionButtons = `<button onclick="handleNodeAction(${idx}, 'start')" style="background:#0ea5e9; padding:6px 18px; font-size:10px; color:white; border-radius:4px;">START</button>`;
+        // Calculate Shift Number for this specific node
+        let globalPos = 0;
+        const keys = Object.keys(dailyMaps);
+        for (let k of keys) { 
+            if(k === taskId) break; 
+            globalPos += dailyMaps[k].length; 
         }
+        const shiftNum = Math.floor(((globalPos + idx) / (totalGlobalTopics || 1)) * shiftCount) + 1;
 
         const row = document.createElement("div");
-        row.style.cssText = "display:flex; align-items:center; margin-bottom:20px; gap:12px;";
+        row.style.cssText = "display:flex; align-items:center; margin-bottom:20px; gap:12px; position:relative;";
+        
         row.innerHTML = `
-            <div class="node-circle status-${node.status}" style="width:45px; height:45px; display:flex; align-items:center; justify-content:center; border: 3px solid ${isDoing ? '#facc15' : '#1e293b'}; border-radius:50%; background:#0f172a;">
-                ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:11px; font-weight:900; color:#facc15;">--:--</span>' : idx+1}
+            <div class="node-circle status-${node.status}" style="width:42px; height:42px; display:flex; align-items:center; justify-content:center; flex-shrink:0; font-size:14px; border: 3px solid #1e293b;">
+                ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:10px; font-weight:900;">--:--</span>' : idx + 1}
             </div>
-            <div style="flex-grow:1; background:#0f172a; padding:15px; border-radius:12px; border:1px solid ${isDoing ? '#facc15' : '#1e293b'};">
-                <div style="font-weight:bold; color:#fff; font-size:13px;">${node.label}</div>
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:8px;">
-                    <div style="font-size:11px; color:#38bdf8;">Allocated: ${node.dynamicMins}m</div>
-                    <div style="display:flex; gap:8px;">${actionButtons}</div>
+            <div style="flex-grow:1; background:#0f172a; padding:12px 16px; border-radius:12px; border:1px solid ${isDoing ? '#facc15' : '#1e293b'}; box-shadow: 0 4px 6px rgba(0,0,0,0.2);">
+                <div style="display:flex; justify-content:space-between; align-items:start;">
+                    <div>
+                        <div style="font-size:9px; color:#38bdf8; text-transform:uppercase; letter-spacing:0.5px; font-weight:800;">${node.module || 'MODULE 1'}</div>
+                        <div style="font-weight:bold; color:#fff; font-size:14px; margin:2px 0;">${node.label}</div>
+                    </div>
+                    <div style="text-align:right;">
+                         <div style="font-size:10px; color:#94a3b8;">Shift ${shiftNum}</div>
+                         <div style="font-size:12px; font-weight:bold; color:${isDone ? '#4ade80' : '#38bdf8'};">
+                            ${isDone ? 'Used: ' : ''}${displayMins}m
+                         </div>
+                    </div>
+                </div>
+                
+                <div style="margin-top:10px; display:flex; gap:8px;">
+                    ${!isDone ? `
+                        <button onclick="handleNodeAction(${idx}, '${isDoing ? 'done' : 'start'}', ${displayMins})" 
+                                style="background:${isDoing ? '#16a34a' : '#0ea5e9'}; padding:6px 14px; font-size:11px; color:white; border:none; border-radius:6px; flex-grow:1; font-weight:bold;">
+                            ${isDoing ? 'FINISH TOPIC' : 'START STUDYING'}
+                        </button>` : 
+                        `<div style="font-size:10px; color:#4ade80; font-weight:bold;">✓ Completed at ${node.completedAt || 'N/A'}</div>`
+                    }
+                    ${isDoing ? `
+                        <button onclick="handleNodeAction(${idx}, 'abort')" 
+                                style="background:#334155; padding:6px 14px; font-size:11px; color:white; border:none; border-radius:6px; width:auto;">
+                            PAUSE
+                        </button>` : ''
+                    }
                 </div>
             </div>`;
+            
         container.appendChild(row);
-        if(isDoing) startCountdown(node.dynamicMins);
+        if(isDoing) startCountdown(displayMins);
     });
 };
+/* --- 2. GLOBAL REDISTRIBUTION (REMAINING TIME FOCUS) --- */
 
-/* --- 2. UPDATED ACTION LOGIC (REDISTRIBUTE ON FINISH) --- */
-window.handleNodeAction = function(idx, action) {
-    const taskId = window.currentMapTaskId; 
+window.handleNodeAction = function(idx, action, currentAllocatedMins) {
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const mapRef = ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`);
-    
-    get(mapRef).then((snapshot) => {
+    const uniqueKey = window.currentMapTaskId;
+
+    // Fetch fresh from server to ensure multi-device sync
+    get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`)).then((snapshot) => {
         let dailyMaps = snapshot.val() || {};
-        let nodes = dailyMaps[taskId];
+        let nodes = dailyMaps[uniqueKey];
 
         if (action === 'start') {
-            // Standard start logic...
+            Object.keys(dailyMaps).forEach(k => {
+                dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
+            });
             nodes[idx].status = 'doing';
-            localStorage.setItem("CURRENT_ACTIVE_TOPIC_TS", Date.now().toString());
-        } 
-        else if (action === 'done') {
-            const startTS = parseInt(localStorage.getItem("CURRENT_ACTIVE_TOPIC_TS")) || Date.now();
+            localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
+        } else if (action === 'done') {
+            const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
             const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
-            
             nodes[idx].status = 'done';
             nodes[idx].dynamicMins = actualUsedMins;
-            nodes[idx].completedAt = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+            nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-            // --- THE REDISTRIBUTION MATH ---
-            let totalShiftMins = (parseFloat(localStorage.getItem("DAILY_SHIFT_COUNT")) || 3) * 120;
-            let timeSpent = 0;
-            let remainingTodoNodes = [];
-
-            // Calculate spent time and find all pending nodes across ALL subjects
-            Object.keys(dailyMaps).forEach(tId => {
-                dailyMaps[tId].forEach((n, i) => {
-                    if (n.status === 'done') timeSpent += n.dynamicMins;
-                    else {
-                        remainingTodoNodes.push({ taskId: tId, nodeIdx: i });
-                        n.status = 'todo'; // Clean up any 'doing'
-                    }
-                });
+            // Redistribution logic (Simplified for Server Sync)
+            const diff = currentAllocatedMins - actualUsedMins;
+            let pending = [];
+            Object.keys(dailyMaps).forEach(k => {
+                dailyMaps[k].forEach((n, i) => { if(n.status === 'todo') pending.push({k, i}); });
             });
-
-            let timeLeft = Math.max(0, totalShiftMins - timeSpent);
-            if (remainingTodoNodes.length > 0) {
-                let newAlloc = Math.floor(timeLeft / remainingTodoNodes.length);
-                remainingTodoNodes.forEach(item => {
-                    dailyMaps[item.taskId][item.nodeIdx].dynamicMins = newAlloc;
+            if(pending.length > 0) {
+                const adj = diff / pending.length;
+                pending.forEach(p => {
+                    let t = dailyMaps[p.k][p.i];
+                    t.dynamicMins = Math.max(5, Math.round((t.dynamicMins || currentAllocatedMins) + adj));
                 });
             }
-            localStorage.removeItem("CURRENT_ACTIVE_TOPIC_TS");
-        } 
-        else if (action === 'abort') {
+            if(activeMapTimer) clearInterval(activeMapTimer);
+        } else if (action === 'abort') {
             nodes[idx].status = 'todo';
-            localStorage.removeItem("CURRENT_ACTIVE_TOPIC_TS");
+            if(activeMapTimer) clearInterval(activeMapTimer);
         }
 
-        update(mapRef, dailyMaps).then(() => {
-            window.showByjusMap(window.currentMapSubject, taskId);
+        // Push back to Server
+        update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps).then(() => {
+            showByjusMap(currentMapSubject, uniqueKey);
+            loadTasks();
         });
     });
 };
@@ -3646,33 +3590,35 @@ window.extendShiftDirectly = function() {
     showByjusMap(currentMapSubject);
     alert(`Success! Goal updated to ${newTotal} shifts. Time redistributed.`);
 };
-window.startCountdown = function(allocatedMins) {
-    if (window.activeMapTimer) clearInterval(window.activeMapTimer);
+function startCountdown(targetMins) {
+    if (activeMapTimer) clearInterval(activeMapTimer);
+    
+    // FETCH THE PERSISTENT TIMESTAMP
+    const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
+    if (!startTS) return;
 
-    const startTS = parseInt(localStorage.getItem("CURRENT_ACTIVE_TOPIC_TS")) || Date.now();
-    const totalSecs = allocatedMins * 60;
+    const durationMs = targetMins * 60 * 1000;
 
-    window.activeMapTimer = setInterval(() => {
-        const timerDisplay = document.getElementById("miniTimer");
-        if (!timerDisplay) return;
+    activeMapTimer = setInterval(() => {
+        const elapsed = Date.now() - startTS;
+        const remaining = durationMs - elapsed;
+        const timerEl = document.getElementById("miniTimer");
 
-        const elapsedSecs = Math.floor((Date.now() - startTS) / 1000);
-        const remainingSecs = totalSecs - elapsedSecs;
+        // If user closes map, interval keeps running in background, 
+        // but we stop trying to update the HTML element.
+        if (!timerEl) return; 
 
-        if (remainingSecs <= 0) {
-            timerDisplay.innerText = "TIME!";
-            timerDisplay.style.color = "#dc2626"; 
+        if (remaining <= 0) {
+            timerEl.innerText = "OVER";
+            timerEl.style.color = "#ef4444";
             return;
         }
 
-        const m = Math.floor(remainingSecs / 60);
-        const s = remainingSecs % 60;
-        
-        timerDisplay.innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
-        timerDisplay.style.color = "#000000"; // Black text on yellow circle
-        timerDisplay.style.fontWeight = "900";
+        const m = Math.floor(remaining / 60000);
+        const s = Math.floor((remaining % 60000) / 1000);
+        timerEl.innerText = `${m}:${String(s).padStart(2, '0')}`;
     }, 1000);
-};
+}
 window.startNewShift = function() {
     const shiftNum = prompt("Enter Shift Number (1, 2, 3, or 4):");
     
@@ -3791,209 +3737,59 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     saveSubjectData(subjectData); 
     uploadData(); 
 };
-// --- UPDATED AUTH LISTENER ---
-onAuthStateChanged(auth, async (user) => {
-    const studentView = document.getElementById("studentView");
-    const studentControls = document.getElementById("studentControls");
-    const adminBox = document.getElementById("adminBox");
-    const loginBtn = document.getElementById("loginBtn");
-    const logoutBtn = document.getElementById("logoutBtn");
+ window.finalDayEnd = async function() {
+    if(!confirm("End Day? This will log all completed topics with their Module names.")) return;
 
-    if (user) {
-        currentUser = user;
-        loginBtn.classList.add("hidden");
-        logoutBtn.classList.remove("hidden");
-
-        if (user.email === ADMIN_EMAIL) {
-            studentView.classList.add("hidden"); // Guard
-            initAdminDashboard();
-        } else {
-            studentView.classList.remove("hidden");
-            studentControls.classList.remove("hidden");
-            adminBox.classList.add("hidden"); // Guard
-            initStudentDashboard(); 
-        }
-    } else {
-        // --- HARD RESET TO BLANK STATE ---
-        currentUser = null;
-        
-        // Hide every container
-        studentView.classList.add("hidden");
-        studentControls.classList.add("hidden");
-        adminBox.classList.add("hidden");
-        
-        // Clear inner data to prevent "ghost" text appearing
-        document.getElementById("taskList").innerHTML = "";
-        document.getElementById("statusBox").innerText = "Logged out";
-        document.getElementById("syncStatus").innerText = "Offline";
-        
-        // Show Login button
-        loginBtn.classList.remove("hidden");
-        logoutBtn.classList.add("hidden");
-    }
-});
-// --- UPDATED FINAL DAY END (FOR HARD LOGOUT) ---
-window.finalDayEnd = async function() {
-
-  // 🔹 Collect tasks from UI
-  let tasks = [];
-
-  document.querySelectorAll("#taskList .task-row").forEach(row => {
-    tasks.push({
-      name: row.innerText,
-      subject: row.getAttribute("data-subject") || "General",
-      done: row.classList.contains("done")
-    });
-  });
-
-  // 🔹 Save subject-wise
-  await saveSubjectWiseProgress(tasks);
-
-  alert("Day End Saved");
-
-  // Logout
-  signOut(auth).then(() => location.reload());
-};
-// 1. UPDATED: Forced Daily Shift Budget Logic
-window.askDailyBudget = async function() {
-    const todayStr = new Date().toLocaleDateString();
-    const userRef = ref(db, `users/${currentUser.uid}`);
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     
     try {
-        const snap = await get(userRef);
-        const user = snap.val() || {};
+        const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+        const maps = snapshot.val() || {};
 
-        // If goal already exists for today, sync to local and exit
-        if (user.DAILY_GOAL_DATE === todayStr && user.DAILY_SHIFT_COUNT) {
-            localStorage.setItem("DAILY_SHIFT_COUNT", user.DAILY_SHIFT_COUNT);
-            return;
+        // Iterate through each subject map (taskId)
+        for (const taskId in maps) {
+            const nodes = maps[taskId];
+            const completedByModule = {};
+            const pendingByModule = {};
+            
+            // Group topics by Module name
+            nodes.forEach(n => {
+                const modName = n.module || "General";
+                if (n.status === 'done') {
+                    if (!completedByModule[modName]) completedByModule[modName] = [];
+                    completedByModule[modName].push(n.label);
+                } else {
+                    if (!pendingByModule[modName]) pendingByModule[modName] = [];
+                    pendingByModule[modName].push(n.label);
+                }
+            });
+
+            // Log each Module as a unique entry in the Subject Progress Table
+            Object.keys(completedByModule).forEach(mod => {
+                const subjectWithModule = `${currentMapSubject} [${mod}]`;
+                const coveredText = completedByModule[mod].join(", ");
+                const pendingText = pendingByModule[mod] ? pendingByModule[mod].join(", ") : "All Clear";
+                
+                // Use the existing helper to save into SUBJECT_WISE_TABLE
+                saveAutomatedSubjectProgress(subjectWithModule, coveredText, pendingText);
+            });
         }
 
-        // FORCE ASK: Loop until valid number is provided
-        let shiftNum = 0;
-        while (shiftNum <= 0 || isNaN(shiftNum)) {
-            const shifts = prompt("NEW DAY DETECTED\nEnter total shifts for today (1 shift = 2 hrs):", "3");
-            if (shifts === null) continue; 
-            shiftNum = parseInt(shifts);
-        }
-
-        // Save to Firebase and LocalStorage
-        await update(userRef, {
-            DAILY_SHIFT_COUNT: shiftNum,
-            DAILY_GOAL_DATE: todayStr
-        });
-        localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
+        // --- Standard Cleanup ---
+        localStorage.removeItem(key("DAILY_GOAL_DATE"));
+        localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
+        localStorage.removeItem(key("SHIFT_END_TS"));
         
+        // Remove maps from live DB as they are now in the history table
+        await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+        
+        // Final logout/reload
+        location.reload();
+
     } catch (e) {
-        console.error("Budget Error:", e);
+        console.error("Day End Error:", e);
+        alert("Error finalizing day. Please check connection.");
     }
-};
-
-// 2. UPDATED: Initialization Sequence
-window.initStudentDashboard = async function() {
-    const userRef = ref(db, `users/${currentUser.uid}`);
-    
-    // Step A: Force Daily Budget Check first
-    await window.askDailyBudget();
-
-    // Step B: Setup Real-time Listener for Dashboard Data
-    if (window.studentUnsubscribe) window.studentUnsubscribe();
-    
-    window.studentUnsubscribe = onValue(userRef, (snapshot) => {
-        const liveData = snapshot.val() || {};
-        
-        // Sync critical keys for rendering
-        if(liveData.TASKS) localStorage.setItem(key("TASKS"), liveData.TASKS);
-        if(liveData.EXTRA) localStorage.setItem(key("EXTRA"), liveData.EXTRA);
-        if(liveData.PENALTY) penalty = parseInt(liveData.PENALTY) || 0;
-
-        // Make the student dashboard visible
-        const studentView = document.getElementById("studentView");
-        const taskBox = document.getElementById("taskBox");
-        if (studentView) studentView.classList.remove("hidden");
-        if (taskBox) taskBox.classList.remove("hidden");
-
-        // Refresh UI Elements
-        window.loadTasks(); 
-        updateProgress();
-        runShiftTimer();
-        
-        document.getElementById("statusBox").innerText = currentUser.email;
-        document.getElementById("syncStatus").innerText = "Session Active";
-    });
-
-    // Start Watchdog
-    startIdle(1800);
-};
-
-// 3. UPDATED: Task List Rendering logic (Fixes the Blank Screen)
-window.loadTasks = function() {
-    const tList = document.getElementById("taskList");
-    const eList = document.getElementById("extraList");
-    if (!tList || !eList) return;
-
-    tList.innerHTML = "";
-    eList.innerHTML = "";
-
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-
-    if (tasks.length === 0) {
-        tList.innerHTML = `<div style="color:#64748b; font-size:14px; padding:20px; text-align:center; border:1px dashed #334155; border-radius:12px;">
-            Waiting for Admin to assign today's subjects...</div>`;
-    }
-
-    const renderItem = (item, listRef) => {
-        const container = document.createElement("div");
-        container.style.cssText = "display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; background:#0f172a; padding:12px; border-radius:10px; border:1px solid #1e293b;";
-        
-        const leftSide = document.createElement("div");
-        leftSide.style.display = "flex";
-        leftSide.style.alignItems = "center";
-        leftSide.style.gap = "12px";
-
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.checked = item.done;
-        cb.style.width = "18px";
-        cb.style.height = "18px";
-        cb.style.cursor = "pointer";
-
-        const label = document.createElement("span");
-        label.innerText = item.name;
-        label.style.fontWeight = "600";
-        label.style.fontSize = "14px";
-        if (item.done) label.style.color = "#4ade80";
-
-        cb.onchange = () => {
-            if (cb.checked) {
-                const remark = prompt(`Completed: ${item.name}. Details?`, "Done");
-                const dueVal = prompt(`Any pending topics?`, "None");
-                item.comment = remark || "-";
-                item.due = dueVal || "-";
-                saveAutomatedSubjectProgress(item.subjectOnly || item.name, item.comment, item.due);
-            }
-            item.done = cb.checked;
-            save(tasks, extras);
-        };
-
-        leftSide.append(cb, label);
-        container.append(leftSide);
-
-        // Render MAP button for Journeys
-        if (item.id && !item.name.startsWith("MOCK TEST:")) {
-            const mapBtn = document.createElement("button");
-            mapBtn.innerText = "🗺 MAP";
-            mapBtn.style.cssText = "width:auto; padding:6px 12px; font-size:11px; background:#0ea5e9; border:none; color:white; border-radius:6px; margin:0; cursor:pointer; font-weight:bold;";
-            mapBtn.onclick = () => showByjusMap(item.subjectOnly || item.name, item.id);
-            container.append(mapBtn);
-        }
-
-        listRef.append(container);
-    };
-
-    tasks.forEach(t => renderItem(t, tList));
-    extras.forEach(e => renderItem(e, eList));
 };
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
@@ -4037,19 +3833,6 @@ window.loadTasks = function() {
     window.showByjusMap = showByjusMap;
     window.toggleNodeStatus = toggleNodeStatus;
     window.closeMap = closeMap;
-    window.openAdminBulkMap = window.openAdminBulkMap;
-    window.initStudentDashboard = initStudentDashboard;
-window.loadTasks = loadTasks;
-window.save = save; // Needed for checkbox updates
-window.startIdle = startIdle;
-  window.saveAdminJourney = saveAdminJourney;
-  window.openAdminBulkMap = openAdminBulkMap;
-window.fillFromRequest = fillFromRequest;
-window.startCountdown = startCountdown;
-  window.handleNodeAction = handleNodeAction;
-  window.rejectRequest = rejectRequest;
-  window.askDailyBudget = askDailyBudget;
-  window.adminPeekStudentMap = adminPeekStudentMap;
   </script>
 
 </body>
