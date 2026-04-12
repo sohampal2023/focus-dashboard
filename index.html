@@ -3520,11 +3520,14 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
     const uniqueKey = window.currentMapTaskId;
 
     try {
+        // 1. Fresh sync from Cloud to ensure all devices are matched
         const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
         let dailyMaps = snapshot.exists() ? snapshot.val() : {};
         let nodes = dailyMaps[uniqueKey] || [];
 
+        // --- ACTION: START ---
         if (action === 'start') {
+            // Reset any other 'doing' nodes across all subjects
             Object.keys(dailyMaps).forEach(k => {
                 dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
             });
@@ -3532,57 +3535,68 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
             localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
         } 
 
+        // --- ACTION: DONE (Strict Math - No Overtime) ---
         else if (action === 'done') {
             const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
+            // Calculate how many minutes you actually studied
             const actualUsed = startTS ? Math.max(1, Math.floor((Date.now() - startTS) / 60000)) : 1;
             
             nodes[idx].status = 'done';
             nodes[idx].dynamicMins = actualUsed; 
             nodes[idx].completedAt = new Date().toLocaleTimeString(); 
 
-            // --- REDISTRIBUTION MATH FIX ---
+            // --- EXACT REDISTRIBUTION LOGIC ---
             const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
-            const totalDailyBudget = shiftCount * 120;
+            const totalDailyBudget = shiftCount * 120; // Exact total minutes (e.g. 120, 240, 360)
             
             let totalSpentToday = 0;
             let pendingNodes = [];
 
+            // Sum up time used across all maps
             Object.keys(dailyMaps).forEach(subj => {
                 dailyMaps[subj].forEach((node, nIdx) => {
-                    if (node.status === 'done') totalSpentToday += (node.dynamicMins || 0);
-                    else if (node.status === 'todo') pendingNodes.push({ subj, nIdx });
+                    if (node.status === 'done') {
+                        totalSpentToday += (node.dynamicMins || 0);
+                    } else if (node.status === 'todo') {
+                        pendingNodes.push({ subj, nIdx });
+                    }
                 });
             });
 
+            // Calculate exactly what is left
             const remainingBudget = totalDailyBudget - totalSpentToday;
 
             if (pendingNodes.length > 0) {
-                let evenShare = Math.floor(remainingBudget / pendingNodes.length);
+                // Divide the remaining time exactly among remaining nodes
+                // Example: 120 mins / 9 nodes = 13 mins exactly
+                let exactShare = Math.floor(remainingBudget / pendingNodes.length);
                 
                 pendingNodes.forEach(p => {
-                    let finalAllocated = evenShare;
-                    
-                    // 🛑 FIX: No more 2-minute or 240-minute tasks
-                    if (finalAllocated > 90) finalAllocated = 90; // Max 90 mins
-                    if (finalAllocated < 15) finalAllocated = 15; // Min 15 mins
-                    
-                    dailyMaps[p.subj][p.nIdx].dynamicMins = finalAllocated;
+                    // No floor (15m) and no cap (90m) - just exact math
+                    dailyMaps[p.subj][p.nIdx].dynamicMins = Math.max(1, exactShare);
                 });
             }
+            
             if(activeMapTimer) clearInterval(activeMapTimer);
+            localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
         } 
 
+        // --- ACTION: ABORT / PAUSE ---
         else if (action === 'abort') {
             nodes[idx].status = 'todo';
             if(activeMapTimer) clearInterval(activeMapTimer);
+            localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
         }
 
-        // Sync to Server
+        // 2. Final Cloud Sync (Triggers update on all other devices)
         await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps);
+        
+        // 3. Update UI
         showByjusMap(currentMapSubject, uniqueKey);
         loadTasks();
 
     } catch (e) {
+        console.error("Sync Error:", e);
         alert("Sync Error: " + e.message);
     }
 };
@@ -3774,7 +3788,7 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("End Day and Sync all devices?")) return;
+    if(!confirm("End Day? This will sync your new tasks to all devices.")) return;
 
     try {
         const nextDayTasks = [];
@@ -3794,16 +3808,18 @@ window.finalDayEnd = async function() {
         const p = calculate();
         const todayStr = new Date().toLocaleDateString();
 
-        // 🔥 CRITICAL: Update the main TASKS key so it's not blank tomorrow
+        // 🔥 FORCE RESET: We save directly to the main 'TASKS' path
         const globalReset = {
             TASKS: JSON.stringify(nextDayTasks),
             EXTRA: "[]",
             PENALTY: "0",
-            dailyGoalDate: "COMPLETED_" + todayStr 
+            dailyGoalDate: "COMPLETED_" + todayStr // Mark day done for all devices
         };
 
+        // Update Firebase Cloud
         await update(ref(db, `users/${currentUser.uid}`), globalReset);
 
+        // Update Local Storage
         localStorage.setItem(key("TASKS"), JSON.stringify(nextDayTasks));
         localStorage.setItem(key("EXTRA"), "[]");
         
