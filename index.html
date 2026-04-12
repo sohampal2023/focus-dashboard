@@ -2052,15 +2052,11 @@ async function initStudentDashboard() {
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 2. --- DOWNLOAD DATA (CRITICAL FOR LEAVE BALANCE) ---
+    // 2. --- DOWNLOAD DATA & LEAVE BALANCE ---
     const serverData = await downloadData(currentUser.uid);
-    
-    // --- THE FIX FOR LEAVE BALANCE ---
-    // We look for the button containing "Leave Bal" and update it
     const leaveDisplay = document.querySelector("button[onclick='requestLeave()']") || document.getElementById("leaveBtn");
     if (leaveDisplay) {
-        const balance = serverData?.leaveBalance || 0;
-        leaveDisplay.innerText = `Leave Bal: ${balance}`;
+        leaveDisplay.innerText = `Leave Bal: ${serverData?.leaveBalance || 0}`;
     }
 
     if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
@@ -2075,21 +2071,19 @@ async function initStudentDashboard() {
     if (!goalDate || goalDate !== todayStr) {
         let askedShifts = prompt("Enter number of shifts for today (2 hours each):", "3");
         if (!askedShifts || isNaN(askedShifts)) askedShifts = "3"; 
-        
         localStorage.setItem(key("DAILY_SHIFT_COUNT"), askedShifts);
         localStorage.setItem(key("DAILY_GOAL_DATE"), todayStr);
-        
-        await update(ref(db, `users/${currentUser.uid}`), { 
-            dailyShiftTarget: askedShifts, 
-            dailyGoalDate: todayStr,
-            penalty: 0
-        });
+        await update(ref(db, `users/${currentUser.uid}`), { dailyShiftTarget: askedShifts, dailyGoalDate: todayStr, penalty: 0 });
     }
 
-    // 4. --- RECOVER BALANCES ---
-    dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
-    document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
-    penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+    // 4. --- CRITICAL: BIO BREAK REASON CHECK ---
+    let logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    // If the last log entry is still "Pending", it means you just returned from a Bio Break
+    if (logs.length > 0 && logs[logs.length - 1].reason === "Pending") {
+        const userReason = prompt("Welcome back! Provide reason for previous break:", "Bio Break");
+        logs[logs.length - 1].reason = userReason || "Bio Break";
+        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
 
     // 5. --- SHIFT TIMER RESUME ---
     const pausedRemaining = localStorage.getItem(key("PAUSED_SHIFT_REMAINING"));
@@ -2099,6 +2093,11 @@ async function initStudentDashboard() {
     } else if (!localStorage.getItem(key("SHIFT_END_TS"))) {
         const totalMins = (parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3) * 120;
         localStorage.setItem(key("SHIFT_END_TS"), Date.now() + (totalMins * 60000));
+    }
+
+    if (!logs.length || logs[logs.length - 1].logoutTS !== null) {
+        logs.push({ login: new Date().toLocaleString(), loginTS: Date.now(), logout: "-", logoutTS: null, reason: "-", completed: [] });
+        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
     // 6. --- COMPONENT START ---
@@ -2111,9 +2110,8 @@ async function initStudentDashboard() {
     runShiftTimer();      
     uploadData();
 
-    // 7. --- UNLOCK ALL SIDEBAR & DASHBOARD BUTTONS ---
-    // This targets every button in your sidebar to ensure they are clickable
-    const buttons = ["bioBtn", "histBtn", "dayBtn", "leaveBtn", "noticeBtn", "refreshBtn"];
+    // 7. --- UNLOCK ALL SIDEBAR BUTTONS ---
+    const buttons = ["bioBtn", "histBtn", "dayBtn", "noticeBtn", "refreshBtn"];
     buttons.forEach(id => {
         const btn = document.getElementById(id);
         if(btn) {
@@ -2122,14 +2120,6 @@ async function initStudentDashboard() {
             btn.style.cursor = "pointer";
         }
     });
-
-    // FORCE UNLOCK SUBJECT PROGRESS
-    const progBtn = document.querySelector("button[onclick='toggleSubjectProgress()']");
-    if(progBtn) {
-        progBtn.disabled = false;
-        progBtn.style.opacity = "1";
-        progBtn.style.cursor = "pointer";
-    }
 }
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
@@ -3388,21 +3378,28 @@ window.showByjusMap = async function(subjectName, taskId) {
     const dailyMaps = snapshot.val() || {};
     const nodes = dailyMaps[taskId] || [];
 
+    const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
+    const totalDayMins = shiftCount * 120;
+
+    // Calculate Global Counts for Shift Mapping
+    let allMapKeys = Object.keys(dailyMaps);
+    let totalGlobalTopics = 0;
+    allMapKeys.forEach(k => { totalGlobalTopics += dailyMaps[k].length; });
+
     const container = document.getElementById("mapContainer");
     container.innerHTML = "";
     
-    // Provision to show Module Name
-    const moduleType = nodes[0]?.module || "General";
+    const moduleType = nodes[0]?.module || "Assigned Task";
 
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
-        <div style="display:flex; flex-direction:column; gap:4px;">
+        <div style="display:flex; flex-direction:column; gap:5px; width:100%;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:bold; color:#38bdf8;">${subjectName}</span>
-                <span style="font-size:9px; background:#334155; padding:2px 6px; border-radius:10px; color:#94a3b8;">${moduleType}</span>
+                <span style="font-weight:bold; color:#38bdf8; font-size:1.1rem;">${subjectName}</span>
+                <span style="font-size:9px; background:#334155; padding:2px 8px; border-radius:10px; color:#94a3b8;">${moduleType}</span>
             </div>
             <div style="font-size:10px; color:#94a3b8; border-top:1px solid #1e293b; padding-top:5px; margin-top:10px;">
-                SERVER SYNC ACTIVE | EDITABLE ON ANY DEVICE
+                STUDIED: ${nodes.filter(n=>n.status==='done').reduce((s,n)=>s+(n.dynamicMins||0),0)}m | TARGET: ${totalDayMins}m
             </div>
         </div>
     `;
@@ -3410,17 +3407,33 @@ window.showByjusMap = async function(subjectName, taskId) {
     nodes.forEach((node, idx) => {
         const isDoing = node.status === 'doing';
         const isDone = node.status === 'done';
+
+        // --- RESTORED SHIFT CALCULATION ---
+        let globalPos = 0;
+        for (let key of allMapKeys) {
+            if (key === taskId) break;
+            globalPos += dailyMaps[key].length;
+        }
+        const currentGlobalIdx = globalPos + idx;
+        const shiftNum = Math.floor((currentGlobalIdx / totalGlobalTopics) * shiftCount) + 1;
+
         const row = document.createElement("div");
         row.style.cssText = "display:flex; align-items:center; margin-bottom:25px; gap:12px;";
         row.innerHTML = `
-            <div class="node-circle status-${node.status}" style="width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
-                ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:10px; color:#000;">--:--</span>' : idx+1}
+            <div class="node-circle status-${node.status}" style="width:40px; height:40px; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+                ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:10px; color:#000; font-weight:bold;">--:--</span>' : idx+1}
             </div>
-            <div style="flex-grow:1; background:#0f172a; padding:12px; border-radius:10px; border:1px solid #1e293b;">
-                <div style="font-weight:bold; color:#fff; font-size:12px;">${node.label}</div>
-                <div style="margin-top:8px; display:flex; gap:5px;">
-                    ${!isDone ? `<button onclick="handleNodeAction(${idx}, '${isDoing ? 'done' : 'start'}', ${node.dynamicMins || 0})" style="background:${isDoing ? '#16a34a' : '#0ea5e9'}; padding:4px 10px; font-size:10px; color:white; border:none; border-radius:4px;">${isDoing ? 'DONE' : 'START'}</button>` : ''}
-                    ${isDoing ? `<button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; padding:4px 10px; font-size:10px; color:white; border:none; border-radius:4px;">ABORT</button>` : ''}
+            <div style="flex-grow:1; background:#0f172a; padding:15px; border-radius:12px; border:1px solid ${isDoing ? '#facc15' : '#1e293b'};">
+                <div style="font-weight:bold; color:#fff; font-size:13px; text-transform:uppercase;">${node.label}</div>
+                <div style="font-size:11px; margin-top:4px; font-weight:bold;">
+                    <span style="color:#94a3b8;">Shift ${shiftNum} | </span>
+                    <span style="color:#38bdf8;">${isDone ? 'Used: ' : ''}${node.dynamicMins || 0}m</span>
+                </div>
+                <div style="margin-top:10px; display:flex; gap:8px;">
+                    ${!isDone ? 
+                        `<button onclick="handleNodeAction(${idx}, '${isDoing ? 'done' : 'start'}', ${node.dynamicMins || 0})" style="background:${isDoing ? '#16a34a' : '#0ea5e9'}; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold;">${isDoing ? 'DONE' : 'START'}</button>` 
+                        : `<span style="color:#4ade80; font-size:10px; font-weight:bold;">● COMPLETED</span>`}
+                    ${isDoing ? `<button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold;">ABORT</button>` : ''}
                 </div>
             </div>
         `;
@@ -3429,7 +3442,6 @@ window.showByjusMap = async function(subjectName, taskId) {
     });
     document.getElementById("byjusMapBox").classList.remove("hidden");
 };
-
 /* --- 2. GLOBAL REDISTRIBUTION (REMAINING TIME FOCUS) --- */
 
 window.handleNodeAction = function(idx, action, currentAllocatedMins) {
