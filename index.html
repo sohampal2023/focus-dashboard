@@ -2052,18 +2052,26 @@ async function initStudentDashboard() {
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 2. --- DOWNLOAD DATA ---
+    // 2. --- DOWNLOAD DATA (CRITICAL FOR LEAVE BALANCE) ---
     const serverData = await downloadData(currentUser.uid);
+    
+    // --- THE FIX FOR LEAVE BALANCE ---
+    // We look for the button containing "Leave Bal" and update it
+    const leaveDisplay = document.querySelector("button[onclick='requestLeave()']") || document.getElementById("leaveBtn");
+    if (leaveDisplay) {
+        const balance = serverData?.leaveBalance || 0;
+        leaveDisplay.innerText = `Leave Bal: ${balance}`;
+    }
+
     if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
         location.reload(); 
         return; 
     }
 
-    // 3. --- SHIFT PROMPT (RESTORED LOGIC) ---
+    // 3. --- SHIFT PROMPT (RESETS IF DAY ENDED) ---
     const todayStr = new Date().toLocaleDateString();
     let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
 
-    // If goalDate is missing (Day End was pressed), ask for shifts
     if (!goalDate || goalDate !== todayStr) {
         let askedShifts = prompt("Enter number of shifts for today (2 hours each):", "3");
         if (!askedShifts || isNaN(askedShifts)) askedShifts = "3"; 
@@ -2078,7 +2086,7 @@ async function initStudentDashboard() {
         });
     }
 
-    // 4. --- RECOVER STATE ---
+    // 4. --- RECOVER BALANCES ---
     dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
     document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
@@ -2103,7 +2111,8 @@ async function initStudentDashboard() {
     runShiftTimer();      
     uploadData();
 
-    // 7. --- ENABLE ALL SIDEBAR BUTTONS ---
+    // 7. --- UNLOCK ALL SIDEBAR & DASHBOARD BUTTONS ---
+    // This targets every button in your sidebar to ensure they are clickable
     const buttons = ["bioBtn", "histBtn", "dayBtn", "leaveBtn", "noticeBtn", "refreshBtn"];
     buttons.forEach(id => {
         const btn = document.getElementById(id);
@@ -2114,11 +2123,12 @@ async function initStudentDashboard() {
         }
     });
 
-    // RE-ENABLE SUBJECT PROGRESS BUTTON
+    // FORCE UNLOCK SUBJECT PROGRESS
     const progBtn = document.querySelector("button[onclick='toggleSubjectProgress()']");
     if(progBtn) {
         progBtn.disabled = false;
         progBtn.style.opacity = "1";
+        progBtn.style.cursor = "pointer";
     }
 }
 window.dismissFeedback = async function() {
