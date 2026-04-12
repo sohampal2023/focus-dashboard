@@ -3352,12 +3352,16 @@ window.openAdminBulkMap = async function(uid) {
         reqDiv.innerHTML = "<span style='font-size:11px; color:#64748b;'>No requests</span>";
     } else {
         Object.entries(extraRequests).forEach(([id, req]) => {
-            reqDiv.innerHTML += `
-                <div style="font-size:12px; padding:5px; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center;">
-                    <span>${req.subject}</span>
-                    <button onclick="fillFromRequest('${req.subject}', '${id}')" style="width:auto; padding:2px 8px; font-size:10px; background:#0ea5e9;">ASSIGN</button>
-                </div>`;
-        });
+    if (!req) return;
+    reqDiv.innerHTML += `
+        <div id="req_${id}" style="font-size:12px; padding:10px; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center; background:#1e293b; margin-bottom:5px; border-radius:4px;">
+            <span style="color:#fff; font-weight:bold;">${req.subject}</span>
+            <div style="display:flex; gap:5px;">
+                <button onclick="fillFromRequest('${req.subject}', '${id}')" style="width:auto; padding:4px 10px; font-size:10px; background:#22c55e; border:none; color:white; border-radius:4px; cursor:pointer;">ASSIGN</button>
+                <button onclick="rejectRequest('${id}')" style="width:auto; padding:4px 10px; font-size:10px; background:#dc2626; border:none; color:white; border-radius:4px; cursor:pointer;">REJECT</button>
+            </div>
+        </div>`;
+});
     }
 
     const mapsDiv = document.getElementById("admMapsList");
@@ -3390,6 +3394,20 @@ function snapshotExists(snap) {
     window.currentRequestId = reqId;
 };
 
+window.rejectRequest = async function(reqId) {
+    if(!confirm("Are you sure you want to reject this request?")) return;
+    
+    const targetUid = window.currentAdminTargetUid;
+    // Remove from Firebase immediately
+    await remove(ref(db, `users/${targetUid}/EXTRA_REQUESTS/${reqId}`));
+    
+    // Remove from the Admin UI instantly
+    const el = document.getElementById(`req_${reqId}`);
+    if(el) el.remove();
+    
+    alert("Request Rejected & Cleared.");
+};
+
 window.saveAdminJourney = async function() {
     const sub = document.getElementById("admSub").value;
     const mod = document.getElementById("admMod").value || "Module 1";
@@ -3397,7 +3415,7 @@ window.saveAdminJourney = async function() {
     const topics = document.getElementById("admTopics").value;
     const lines = topics.split('\n').filter(l => l.trim() !== "");
 
-    if (!lines.length) return alert("Please enter subtopics!");
+    if (!lines.length) return alert("Enter subtopics!");
 
     const taskId = "TASK_" + Date.now();
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
@@ -3412,39 +3430,25 @@ window.saveAdminJourney = async function() {
         dynamicMins: 30
     }));
 
-    // 1. Get current tasks
     const taskSnap = await get(ref(db, `users/${targetUid}/TASKS`));
     let currentTasks = JSON.parse(taskSnap.val() || "[]");
+    currentTasks.push({ id: taskId, name: displayLabel, subjectOnly: sub, done: false });
 
-    // 2. Add new entry
-    currentTasks.push({
-        id: taskId,
-        name: displayLabel,
-        subjectOnly: sub,
-        done: false
-    });
-
-    // 3. BATCH UPDATE: Includes the removal of the request notification
+    // --- BATCH UPDATE: Save Work AND Delete Request ---
     const updates = {};
     updates[`users/${targetUid}/dailyMaps/${todayKey}/${taskId}`] = newMapData;
     updates[`users/${targetUid}/TASKS`] = JSON.stringify(currentTasks);
     
-    // 🔥 CLEAR THE NOTIFICATION/REQUEST
+    // If we filled this from a request, delete it now so it disappears
     if (window.currentRequestId) {
         updates[`users/${targetUid}/EXTRA_REQUESTS/${window.currentRequestId}`] = null;
     }
 
-    try {
-        await update(ref(db), updates);
-        alert("Journey Pushed! Notification cleared from Admin Panel.");
-        
-        const modal = document.getElementById('adminControlCenter');
-        if(modal) modal.remove();
-        
-        window.currentRequestId = null; // Reset the ID
-    } catch (err) {
-        alert("Save failed: " + err.message);
-    }
+    await update(ref(db), updates);
+    
+    alert("Manual Save Success. Request cleared.");
+    document.getElementById('adminControlCenter').remove();
+    window.currentRequestId = null; 
 };
 window.generateMapFromBulk = function() {
     const text = document.getElementById('bulkTextarea').value;
@@ -3587,7 +3591,9 @@ window.showByjusMap = async function(subjectName, taskId) {
         // Stage-based Button Logic
         let actionButtons = "";
         if (isDone) {
-            actionButtons = `<span style="color:#4ade80; font-size:11px; font-weight:bold;">✔ COMPLETED</span>`;
+            actionButtons = <div style="background:#1e293b; color:#38bdf8; padding:4px 8px; border-radius:4px; font-size:10px; font-weight:bold; border:1px solid #38bdf8;">
+            FINISHED @ ${node.completedAt || '--:--'}
+        </div>`;
         } else if (isDoing) {
             // Stage 2: User can only finish or cancel
             actionButtons = `
@@ -3665,15 +3671,19 @@ window.handleNodeAction = function(idx, action, currentAllocatedMins) {
             update(ref(db, `users/${currentUser.uid}`), { "CURRENT_ACTIVE_TOPIC_TS": startTime });
 
         } else if (action === 'done') {
-            const startTS = parseInt(localStorage.getItem("CURRENT_ACTIVE_TOPIC_TS")) || Date.now();
-            const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
-            
-            nodes[idx].status = 'done';
-            nodes[idx].dynamicMins = actualUsedMins;
-            nodes[idx].completedAt = new Date().toLocaleTimeString();
-            localStorage.removeItem("CURRENT_ACTIVE_TOPIC_TS");
+    const startTS = parseInt(localStorage.getItem("CURRENT_ACTIVE_TOPIC_TS")) || Date.now();
+    const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
+    
+    nodes[idx].status = 'done';
+    nodes[idx].dynamicMins = actualUsedMins;
+    
+    // CAPTURE COMPLETION TIME (e.g., 10:45 PM)
+    const now = new Date();
+    nodes[idx].completedAt = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        } else if (action === 'abort') {
+    localStorage.removeItem("CURRENT_ACTIVE_TOPIC_TS");
+    if(window.activeMapTimer) clearInterval(window.activeMapTimer);
+}else if (action === 'abort') {
             nodes[idx].status = 'todo';
             localStorage.removeItem("CURRENT_ACTIVE_TOPIC_TS");
         }
@@ -3722,33 +3732,30 @@ window.extendShiftDirectly = function() {
     alert(`Success! Goal updated to ${newTotal} shifts. Time redistributed.`);
 };
 window.startCountdown = function(allocatedMins) {
-    if (activeMapTimer) clearInterval(activeMapTimer);
+    if (window.activeMapTimer) clearInterval(window.activeMapTimer);
 
-    // Get the start time we saved when "START" was pressed
-    const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS"))) || Date.now();
+    const startTS = parseInt(localStorage.getItem("CURRENT_ACTIVE_TOPIC_TS")) || Date.now();
     const totalSecs = allocatedMins * 60;
 
-    activeMapTimer = setInterval(() => {
+    window.activeMapTimer = setInterval(() => {
+        const timerDisplay = document.getElementById("miniTimer");
+        if (!timerDisplay) return;
+
         const elapsedSecs = Math.floor((Date.now() - startTS) / 1000);
         const remainingSecs = totalSecs - elapsedSecs;
 
-        // Find the timer element in the Map UI
-        const timerDisplay = document.getElementById("miniTimer");
-
-        if (!timerDisplay) {
-            // If the element isn't found yet (rendering delay), just keep waiting
-            return;
-        }
-
         if (remainingSecs <= 0) {
-            timerDisplay.innerText = "OVER!";
-            timerDisplay.style.color = "#ef4444";
+            timerDisplay.innerText = "TIME!";
+            timerDisplay.style.color = "#dc2626"; 
             return;
         }
 
         const m = Math.floor(remainingSecs / 60);
         const s = remainingSecs % 60;
+        
         timerDisplay.innerText = `${m}:${s < 10 ? '0' : ''}${s}`;
+        timerDisplay.style.color = "#000000"; // Black text on yellow circle
+        timerDisplay.style.fontWeight = "900";
     }, 1000);
 };
 window.startNewShift = function() {
@@ -4021,6 +4028,7 @@ window.startIdle = startIdle;
 window.fillFromRequest = fillFromRequest;
 window.startCountdown = startCountdown;
   window.handleNodeAction = handleNodeAction;
+  window.rejectRequest = rejectRequest;
   </script>
 
 </body>
