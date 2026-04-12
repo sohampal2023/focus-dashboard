@@ -557,7 +557,24 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 </div>
 
 <div id="studentView">
-    
+    <div id="studentView" class="hidden">
+        
+        <div id="adminFeedbackBox" class="feedback-box hidden">...</div>
+        <div id="leaveDashboardBox" class="hidden">...</div>
+        <div id="noticeBoardBox" class="card hidden">...</div>
+        <div id="historyBox" class="card hidden">...</div>
+        <div id="subjectProgressBox" class="card hidden">...</div>
+
+        <div id="taskBox" class="card hidden">
+             </div>
+
+        <div id="logBox" class="card hidden">...</div>
+        <div id="nextDayBox" class="card hidden">...</div>
+        <div id="reportBox" class="card hidden">...</div>
+
+    </div> 
+    <div id="adminBox" class="card hidden">...</div>
+</div>
     <div id="adminFeedbackBox" class="feedback-box hidden">
         <h3 style="margin:0 0 5px 0; color:#fff">Admin Daily Review</h3>
         <div id="adminFeedbackText" style="font-style:italic"></div>
@@ -3883,8 +3900,6 @@ onAuthStateChanged(auth, async (user) => {
     const adminBox = document.getElementById("adminBox");
     const loginBtn = document.getElementById("loginBtn");
     const logoutBtn = document.getElementById("logoutBtn");
-    const statusBox = document.getElementById("statusBox");
-    const syncStatus = document.getElementById("syncStatus");
 
     if (user) {
         currentUser = user;
@@ -3892,30 +3907,31 @@ onAuthStateChanged(auth, async (user) => {
         logoutBtn.classList.remove("hidden");
 
         if (user.email === ADMIN_EMAIL) {
+            studentView.classList.add("hidden"); // Guard
             initAdminDashboard();
         } else {
-            // Only show content if a student is actually logged in
             studentView.classList.remove("hidden");
             studentControls.classList.remove("hidden");
+            adminBox.classList.add("hidden"); // Guard
             initStudentDashboard(); 
         }
     } else {
-        // --- THIS FORCES THE BLANK STATE ---
+        // --- HARD RESET TO BLANK STATE ---
         currentUser = null;
         
-        // Hide EVERYTHING
+        // Hide every container
         studentView.classList.add("hidden");
         studentControls.classList.add("hidden");
         adminBox.classList.add("hidden");
         
-        // Show only login button
+        // Clear inner data to prevent "ghost" text appearing
+        document.getElementById("taskList").innerHTML = "";
+        document.getElementById("statusBox").innerText = "Logged out";
+        document.getElementById("syncStatus").innerText = "Offline";
+        
+        // Show Login button
         loginBtn.classList.remove("hidden");
         logoutBtn.classList.add("hidden");
-        
-        // Reset Text
-        statusBox.innerText = "Logged out";
-        statusBox.style.color = "#94a3b8";
-        syncStatus.innerText = "Offline";
     }
 });
 // --- UPDATED FINAL DAY END (FOR HARD LOGOUT) ---
