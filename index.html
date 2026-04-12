@@ -2877,56 +2877,65 @@ async function loadTasks() {
     const eList = document.getElementById("extraList");
     if (!tList || !eList) return;
     
-    tList.innerHTML = "Syncing with Server...";
+    // Show a small loading indicator while fetching from server
+    tList.innerHTML = "<div style='font-size:10px; color:#38bdf8;'>Syncing Journeys...</div>";
     eList.innerHTML = "";
 
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
 
-    // 🔥 FETCH JOURNEYS DIRECTLY FROM SERVER
-    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-    const serverMaps = mapSnap.exists() ? mapSnap.val() : {};
+    try {
+        // 🔥 FETCH DIRECTLY FROM SERVER so every device sees the same buttons
+        const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+        const serverMaps = mapSnap.exists() ? mapSnap.val() : {};
 
-    tList.innerHTML = ""; // Clear the "Syncing" text
+        tList.innerHTML = ""; // Clear the loading text
 
-    const renderItem = (item, listRef) => {
-        const container = document.createElement("div");
-        container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
-        
-        const taskId = String(item.id || item.name.replace(/'/g, "\\'")); 
+        const renderItem = (item, listRef) => {
+            const container = document.createElement("div");
+            container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
+            
+            const cleanName = item.name.replace(/'/g, "\\'");
+            const taskId = String(item.id || cleanName); 
 
-        // IF THE SERVER HAS THIS ID, SHOW "VIEW MAP"
-        let mapBtnHtml = "";
-        if (!item.name.startsWith("MOCK TEST:")) {
-            if (serverMaps[taskId]) {
-                mapBtnHtml = `<button onclick="showByjusMap('${item.name}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold;">🗺 VIEW MAP</button>`;
-            } else {
-                mapBtnHtml = `<button onclick="openSubjectJourney('${item.name}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px;">+ SET JOURNEY</button>`;
+            let mapBtnHtml = "";
+            if (!item.name.startsWith("MOCK TEST:")) {
+                // Check Server Data: If journey exists on Server, show "VIEW MAP"
+                if (serverMaps[taskId]) {
+                    mapBtnHtml = `<button onclick="showByjusMap('${cleanName}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold; cursor:pointer;">🗺 VIEW MAP</button>`;
+                } else {
+                    mapBtnHtml = `<button onclick="openSubjectJourney('${cleanName}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px; cursor:pointer;">+ SET JOURNEY</button>`;
+                }
             }
-        }
 
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.checked = item.done;
-        cb.style.marginRight = "10px";
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.checked = item.done;
+            cb.style.marginRight = "10px";
 
-        const label = document.createElement("span");
-        label.innerText = item.name;
+            const label = document.createElement("span");
+            label.innerText = item.name;
+            label.style.fontSize = "13px";
 
-        cb.onchange = () => {
-            item.done = cb.checked;
-            save(tasks, extras);
-            loadTasks();
+            cb.onchange = () => {
+                item.done = cb.checked;
+                save(tasks, extras);
+                loadTasks();
+            };
+
+            container.append(cb, label);
+            container.insertAdjacentHTML('beforeend', mapBtnHtml);
+            listRef.append(container);
         };
 
-        container.append(cb, label);
-        container.insertAdjacentHTML('beforeend', mapBtnHtml);
-        listRef.append(container);
-    };
+        tasks.forEach(t => renderItem(t, tList));
+        extras.forEach(e => renderItem(e, eList));
 
-    tasks.forEach(t => renderItem(t, tList));
-    extras.forEach(e => renderItem(e, eList));
+    } catch (e) {
+        console.error("Task Loading Error:", e);
+        tList.innerHTML = "Offline - Check Connection";
+    }
 }
   window.addExtra = function() {
     let menu = "Select Subject for Extra Work:\n\n";
@@ -3277,15 +3286,19 @@ window.openSubjectJourney = function(subjectName, taskId) {
     modal.classList.remove("hidden");
 };
 window.generateMapFromBulk = function() {
-    const moduleName = prompt("Module Name?", "Module 1");
+    const moduleName = prompt("Which Module are these sub-topics for?", "Module 1");
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
     
-    if (!moduleName || lines.length === 0) return;
+    if (!moduleName || lines.length === 0) {
+        alert("Module and Topics are required.");
+        return;
+    }
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const taskId = String(window.currentMapTaskId);
 
+    // This is the array of topics
     const nodesArray = lines.map((line) => ({
         label: line.trim(),
         module: moduleName.trim(),
@@ -3294,13 +3307,22 @@ window.generateMapFromBulk = function() {
         dynamicMins: 0 
     }));
 
-    // SAVE ONLY TO FIREBASE
-    update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}/${taskId}`), nodesArray)
+    // 🔥 FIX: Wrap the array in an OBJECT for Firebase update
+    const updatePayload = {};
+    updatePayload[taskId] = nodesArray;
+
+    // Save directly to the server path
+    update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), updatePayload)
     .then(() => {
         document.getElementById('bulkInputModal').classList.add('hidden');
-        loadTasks(); // This will now fetch from Cloud to show the button
+        // Refresh the sidebar by fetching from server
+        loadTasks(); 
+        // Open the map
+        showByjusMap(currentMapSubject, taskId);
     })
-    .catch(e => alert("Server Error: " + e.message));
+    .catch((error) => {
+        alert("Server Error: " + error.message);
+    });
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
 window.addNewSubTopic = async function(taskId) {
