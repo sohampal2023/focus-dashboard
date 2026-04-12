@@ -3549,14 +3549,17 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
     const uniqueKey = window.currentMapTaskId;
 
     try {
-        // 1. Fresh sync from Cloud to ensure all devices are matched
-        const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        let dailyMaps = snapshot.exists() ? snapshot.val() : {};
+        // 1. ALWAYS pull fresh data from the server first to prevent using old local values
+        const snapshot = await get(ref(db, `users/${currentUser.uid}`));
+        if (!snapshot.exists()) return;
+        
+        const userData = snapshot.val();
+        let dailyMaps = userData.dailyMaps ? userData.dailyMaps[todayKey] : {};
         let nodes = dailyMaps[uniqueKey] || [];
 
         // --- ACTION: START ---
         if (action === 'start') {
-            // Reset any other 'doing' nodes across all subjects
+            // Reset any other 'doing' nodes across ALL subjects to 'todo'
             Object.keys(dailyMaps).forEach(k => {
                 dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
             });
@@ -3567,21 +3570,22 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
         // --- ACTION: DONE (Strict Math - No Overtime) ---
         else if (action === 'done') {
             const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
-            // Calculate how many minutes you actually studied
+            // Calculate actual minutes studied (minimum 1m)
             const actualUsed = startTS ? Math.max(1, Math.floor((Date.now() - startTS) / 60000)) : 1;
             
             nodes[idx].status = 'done';
             nodes[idx].dynamicMins = actualUsed; 
             nodes[idx].completedAt = new Date().toLocaleTimeString(); 
 
-            // --- EXACT REDISTRIBUTION LOGIC ---
-            const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
-            const totalDailyBudget = shiftCount * 120; // Exact total minutes (e.g. 120, 240, 360)
+            // --- THE EXACT MATH LOGIC ---
+            // We use the Shift Target saved on the SERVER, not previous local memory
+            const shiftCount = parseFloat(userData.dailyShiftTarget) || 1;
+            const totalDailyBudget = shiftCount * 120; 
             
             let totalSpentToday = 0;
             let pendingNodes = [];
 
-            // Sum up time used across all maps
+            // Calculate exact time spent across all subjects in the journey
             Object.keys(dailyMaps).forEach(subj => {
                 dailyMaps[subj].forEach((node, nIdx) => {
                     if (node.status === 'done') {
@@ -3592,16 +3596,15 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
                 });
             });
 
-            // Calculate exactly what is left
             const remainingBudget = totalDailyBudget - totalSpentToday;
 
             if (pendingNodes.length > 0) {
-                // Divide the remaining time exactly among remaining nodes
-                // Example: 120 mins / 9 nodes = 13 mins exactly
+                // EXACT DIVISION: Remaining Time / Number of remaining nodes
+                // If you have 9 nodes and 120 mins, it gives EXACTLY 13.33 -> 13 mins.
                 let exactShare = Math.floor(remainingBudget / pendingNodes.length);
                 
                 pendingNodes.forEach(p => {
-                    // No floor (15m) and no cap (90m) - just exact math
+                    // No 15m floor, no 90m cap. Just the exact math.
                     dailyMaps[p.subj][p.nIdx].dynamicMins = Math.max(1, exactShare);
                 });
             }
@@ -3617,10 +3620,10 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
             localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
         }
 
-        // 2. Final Cloud Sync (Triggers update on all other devices)
+        // 2. SAVE TO CLOUD (This updates all devices immediately)
         await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps);
         
-        // 3. Update UI
+        // 3. REFRESH UI
         showByjusMap(currentMapSubject, uniqueKey);
         loadTasks();
 
