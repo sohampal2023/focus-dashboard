@@ -772,50 +772,48 @@ const FIXED_SUBJECTS = [
 ];
 
 onAuthStateChanged(auth, async (user) => {
-    // 1. Check for locked report view
     const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
     if (lockedReport) {
-        document.body.innerHTML = `
-          <div style="min-height:100vh; display:flex; justify-content:center; align-items:center; background:#020617; padding:20px;">
-            <div style="width:100%;max-width:520px">
-              ${lockedReport}
-              <div style="margin-top:15px;text-align:center">
-                <button onclick="dismissReportLock()" style="padding:12px 20px; background:#0ea5e9; border:none; border-radius:8px; color:white; font-size:14px; cursor:pointer;">
-                  Login & Start New Session
-                </button>
-              </div>
-            </div>
-          </div>`;
+        document.body.innerHTML = `<div style="min-height:100vh; display:flex; justify-content:center; align-items:center; background:#020617; padding:20px;"><div style="width:100%;max-width:520px">${lockedReport}<div style="margin-top:15px;text-align:center"><button onclick="dismissReportLock()" style="padding:12px 20px; background:#0ea5e9; border:none; border-radius:8px; color:white; font-size:14px; cursor:pointer;">Login & Start New Session</button></div></div></div>`;
         return;
     }
 
     if (user) {
         currentUser = user;
-        document.getElementById("syncStatus").innerText = "Syncing...";
-        
         if (user.email === ADMIN_EMAIL) {
             initAdminDashboard();
         } else {
-            // --- CRITICAL: FETCH FRESH DATA TO CHECK SHIFT STATUS ---
-            const userRef = ref(db, `users/${user.uid}`);
-            const snap = await get(userRef);
-            const userData = snap.val() || {};
-
-            // ONLY ask if DAILY_GOAL_DATE is empty (this happens only after Day End)
-            if (!userData.DAILY_GOAL_DATE) {
-                await askDailyBudget();
-            } else {
-                // If it exists, just ensure LocalStorage is synced so refreshes don't break
-                localStorage.setItem("DAILY_SHIFT_COUNT", userData.DAILY_SHIFT_COUNT);
-            }
-            
-            initStudentDashboard();
+            initStudentDashboard(); // Jump straight here
         }
     } else {
         currentUser = null;
         document.getElementById("loginBtn")?.classList.remove("hidden");
     }
 });
+window.askDailyBudget = async function() {
+    // Double check LocalStorage first to handle F5 race conditions
+    if (localStorage.getItem("DAILY_SHIFT_COUNT")) return;
+
+    const shifts = prompt("New Session! How many 2-hour shifts for today?");
+    const shiftNum = parseFloat(shifts);
+
+    if (isNaN(shiftNum) || shiftNum <= 0) {
+        alert("Valid shift count required.");
+        return window.askDailyBudget(); 
+    }
+
+    const todayStr = new Date().toLocaleDateString();
+    
+    // This write to Firebase adds the DAILY_GOAL_DATE, which kills the prompt for all refreshes
+    await update(ref(db, `users/${currentUser.uid}`), {
+        "DAILY_SHIFT_COUNT": shiftNum,
+        "DAILY_GOAL_DATE": todayStr,
+        "TASKS": "[]",
+        "EXTRA": "[]"
+    });
+    
+    localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
+};
 
 // --- GLOBAL VARIABLES ---
 let currentUser = null; 
@@ -2020,96 +2018,75 @@ async function loadNotices() {
     }
 }
 window.initStudentDashboard = function() {
-    askDailyBudget();
-    // 1. FORCE UI VISIBILITY (Wakes up the dashboard immediately)
-    const studentView = document.getElementById("studentView");
-    const studentControls = document.getElementById("studentControls");
-    const taskBox = document.getElementById("taskBox");
-    const logBox = document.getElementById("logBox");
-
-    if(studentView) studentView.classList.remove("hidden");
-    if(studentControls) studentControls.classList.remove("hidden");
-    if(taskBox) taskBox.classList.remove("hidden");
-    if(logBox) logBox.classList.remove("hidden");
-    
-    // Toggle login/logout buttons
-    document.getElementById("loginBtn")?.classList.add("hidden");
-    document.getElementById("logoutBtn")?.classList.remove("hidden");
-
-    // 2. HARD UNLOCK: Keep all sidebar buttons active 24/7
-    const sidebarButtons = document.querySelectorAll(".sidebar button");
-    sidebarButtons.forEach(btn => {
-        btn.disabled = false;
-        btn.style.opacity = "1";
-        btn.style.cursor = "pointer";
-        btn.style.filter = "none";
-    });
-
-    // 3. CLEANUP: Prevent duplicate listeners
-    if (window.studentUnsubscribe) window.studentUnsubscribe();
-
-    // 4. START REAL-TIME LIVE SYNC
     const userRef = ref(db, `users/${currentUser.uid}`);
-    // --- Inside initStudentDashboard function ---
-window.studentUnsubscribe = onValue(userRef, (snapshot) => {
-    try {
-        const data = snapshot.val() || {};
-        const todayDate = new Date().toLocaleDateString();
-        const todayKey = todayDate.replace(/\//g, "-");
-
-        // Sync Tasks & Extra
-        localStorage.setItem(key("TASKS"), data.TASKS || "[]");
-        localStorage.setItem(key("EXTRA"), data.EXTRA || "[]");
+    
+    // 1. FIRST: Check Firebase to see if this is a fresh login or just a refresh
+    get(userRef).then(async (snap) => {
+        const data = snap.val() || {};
         
-        // Sync Maps ONLY if they exist for today
-        if (data.dailyMaps && data.dailyMaps[todayKey]) {
-            const mapStorage = {};
-            mapStorage[todayDate] = data.dailyMaps[todayKey];
-            localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(mapStorage));
+        // If DAILY_GOAL_DATE is missing, it means Day End was pressed. Prompt for shifts.
+        if (!data.DAILY_GOAL_DATE) {
+            await askDailyBudget(); 
+        } else {
+            // It's a refresh. Sync the shift count to LocalStorage so the UI knows the budget.
+            localStorage.setItem("DAILY_SHIFT_COUNT", data.DAILY_SHIFT_COUNT);
         }
 
-        // Standard UI Renders
-        if (typeof window.loadTasks === "function") window.loadTasks();
-
-        // Update indicators
-        const shiftLabel = document.getElementById("currentShiftLabel");
-        if (shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
+        // 2. NOW start the Real-Time Sync
+        if (window.studentUnsubscribe) window.studentUnsubscribe();
         
-        const timeoutDisp = document.getElementById("timeoutCounter");
-        if (timeoutDisp) timeoutDisp.innerText = "Timeouts: " + (data.DAILY_TIMEOUTS || 0);
+        window.studentUnsubscribe = onValue(userRef, (snapshot) => {
+            try {
+                const liveData = snapshot.val() || {};
+                const todayDate = new Date().toLocaleDateString();
+                const todayKey = todayDate.replace(/\//g, "-");
 
-        document.getElementById("syncStatus").innerText = "Manual Flow Active";
-    } catch (err) {
-        console.error(err);
-    }
-}); (error) => {
-        console.error("Firebase Read Error:", error);
-        document.getElementById("syncStatus").innerText = "Offline";
-    };
+                // Sync Core Data
+                localStorage.setItem(key("TASKS"), liveData.TASKS || "[]");
+                localStorage.setItem(key("EXTRA"), liveData.EXTRA || "[]");
+                
+                // Sync specific session maps
+                if (liveData.dailyMaps && liveData.dailyMaps[todayKey]) {
+                    const mapStorage = {};
+                    mapStorage[todayDate] = liveData.dailyMaps[todayKey];
+                    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(mapStorage));
+                }
 
-    // 5. Start Watchdog Session
-    startIdle(1800);
-};
-window.askDailyBudget = async function() {
-    const shifts = prompt("New Session Detected! How many 2-hour shifts are you doing? (e.g., 3)");
-    const shiftNum = parseFloat(shifts);
+                // UI Visibility & Renders
+                document.getElementById("studentView")?.classList.remove("hidden");
+                document.getElementById("studentControls")?.classList.remove("hidden");
+                document.getElementById("taskBox")?.classList.remove("hidden");
+                document.getElementById("logBox")?.classList.remove("hidden");
+                document.getElementById("loginBtn")?.classList.add("hidden");
+                document.getElementById("logoutBtn")?.classList.remove("hidden");
 
-    if (isNaN(shiftNum) || shiftNum <= 0) {
-        alert("Shift count is mandatory to build your journey.");
-        return window.askDailyBudget(); 
-    }
+                if (typeof window.loadTasks === "function") window.loadTasks();
 
-    // Set the date flag. This prevents the prompt from appearing on refresh.
-    const todayStr = new Date().toLocaleDateString();
-    
-    await update(ref(db, `users/${currentUser.uid}`), {
-        "DAILY_SHIFT_COUNT": shiftNum,
-        "DAILY_GOAL_DATE": todayStr, // This acts as our "Already Asked" flag
-        "TASKS": "[]",
-        "EXTRA": "[]"
+                // Sidebar Unlock
+                document.querySelectorAll(".sidebar button").forEach(btn => {
+                    btn.disabled = false;
+                    btn.style.opacity = "1";
+                });
+
+                // Update Status Text
+                const shiftLabel = document.getElementById("currentShiftLabel");
+                if (shiftLabel) shiftLabel.innerText = liveData.CURRENT_SHIFT_LABEL || "No Shift Active";
+                
+                const timeoutDisp = document.getElementById("timeoutCounter");
+                if (timeoutDisp) timeoutDisp.innerText = "Timeouts: " + (liveData.DAILY_TIMEOUTS || 0);
+
+                document.getElementById("syncStatus").innerText = "Session Active";
+            } catch (err) {
+                console.error("Sync Error:", err);
+            }
+        }, (error) => {
+            console.error("Firebase Read Error:", error);
+            document.getElementById("syncStatus").innerText = "Offline";
+        });
     });
-    
-    localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
+
+    // 3. Start Watchdog Session
+    startIdle(1800);
 };
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
