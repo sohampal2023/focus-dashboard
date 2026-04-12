@@ -2050,56 +2050,40 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // 1. Basic UI Visibility
+    // 1. Basic UI Setup
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox")?.classList.remove("hidden");
-    document.getElementById("logBox")?.classList.remove("hidden");
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 2. Download Core Data (Tasks/Logs)
-    const serverData = await downloadData(currentUser.uid);
+    // 2. 🔥 FORCE SYNC FROM SERVER
+    // This ensures Device B pulls the "dailyMaps" that Device A created
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
     
-    // 3. 🔥 THE FIX: Sync Journeys from Cloud to Local Storage
-    const today = new Date().toLocaleDateString();
-    const todayKey = today.replace(/\//g, "-");
-    
-    try {
-        const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        if (mapSnap.exists()) {
-            let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-            localMaps[today] = mapSnap.val();
-            localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
-            console.log("Cloud Journeys Synced Successfully");
-        }
-    } catch (e) {
-        console.error("Map Sync Error:", e);
+    // Store in a global variable or update local cache for immediate use
+    if (mapSnap.exists()) {
+        const today = new Date().toLocaleDateString();
+        let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+        localMaps[today] = mapSnap.val();
+        localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
     }
 
-    // 4. Initialize Components
+    // 3. Initialize Components
     loadSubjectList();
     setupTasks(); 
-    loadTasks(); // Sidebar will now see the Cloud Journeys
+    loadTasks(); // This will now see the server data
     updateProgress();
     runShiftTimer();
     
-    // Unlock action buttons
+    // Unlock buttons
     const buttonsToUnlock = ["bioBtn", "histBtn", "dayBtn", "noticeBtn", "leaveBtn"];
     buttonsToUnlock.forEach(id => {
         const btn = document.getElementById(id);
-        if(btn) {
-            btn.disabled = false;
-            btn.style.opacity = "1";
-        }
+        if(btn) btn.disabled = false;
     });
-
-    // Handle Lockout
-    if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
-        location.reload(); 
-        return; 
-    }
 }
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
@@ -2877,65 +2861,55 @@ async function loadTasks() {
     const eList = document.getElementById("extraList");
     if (!tList || !eList) return;
     
-    // Show a small loading indicator while fetching from server
-    tList.innerHTML = "<div style='font-size:10px; color:#38bdf8;'>Syncing Journeys...</div>";
-    eList.innerHTML = "";
-
+    tList.innerHTML = "<div style='font-size:10px; color:#38bdf8;'>Syncing Server...</div>";
+    
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
 
-    try {
-        // 🔥 FETCH DIRECTLY FROM SERVER so every device sees the same buttons
-        const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        const serverMaps = mapSnap.exists() ? mapSnap.val() : {};
+    // 🔥 ALWAYS FETCH LIVE FROM SERVER
+    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    const serverMaps = mapSnap.exists() ? mapSnap.val() : {};
 
-        tList.innerHTML = ""; // Clear the loading text
+    tList.innerHTML = ""; 
 
-        const renderItem = (item, listRef) => {
-            const container = document.createElement("div");
-            container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
-            
-            const cleanName = item.name.replace(/'/g, "\\'");
-            const taskId = String(item.id || cleanName); 
+    const renderItem = (item, listRef) => {
+        const container = document.createElement("div");
+        container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
+        
+        // 🔥 STABLE ID: Use item.id if it exists, otherwise use the Name
+        const taskId = String(item.id || item.name).replace(/'/g, "\\'"); 
 
-            let mapBtnHtml = "";
-            if (!item.name.startsWith("MOCK TEST:")) {
-                // Check Server Data: If journey exists on Server, show "VIEW MAP"
-                if (serverMaps[taskId]) {
-                    mapBtnHtml = `<button onclick="showByjusMap('${cleanName}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold; cursor:pointer;">🗺 VIEW MAP</button>`;
-                } else {
-                    mapBtnHtml = `<button onclick="openSubjectJourney('${cleanName}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px; cursor:pointer;">+ SET JOURNEY</button>`;
-                }
+        let mapBtnHtml = "";
+        if (!item.name.startsWith("MOCK TEST:")) {
+            // Check server data
+            if (serverMaps[taskId]) {
+                mapBtnHtml = `<button onclick="showByjusMap('${item.name.replace(/'/g, "\\'")}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold;">🗺 VIEW MAP</button>`;
+            } else {
+                mapBtnHtml = `<button onclick="openSubjectJourney('${item.name.replace(/'/g, "\\'")}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px;">+ SET JOURNEY</button>`;
             }
+        }
 
-            const cb = document.createElement("input");
-            cb.type = "checkbox";
-            cb.checked = item.done;
-            cb.style.marginRight = "10px";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = item.done;
+        cb.style.marginRight = "10px";
+        const label = document.createElement("span");
+        label.innerText = item.name;
 
-            const label = document.createElement("span");
-            label.innerText = item.name;
-            label.style.fontSize = "13px";
-
-            cb.onchange = () => {
-                item.done = cb.checked;
-                save(tasks, extras);
-                loadTasks();
-            };
-
-            container.append(cb, label);
-            container.insertAdjacentHTML('beforeend', mapBtnHtml);
-            listRef.append(container);
+        cb.onchange = () => {
+            item.done = cb.checked;
+            save(tasks, extras);
+            loadTasks();
         };
 
-        tasks.forEach(t => renderItem(t, tList));
-        extras.forEach(e => renderItem(e, eList));
+        container.append(cb, label);
+        container.insertAdjacentHTML('beforeend', mapBtnHtml);
+        listRef.append(container);
+    };
 
-    } catch (e) {
-        console.error("Task Loading Error:", e);
-        tList.innerHTML = "Offline - Check Connection";
-    }
+    tasks.forEach(t => renderItem(t, tList));
+    extras.forEach(e => renderItem(e, eList));
 }
   window.addExtra = function() {
     let menu = "Select Subject for Extra Work:\n\n";
