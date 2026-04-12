@@ -2050,91 +2050,36 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // 1. IMMEDIATE UI SETUP
-    const studentView = document.getElementById("studentView");
-    const controls = document.getElementById("studentControls");
-    const taskBox = document.getElementById("taskBox");
-    const logBox = document.getElementById("logBox");
-    const syncStatus = document.getElementById("syncStatus");
+    const serverData = await downloadData(currentUser.uid);
+    const today = new Date().toLocaleDateString();
 
-    // Force visibility and unlock buttons immediately
-    if (studentView) studentView.classList.remove("hidden");
-    if (controls) controls.classList.remove("hidden");
-    if (taskBox) taskBox.classList.remove("hidden");
-    if (logBox) logBox.classList.remove("hidden");
+    // Force unlock buttons and show containers
+    document.getElementById("studentView").classList.remove("hidden");
+    document.getElementById("taskBox").classList.remove("hidden");
 
-    const allButtons = document.querySelectorAll(".sidebar button, #studentControls button");
-    allButtons.forEach(btn => {
-        btn.disabled = false;
-        btn.style.opacity = "1";
-    });
-
-    try {
-        if (syncStatus) syncStatus.innerText = "📥 Syncing Cloud Data...";
-
-        // 2. DOWNLOAD FRESH DATA FROM SERVER (Not LocalStorage)
-        const serverData = await downloadData(currentUser.uid);
-        if (!serverData) return;
-
-        const today = new Date().toLocaleDateString();
-        const serverGoalDate = serverData.dailyGoalDate;
-
-        // 3. 🔥 THE RESET LOGIC (Fixes Shift 3 Error)
-        // If server date is empty or doesn't match today, it's a NEW DAY.
-        if (!serverGoalDate || serverGoalDate !== today) {
-            
-            // Clear all old shift memory from this device
-            localStorage.removeItem(key("DAILY_GOAL_DATE"));
-            localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
-            localStorage.removeItem(key("SHIFT_END_TS"));
-            localStorage.removeItem(key("CURRENT_SHIFT_LABEL"));
-
-            // Force the prompt for Shift 1
-            let shifts = prompt("New Day Detected! Enter total shifts for today:", "1") || "1";
-            
-            localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
-            localStorage.setItem(key("DAILY_GOAL_DATE"), today);
-
-            // Save new day markers to Cloud
-            await update(ref(db, `users/${currentUser.uid}`), { 
-                dailyGoalDate: today,
-                dailyShiftTarget: shifts,
-                currentShiftLabel: "No Active Shift"
-            });
-        } else {
-            // It is the same day: Restore current progress from Server
-            localStorage.setItem(key("DAILY_SHIFT_COUNT"), serverData.dailyShiftTarget || "1");
-            localStorage.setItem(key("DAILY_GOAL_DATE"), serverGoalDate);
-        }
-
-        // 4. RENDER ALL COMPONENTS
-        loadSubjectList();
-        await loadTasks();   // Draws Assigned and Extra tasks
-        updateProgress();    // Draws Speedometer
-        renderLogs();        // Draws Login/Logout table
-        runShiftTimer();     // Starts Shift Countdown
+    // 🔥 THE FIX: If server doesn't have TODAY'S date, force prompt
+    if (!serverData.dailyGoalDate || serverData.dailyGoalDate !== today) {
         
-        // Start Watchdog (30 mins)
-        if(typeof startIdle === "function") startIdle(1800);
+        // 1. Wipe local memory of old shifts
+        localStorage.removeItem(key("DAILY_GOAL_DATE"));
+        localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
 
-        document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
-        document.getElementById("loginBtn")?.classList.add("hidden");
-        document.getElementById("logoutBtn")?.classList.remove("hidden");
-        if (syncStatus) syncStatus.innerText = "✅ Online & Synced";
-
-        // 5. LIVE SYNC LISTENER (For multi-device support)
-        // If you "Day End" on PC, your Phone will detect it here
-        onValue(ref(db, `users/${currentUser.uid}/dailyGoalDate`), (snapshot) => {
-            const liveDate = snapshot.val();
-            if (liveDate && liveDate.startsWith("COMPLETED") && liveDate !== today) {
-                location.reload(); // Refresh to show Day End report
-            }
+        // 2. Ask for new shift
+        let shifts = prompt("New Day! Enter total shifts for today:", "1") || "1";
+        
+        // 3. Save to Cloud so handleNodeAction can use it
+        await update(ref(db, `users/${currentUser.uid}`), { 
+            dailyGoalDate: today,
+            dailyShiftTarget: shifts 
         });
-
-    } catch (error) {
-        console.error("Critical Init Error:", error);
-        if (syncStatus) syncStatus.innerText = "⚠️ Sync Error - Working Offline";
+        localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
+    } else {
+        localStorage.setItem(key("DAILY_SHIFT_COUNT"), serverData.dailyShiftTarget);
     }
+
+    await loadTasks(); 
+    updateProgress();
+    runShiftTimer();
 }
 // Helper to recalculate time based on shifts
 async function redistributeTimeForNewDay(shifts) {
@@ -3549,7 +3494,7 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
     const uniqueKey = window.currentMapTaskId;
 
     try {
-        // 1. ALWAYS pull fresh data from the server first to prevent using old local values
+        // 1. Pull Fresh Data from Cloud (Ignore Local memory)
         const snapshot = await get(ref(db, `users/${currentUser.uid}`));
         if (!snapshot.exists()) return;
         
@@ -3557,9 +3502,7 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
         let dailyMaps = userData.dailyMaps ? userData.dailyMaps[todayKey] : {};
         let nodes = dailyMaps[uniqueKey] || [];
 
-        // --- ACTION: START ---
         if (action === 'start') {
-            // Reset any other 'doing' nodes across ALL subjects to 'todo'
             Object.keys(dailyMaps).forEach(k => {
                 dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
             });
@@ -3567,44 +3510,35 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
             localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
         } 
 
-        // --- ACTION: DONE (Strict Math - No Overtime) ---
         else if (action === 'done') {
             const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
-            // Calculate actual minutes studied (minimum 1m)
             const actualUsed = startTS ? Math.max(1, Math.floor((Date.now() - startTS) / 60000)) : 1;
             
             nodes[idx].status = 'done';
             nodes[idx].dynamicMins = actualUsed; 
             nodes[idx].completedAt = new Date().toLocaleTimeString(); 
 
-            // --- THE EXACT MATH LOGIC ---
-            // We use the Shift Target saved on the SERVER, not previous local memory
+            // 2. THE EXACT MATH: 
+            // Budget comes directly from the shift you entered at login
             const shiftCount = parseFloat(userData.dailyShiftTarget) || 1;
             const totalDailyBudget = shiftCount * 120; 
             
             let totalSpentToday = 0;
             let pendingNodes = [];
 
-            // Calculate exact time spent across all subjects in the journey
             Object.keys(dailyMaps).forEach(subj => {
                 dailyMaps[subj].forEach((node, nIdx) => {
-                    if (node.status === 'done') {
-                        totalSpentToday += (node.dynamicMins || 0);
-                    } else if (node.status === 'todo') {
-                        pendingNodes.push({ subj, nIdx });
-                    }
+                    if (node.status === 'done') totalSpentToday += (node.dynamicMins || 0);
+                    else if (node.status === 'todo') pendingNodes.push({ subj, nIdx });
                 });
             });
 
             const remainingBudget = totalDailyBudget - totalSpentToday;
 
             if (pendingNodes.length > 0) {
-                // EXACT DIVISION: Remaining Time / Number of remaining nodes
-                // If you have 9 nodes and 120 mins, it gives EXACTLY 13.33 -> 13 mins.
+                // No overtime, no stretching. Total remaining / nodes.
                 let exactShare = Math.floor(remainingBudget / pendingNodes.length);
-                
                 pendingNodes.forEach(p => {
-                    // No 15m floor, no 90m cap. Just the exact math.
                     dailyMaps[p.subj][p.nIdx].dynamicMins = Math.max(1, exactShare);
                 });
             }
@@ -3613,22 +3547,16 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
             localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
         } 
 
-        // --- ACTION: ABORT / PAUSE ---
         else if (action === 'abort') {
             nodes[idx].status = 'todo';
             if(activeMapTimer) clearInterval(activeMapTimer);
-            localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
         }
 
-        // 2. SAVE TO CLOUD (This updates all devices immediately)
         await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps);
-        
-        // 3. REFRESH UI
         showByjusMap(currentMapSubject, uniqueKey);
         loadTasks();
 
     } catch (e) {
-        console.error("Sync Error:", e);
         alert("Sync Error: " + e.message);
     }
 };
@@ -3820,7 +3748,7 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will sync all tasks and reset shifts globally.")) return;
+    if(!confirm("End Day? This will sync tasks to all devices.")) return;
 
     try {
         const nextDayTasks = [];
@@ -3837,27 +3765,14 @@ window.finalDayEnd = async function() {
             }
         }
 
-        const p = calculate();
-        const todayStr = new Date().toLocaleDateString();
-
-        // 🔥 THE GLOBAL RESET: This clears "Shift 3" and saves "Assigned Tasks"
-        const globalReset = {
-            TASKS: JSON.stringify(nextDayTasks), // Saves your selected subjects
+        // 🔥 IMPORTANT: Overwrite 'TASKS' on server and clear 'dailyGoalDate'
+        await update(ref(db, `users/${currentUser.uid}`), {
+            TASKS: JSON.stringify(nextDayTasks),
             EXTRA: "[]",
-            PENALTY: "0",
-            dailyGoalDate: "RESET_" + Date.now(), // Forces a fresh login
-            dailyShiftTarget: "", // Wipes the "3"
-            currentShiftLabel: "No Active Shift"
-        };
+            dailyGoalDate: "RESET" // Wiping this forces the Shift prompt on next login
+        });
 
-        await update(ref(db, `users/${currentUser.uid}`), globalReset);
-
-        // Clear this device's memory specifically
         localStorage.clear(); 
-        
-        const reportHTML = `<div class='card' style='text-align:center; padding:40px;'><h1 style='color:#38bdf8;'>${p.percent}%</h1><button onclick='dismissReportLock()' style='background:#22c55e; color:white; padding:15px; width:100%; border:none; border-radius:8px; cursor:pointer;'>START NEW DAY</button></div>`;
-        localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
-        
         signOut(auth).then(() => location.reload());
 
     } catch (e) {
