@@ -3591,9 +3591,9 @@ window.showByjusMap = async function(subjectName, taskId) {
         // Stage-based Button Logic
         let actionButtons = "";
         if (isDone) {
-            actionButtons = <div style="background:#1e293b; color:#38bdf8; padding:4px 8px; border-radius:4px; font-size:10px; font-weight:bold; border:1px solid #38bdf8;">
-            FINISHED @ ${node.completedAt || '--:--'}
-        </div>`;
+            actionButtons = `<div style="background:#1e293b; color:#38bdf8; padding:4px 8px; border-radius:4px; font-size:10px; font-weight:bold; border:1px solid #38bdf8;">
+    FINISHED @ ${node.completedAt || '--:--'}
+</div>`;
         } else if (isDoing) {
             // Stage 2: User can only finish or cancel
             actionButtons = `
