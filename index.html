@@ -2047,54 +2047,49 @@ async function loadNotices() {
     }
 }
 window.initStudentDashboard = function() {
-    // UI Visibility
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
 
-    // FORCE ENABLE ALL SIDEBAR BUTTONS (Never Disable)
+    // FORCE ENABLE ALL SIDEBAR BUTTONS
     const sidebarButtons = document.querySelectorAll(".sidebar button");
     sidebarButtons.forEach(btn => {
         btn.disabled = false;
         btn.style.opacity = "1";
         btn.style.cursor = "pointer";
-        btn.style.filter = "none";
     });
 
-    // DISCONNECT OLD LISTENERS IF ANY
     if (window.studentUnsubscribe) window.studentUnsubscribe();
 
-    // START LIVE SYNC (Multi-device consistency)
     const userRef = ref(db, `users/${currentUser.uid}`);
     window.studentUnsubscribe = onValue(userRef, (snapshot) => {
         const data = snapshot.val() || {};
         
-        // Update Tasks and Extra Work
-        renderTasks(data.TASKS, data.EXTRA);
+        // --- FIX: Sync Firebase data to LocalStorage so loadTasks() can see it ---
+        if(data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
+        if(data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
         
-        // Update Shift Monitor (Shift Number and Timer)
-        updateShiftUI(data.CURRENT_SHIFT_LABEL, data.SHIFT_END_TS);
+        // --- FIX: Call loadTasks (the correct function name) ---
+        loadTasks(); 
         
-        // Update Watchdog Stats
+        // Sync Shift UI
+        document.getElementById("currentShiftLabel").innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
+        
+        // Sync Watchdog
         document.getElementById("timeoutCounter").innerText = "Timeouts: " + (data.DAILY_TIMEOUTS || 0);
         
-        // Update Progress Speedometer
-        if(data.stats) {
-            updateProgressGauge(data.stats.percent, data.stats.rating);
-        }
-
-        // Check for Admin Alerts
+        // Admin Warning logic
         if (data.activeAlert) {
-            showRejectedPopup(data.activeAlert);
+            document.getElementById("rejectedMsg").innerText = "Admin: " + data.activeAlert;
+            document.getElementById("rejectedPopup").classList.remove("hidden");
         } else {
             document.getElementById("rejectedPopup").classList.add("hidden");
         }
 
-        document.getElementById("syncStatus").innerText = "Synced (All Devices)";
+        document.getElementById("syncStatus").innerText = "Real-time Synced";
     });
 
-    // Start local watchdog logic
     startIdle(1800);
 };
 window.dismissFeedback = async function() {
@@ -2818,6 +2813,34 @@ function finishTestSequence(testState, loadDashboard = false) {
     setTimeout(() => location.reload(), 5000);
   }
 }
+  /* --- ADMIN GLOBAL STATE --- */
+let currentAdminTargetUid = null; 
+
+/* --- ADMIN: OPEN JOURNEY MODAL FOR SPECIFIC STUDENT --- */
+window.openAdminBulkMap = function(uid) {
+    // We need to find the student's email to show in the prompt
+    // This is a helper to keep track of who we are editing
+    currentAdminTargetUid = uid; 
+    
+    const subjectName = prompt("Enter Subject Name for this Student's Journey:", "Power System - II");
+    if (!subjectName) return;
+
+    window.currentMapSubject = subjectName;
+    // Generate a unique ID so it doesn't overwrite other tasks
+    window.currentMapTaskId = "TASK_" + Date.now(); 
+
+    const modal = document.getElementById('bulkInputModal');
+    const title = document.getElementById('bulkTitle');
+    
+    modal.classList.remove("hidden");
+    modal.style.display = "flex";
+    modal.style.background = "rgba(2, 6, 23, 0.95)";
+    
+    title.innerText = "ADMIN: SET JOURNEY FOR STUDENT";
+    title.style.color = "#a78bfa";
+    document.getElementById('bulkTextarea').value = "";
+    document.getElementById('bulkTextarea').placeholder = "Enter sub-topics line by line...";
+};
 // --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
 function setupTasks() {
   const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
@@ -2928,7 +2951,7 @@ function loadTasks() {
     extras.forEach(e => renderItem(e, eList));
 }
   window.addExtra = function() {
-    let menu = "Request Extra Work - Select Subject:\n\n";
+    let menu = "Select Subject to Request Extra Work:\n\n";
     FIXED_SUBJECTS.forEach((sub, index) => {
         menu += `${index + 1}. ${sub}\n`;
     });
@@ -2945,19 +2968,17 @@ function loadTasks() {
     const subjectName = FIXED_SUBJECTS[index];
     const requestId = "REQ_" + Date.now();
 
-    // Push Request to Admin instead of adding directly to Extra List
+    // Push Request to Admin
     const requestPayload = {
-        id: requestId,
         subject: subjectName,
-        status: "Pending Admin Assignment",
-        requestTime: Date.now(),
-        studentEmail: currentUser.email
+        status: "WAITING_FOR_ADMIN",
+        studentEmail: currentUser.email,
+        time: Date.now()
     };
 
     update(ref(db, `users/${currentUser.uid}/EXTRA_REQUESTS/${requestId}`), requestPayload)
     .then(() => {
-        alert("Extra Task Requested. Please wait for Admin to assign the Module/Topics.");
-        uploadData();
+        alert("Request Sent! Admin will now set your Module and Subtopics.");
     });
 };
 function save(tasks, extras) {
@@ -3288,7 +3309,8 @@ window.generateMapFromBulk = function() {
     }
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    // Determine if Admin is setting for a student or student setting for self
+    
+    // Target the specific student selected in the Admin Panel
     const targetUid = window.currentAdminTargetUid || currentUser.uid;
     const uniqueTaskId = window.currentMapTaskId || ("TASK_" + Date.now());
 
@@ -3300,18 +3322,18 @@ window.generateMapFromBulk = function() {
         dynamicMins: 30 
     }));
 
-    // Create a specific update object to push into the dailyMaps folder
     const updatePayload = {};
     updatePayload[uniqueTaskId] = newMapData;
 
+    // Push to the student's ID
     update(ref(db, `users/${targetUid}/dailyMaps/${todayKey}`), updatePayload)
     .then(() => {
-        alert("Journey Pushed Successfully to UID: " + targetUid);
+        alert("Journey Pushed Successfully.");
         document.getElementById('bulkInputModal').classList.add('hidden');
-        window.currentAdminTargetUid = null; // Clear target after success
+        window.currentAdminTargetUid = null; 
     })
     .catch((error) => {
-        alert("Firebase Sync Error: " + error.message);
+        alert("Sync Error: " + error.message);
     });
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
@@ -3730,6 +3752,7 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     window.showByjusMap = showByjusMap;
     window.toggleNodeStatus = toggleNodeStatus;
     window.closeMap = closeMap;
+    window.openAdminBulkMap = window.openAdminBulkMap;
   </script>
 
 </body>
