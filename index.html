@@ -2050,67 +2050,125 @@ async function loadNotices() {
     }
 }
 /* --- UPDATED STUDENT INITIALIZATION --- */
+/* --- REPAIRED STUDENT INITIALIZATION --- */
 async function initStudentDashboard() {
     const studentView = document.getElementById("studentView");
     const controls = document.getElementById("studentControls");
+    const taskBox = document.getElementById("taskBox");
+    const logBox = document.getElementById("logBox");
     const syncStatus = document.getElementById("syncStatus");
 
-    // Force Visibility
+    // 1. UNLOCK BUTTONS IMMEDIATELY (Fixes "Buttons not working")
     if (studentView) studentView.classList.remove("hidden");
     if (controls) controls.classList.remove("hidden");
+    if (taskBox) taskBox.classList.remove("hidden");
+    if (logBox) logBox.classList.remove("hidden");
+
+    const allButtons = document.querySelectorAll(".sidebar button, #studentControls button");
+    allButtons.forEach(btn => {
+        btn.disabled = false;
+        btn.style.opacity = "1";
+    });
 
     try {
-        if (syncStatus) syncStatus.innerText = "📥 Syncing Cloud Data...";
+        if (syncStatus) syncStatus.innerText = "📥 Syncing...";
 
-        // 1. Download fresh data from Server
+        // 2. Fetch fresh data
         const serverData = await downloadData(currentUser.uid);
         if (!serverData) return;
 
         const today = new Date().toLocaleDateString();
         const serverGoalDate = serverData.dailyGoalDate;
 
-        // 2. 🔥 THE SHIFT PROMPT TRIGGER
-        // If server date is missing, reset, or from yesterday, it's a NEW DAY.
+        // 3. HANDLE NEW DAY / RESET STATE
         if (!serverGoalDate || serverGoalDate.startsWith("RESET") || serverGoalDate !== today) {
             
-            // Wipe old shift memory
+            // Clear local shift memory
             localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
             localStorage.removeItem(key("SHIFT_END_TS"));
             localStorage.removeItem(key("CURRENT_SHIFT_LABEL"));
 
-            // Prompt for new day configuration
-            let shifts = prompt("New Day Detected! Enter total shifts for today:", "1") || "1";
+            // Prompt for shifts
+            let shifts = prompt("New Day! Enter total shifts for today:", "1") || "1";
             
             localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
             localStorage.setItem(key("DAILY_GOAL_DATE"), today);
 
-            // Sync the new day start to the Cloud
+            // Sync to Firebase
             await update(ref(db, `users/${currentUser.uid}`), { 
                 dailyGoalDate: today,
                 dailyShiftTarget: shifts,
-                currentShiftLabel: "No Active Shift"
+                currentShiftLabel: "No Active Shift",
+                // Ensure TASKS are preserved from Day End
+                TASKS: serverData.TASKS || "[]" 
             });
         } else {
-            // Restore existing shift count if already set today
             localStorage.setItem(key("DAILY_SHIFT_COUNT"), serverData.dailyShiftTarget || "1");
         }
 
-        // 3. Render Dashboard Components
+        // 4. RE-RENDER UI (Fixes "Subject not showing")
         loadSubjectList();
-        await loadTasks();   
+        await loadTasks();   // This will now see the subjects from serverData.TASKS
         updateProgress();    
         renderLogs();        
         runShiftTimer();     
-        
-        if(typeof startIdle === "function") startIdle(1800);
 
         document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
-        if (syncStatus) syncStatus.innerText = "✅ Online & Synced";
+        if (syncStatus) syncStatus.innerText = "✅ Synced";
 
     } catch (error) {
-        console.error("Critical Init Error:", error);
-        if (syncStatus) syncStatus.innerText = "⚠️ Sync Error";
+        console.error("Dashboard Error:", error);
+        if (syncStatus) syncStatus.innerText = "⚠️ Error - Check Console";
     }
+}
+
+/* --- REPAIRED TASK LOADER --- */
+async function loadTasks() {
+    const tList = document.getElementById("taskList");
+    const eList = document.getElementById("extraList");
+    if (!tList || !eList) return;
+
+    // Pull from LocalStorage (filled by downloadData)
+    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+
+    tList.innerHTML = "";
+    eList.innerHTML = "";
+
+    if (tasks.length === 0) {
+        tList.innerHTML = "<div style='color:#64748b;'>No Assigned Subjects found.</div>";
+    }
+
+    // Helper to draw the task row
+    const draw = (item, list, isExtra) => {
+        const div = document.createElement("div");
+        div.className = "task-item"; // Use your existing CSS or inline
+        div.style.cssText = "display:flex; align-items:center; margin-bottom:10px; padding:12px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
+        
+        div.innerHTML = `
+            <input type="checkbox" ${item.done ? 'checked' : ''} style="margin-right:12px;">
+            <span style="color:${item.done ? '#64748b' : '#e5e7eb'}">
+                <strong>${item.name}</strong> ${item.target ? `<br><small style="color:#38bdf8">${item.target}</small>` : ''}
+            </span>
+        `;
+        
+        // Checkbox Logic
+        div.querySelector('input').onchange = (e) => {
+            item.done = e.target.checked;
+            if (item.done) {
+                item.comment = prompt("Work details?", "Done") || "Done";
+                saveAutomatedSubjectProgress(item.name, item.comment, "-");
+            }
+            localStorage.setItem(isExtra ? key("EXTRA") : key("TASKS"), JSON.stringify(isExtra ? extras : tasks));
+            uploadData();
+            updateProgress();
+        };
+
+        list.appendChild(div);
+    };
+
+    tasks.forEach(t => draw(t, tList, false));
+    extras.forEach(e => draw(e, eList, true));
 }
 
 /* --- UPDATED DAY END (CLEAN RESET) --- */
@@ -2965,75 +3023,6 @@ function setupTasks() {
   taskBox.classList.remove("hidden");
   document.getElementById("logBox").classList.remove("hidden");
   document.getElementById("reportBox").classList.add("hidden");
-}
-async function loadTasks() {
-    const tList = document.getElementById("taskList");
-    const eList = document.getElementById("extraList");
-    if (!tList || !eList) return;
-
-    // 1. Force a clean read from LocalStorage (which was just updated by downloadData)
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-
-    // 2. Clear current UI
-    tList.innerHTML = "";
-    eList.innerHTML = "";
-
-    if (tasks.length === 0 && extras.length === 0) {
-        tList.innerHTML = "<div style='color:#64748b; padding:10px;'>No tasks found for today.</div>";
-        return;
-    }
-
-    // 3. Get Journey Data for buttons
-    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-    const serverMaps = mapSnap.exists() ? mapSnap.val() : {};
-
-    const renderItem = (item, listRef, isExtra) => {
-        const container = document.createElement("div");
-        container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
-        
-        const taskId = String(item.id || item.name).replace(/'/g, "\\'"); 
-
-        let mapBtnHtml = "";
-        if (!item.name.startsWith("MOCK TEST:")) {
-            if (serverMaps[taskId]) {
-                mapBtnHtml = `<button onclick="showByjusMap('${item.name.replace(/'/g, "\\'")}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold;">🗺 VIEW MAP</button>`;
-            } else {
-                mapBtnHtml = `<button onclick="openSubjectJourney('${item.name.replace(/'/g, "\\'")}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px;">+ SET JOURNEY</button>`;
-            }
-        }
-
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.checked = item.done;
-        cb.style.marginRight = "10px";
-
-        cb.onchange = async () => {
-            item.done = cb.checked;
-            if (cb.checked) {
-                const rem = prompt("Work Details?", "Completed");
-                item.comment = rem || "Done";
-                saveAutomatedSubjectProgress(item.name, item.comment, "-");
-            }
-            
-            // Update local and server immediately
-            localStorage.setItem(isExtra ? key("EXTRA") : key("TASKS"), JSON.stringify(isExtra ? extras : tasks));
-            uploadData();
-            updateProgress();
-        };
-
-        const label = document.createElement("span");
-        label.innerText = item.name + (item.target ? ` (${item.target})` : "");
-        label.style.color = item.done ? "#64748b" : "#e5e7eb";
-
-        container.append(cb, label);
-        container.insertAdjacentHTML('beforeend', mapBtnHtml);
-        listRef.append(container);
-    };
-
-    tasks.forEach(t => renderItem(t, tList, false));
-    extras.forEach(e => renderItem(e, eList, true));
 }
   window.addExtra = function() {
     let menu = "Select Subject for Extra Work:\n\n";
