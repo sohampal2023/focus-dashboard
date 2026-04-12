@@ -2047,61 +2047,48 @@ async function loadNotices() {
     }
 }
 window.initStudentDashboard = function() {
-    // 1. Force UI elements to show immediately to prevent black screen
+    // FORCE UI VISIBILITY FIRST
     const studentView = document.getElementById("studentView");
     const studentControls = document.getElementById("studentControls");
     if(studentView) studentView.classList.remove("hidden");
     if(studentControls) studentControls.classList.remove("hidden");
     
-    document.getElementById("loginBtn").classList.add("hidden");
-    document.getElementById("logoutBtn").classList.remove("hidden");
+    // Login/Logout button swap
+    document.getElementById("loginBtn")?.classList.add("hidden");
+    document.getElementById("logoutBtn")?.classList.remove("hidden");
 
-    // 2. HARD UNLOCK: Force all sidebar buttons to be clickable
-    const sidebarButtons = document.querySelectorAll(".sidebar button");
-    sidebarButtons.forEach(btn => {
+    // UNLOCK ALL SIDEBAR BUTTONS
+    document.querySelectorAll(".sidebar button").forEach(btn => {
         btn.disabled = false;
         btn.style.opacity = "1";
-        btn.style.cursor = "pointer";
     });
 
-    // 3. Clean up any old listeners to prevent memory leaks/crashes
     if (window.studentUnsubscribe) window.studentUnsubscribe();
 
-    // 4. START LIVE SYNC
     const userRef = ref(db, `users/${currentUser.uid}`);
+    
+    // Start Live Sync
     window.studentUnsubscribe = onValue(userRef, (snapshot) => {
-        try {
-            const data = snapshot.val() || {};
-            
-            // Safety: Update LocalStorage with defaults if data is missing
-            localStorage.setItem(key("TASKS"), data.TASKS || "[]");
-            localStorage.setItem(key("EXTRA"), data.EXTRA || "[]");
-            
-            // 5. Trigger the UI Render
-            if (typeof loadTasks === "function") {
-                loadTasks();
-            } else {
-                console.error("Critical: loadTasks function not found!");
-            }
-
-            // Sync Shift and Watchdog UI
-            const shiftLabel = document.getElementById("currentShiftLabel");
-            if(shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
-            
-            const timeoutDisp = document.getElementById("timeoutCounter");
-            if(timeoutDisp) timeoutDisp.innerText = "Timeouts: " + (data.DAILY_TIMEOUTS || 0);
-
-            document.getElementById("syncStatus").innerText = "Real-time Synced";
-        } catch (err) {
-            console.error("Dashboard Sync Error:", err);
-            document.getElementById("syncStatus").innerText = "Sync Error - Check Console";
+        const data = snapshot.val() || {};
+        
+        // Push data to local storage safely
+        localStorage.setItem(key("TASKS"), data.TASKS || "[]");
+        localStorage.setItem(key("EXTRA"), data.EXTRA || "[]");
+        
+        // Trigger the drawing of tasks
+        if (typeof window.loadTasks === "function") {
+            window.loadTasks();
         }
-    }, (error) => {
-        console.error("Firebase Read Error:", error);
-        alert("Database connection lost. Please refresh.");
+
+        // Sync visual labels
+        const shiftLabel = document.getElementById("currentShiftLabel");
+        if (shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
+        
+        document.getElementById("syncStatus").innerText = "Ready & Synced";
+    }, (err) => {
+        document.getElementById("syncStatus").innerText = "Offline/Error";
     });
 
-    // Start local timer
     startIdle(1800);
 };
 window.dismissFeedback = async function() {
@@ -3734,74 +3721,56 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
   window.loadTasks = function() {
     const tList = document.getElementById("taskList");
     const eList = document.getElementById("extraList");
-    if (!tList || !eList) return;
     
+    // Safety 1: If HTML elements are missing, don't crash
+    if (!tList || !eList) return; 
+
     tList.innerHTML = "";
     eList.innerHTML = "";
 
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    const today = new Date().toLocaleDateString();
-
-    const renderItem = (item, listRef) => {
-        const container = document.createElement("div");
-        container.style.cssText = "background:#0f172a; border:1px solid #1e293b; padding:10px; border-radius:8px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between;";
+    try {
+        // Safety 2: Handle empty or corrupted LocalStorage
+        const taskRaw = localStorage.getItem(key("TASKS"));
+        const extraRaw = localStorage.getItem(key("EXTRA"));
         
-        const cleanName = item.name.replace(/'/g, "\\'");
-        const taskId = item.id || cleanName; 
-
-        // Task Info Wrapper
-        const infoWrapper = document.createElement("div");
-        infoWrapper.style.cssText = "display:flex; align-items:center; gap:10px; flex-grow:1;";
-
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.checked = item.done;
-        cb.style.transform = "scale(1.2)";
-
-        const label = document.createElement("span");
-        label.style.cssText = "font-size:13px; color:#e2e8f0; font-weight:500; line-height:1.4;";
-        label.innerText = item.name;
-
-        // Check for Map existence
-        let mapBtnHtml = "";
-        if (dailyMaps[today] && dailyMaps[today][taskId]) {
-            mapBtnHtml = `<button onclick="showByjusMap('${cleanName}', '${taskId}')" style="width:auto; padding:4px 10px; font-size:10px; background:#0ea5e9; border:none; color:white; border-radius:4px; font-weight:bold; cursor:pointer;">🗺 MAP</button>`;
+        const tasks = JSON.parse(taskRaw || "[]");
+        const extras = JSON.parse(extraRaw || "[]");
+        
+        if (tasks.length === 0 && extras.length === 0) {
+            tList.innerHTML = `<div style="padding:20px; color:#64748b; text-align:center; font-size:12px;">
+                No tasks assigned yet. Wait for Admin.
+            </div>`;
+            return;
         }
 
-        cb.onchange = () => {
-            if (cb.checked) {
-                const remark = prompt(`Completed: ${item.name}. Details?`, "Done");
-                const dueVal = prompt(`Pending topics?`, "None");
-                item.comment = remark || "-";
-                item.due = dueVal || "-";
-                saveAutomatedSubjectProgress(item.name, item.comment, item.due);
-            }
-            item.done = cb.checked;
-            save(tasks, extras);
-            loadTasks();
+        const renderItem = (item, listRef) => {
+            const div = document.createElement("div");
+            div.style.cssText = "background:#0f172a; border:1px solid #1e293b; padding:12px; border-radius:10px; margin-bottom:10px; display:flex; align-items:center; gap:10px;";
+            
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.checked = item.done;
+            
+            const label = document.createElement("span");
+            label.style.fontSize = "13px";
+            label.innerText = item.name || "Untitled Task";
+
+            div.append(cb, label);
+            listRef.append(div);
+            
+            cb.onchange = () => {
+                item.done = cb.checked;
+                save(tasks, extras);
+            };
         };
 
-        infoWrapper.append(cb, label);
-        container.append(infoWrapper);
-        
-        // Add Map button if it exists
-        if(mapBtnHtml) {
-            const btnSpan = document.createElement("span");
-            btnSpan.innerHTML = mapBtnHtml;
-            container.append(btnSpan);
-        }
+        tasks.forEach(t => renderItem(t, tList));
+        extras.forEach(e => renderItem(e, eList));
 
-        listRef.append(container);
-    };
-
-    if(tasks.length === 0 && extras.length === 0) {
-        tList.innerHTML = "<div style='color:#64748b; font-size:12px; text-align:center; padding:20px;'>No tasks assigned by Admin yet.</div>";
+    } catch (err) {
+        console.error("Critical Render Error:", err);
+        tList.innerHTML = `<div style="color:#ef4444; font-size:12px;">Data Error: Try Logout & Login again.</div>`;
     }
-
-    tasks.forEach(t => renderItem(t, tList));
-    extras.forEach(e => renderItem(e, eList));
 };
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
@@ -3846,7 +3815,10 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     window.toggleNodeStatus = toggleNodeStatus;
     window.closeMap = closeMap;
     window.openAdminBulkMap = window.openAdminBulkMap;
-    window.loadTasks = loadTasks;
+    indow.initStudentDashboard = initStudentDashboard;
+window.loadTasks = loadTasks;
+window.save = save; // Needed for checkbox updates
+window.startIdle = startIdle;
   </script>
 
 </body>
