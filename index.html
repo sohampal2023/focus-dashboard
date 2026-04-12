@@ -2050,58 +2050,55 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // --- 1. IMMEDIATE UI FORCE (Do this first!) ---
     const studentView = document.getElementById("studentView");
     const controls = document.getElementById("studentControls");
-    const taskBox = document.getElementById("taskBox");
-    const logBox = document.getElementById("logBox");
+    const syncStatus = document.getElementById("syncStatus");
 
-    // Remove "hidden" class from everything immediately
     if (studentView) studentView.classList.remove("hidden");
     if (controls) controls.classList.remove("hidden");
-    if (taskBox) taskBox.classList.remove("hidden");
-    if (logBox) logBox.classList.remove("hidden");
 
-    // --- 2. HARD-UNLOCK ALL SIDEBAR BUTTONS ---
-    // This finds every button in your sidebar/controls and forces it to be active
-    const sidebarButtons = document.querySelectorAll(".sidebar button, #studentControls button");
-    sidebarButtons.forEach(btn => {
-        btn.disabled = false;
-        btn.style.opacity = "1";
-        btn.style.pointerEvents = "auto";
-        btn.style.display = "block"; // Ensure they aren't set to display:none
-    });
-
-    // --- 3. DATA SYNC (Now we do the risky server stuff) ---
     try {
+        syncStatus.innerText = "📥 Downloading Data...";
         const serverData = await downloadData(currentUser.uid);
+        
+        if (!serverData) {
+            syncStatus.innerText = "❌ Sync Failed";
+            return;
+        }
+
         const today = new Date().toLocaleDateString();
 
         // Check for new day shift prompt
-        let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
+        let goalDate = serverData.dailyGoalDate; 
         if (!goalDate || goalDate !== today) {
             let shifts = prompt("New Day! Enter shifts (2hr each):", "3") || "3";
             localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
             localStorage.setItem(key("DAILY_GOAL_DATE"), today);
-            await update(ref(db, `users/${currentUser.uid}`), { dailyGoalDate: today, dailyShiftTarget: shifts });
+            
+            // This clears yesterday's "Done" status for the new session
+            await update(ref(db, `users/${currentUser.uid}`), { 
+                dailyGoalDate: today, 
+                dailyShiftTarget: shifts 
+            });
         }
 
-        // --- 4. RENDER COMPONENTS ---
+        // --- REFRESH UI ELEMENTS ---
         loadSubjectList();
-        loadTasks();
+        await loadTasks(); // Wait for tasks to be rendered
         updateProgress();
+        renderLogs();
         runShiftTimer();
         
-        // Start Watchdog if function exists
         if(typeof startIdle === "function") startIdle(1800);
 
         document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
         document.getElementById("loginBtn")?.classList.add("hidden");
         document.getElementById("logoutBtn")?.classList.remove("hidden");
+        syncStatus.innerText = "✅ Online";
 
     } catch (error) {
-        console.error("Data Load Error, but UI is unlocked:", error);
-        // Even if the server fails, the buttons are already unlocked from Step 2
+        console.error("Critical Init Error:", error);
+        syncStatus.innerText = "⚠️ Offline Mode";
     }
 }
 // Helper to recalculate time based on shifts
@@ -2905,31 +2902,32 @@ function setupTasks() {
   document.getElementById("reportBox").classList.add("hidden");
 }
 async function loadTasks() {
-    
     const tList = document.getElementById("taskList");
     const eList = document.getElementById("extraList");
     if (!tList || !eList) return;
-    
-    let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    if (tasks.length === 0) {
-        tList.innerHTML = "<div style='color:#64748b; padding:10px;'>No assigned tasks.</div>";
-        return;
-    }
+
+    // 1. Force a clean read from LocalStorage (which was just updated by downloadData)
+    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
 
-    // Pull Journey Data from Server to decide button state
-    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-    const serverMaps = mapSnap.exists() ? mapSnap.val() : {};
-
+    // 2. Clear current UI
     tList.innerHTML = "";
     eList.innerHTML = "";
+
+    if (tasks.length === 0 && extras.length === 0) {
+        tList.innerHTML = "<div style='color:#64748b; padding:10px;'>No tasks found for today.</div>";
+        return;
+    }
+
+    // 3. Get Journey Data for buttons
+    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    const serverMaps = mapSnap.exists() ? mapSnap.val() : {};
 
     const renderItem = (item, listRef, isExtra) => {
         const container = document.createElement("div");
         container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
         
-        // Use the Unique ID we created
         const taskId = String(item.id || item.name).replace(/'/g, "\\'"); 
 
         let mapBtnHtml = "";
@@ -2946,21 +2944,23 @@ async function loadTasks() {
         cb.checked = item.done;
         cb.style.marginRight = "10px";
 
-        cb.onchange = () => {
+        cb.onchange = async () => {
             item.done = cb.checked;
             if (cb.checked) {
                 const rem = prompt("Work Details?", "Completed");
-                item.comment = rem || "-";
+                item.comment = rem || "Done";
                 saveAutomatedSubjectProgress(item.name, item.comment, "-");
             }
-            // 🔥 Save correctly without duplicating
+            
+            // Update local and server immediately
             localStorage.setItem(isExtra ? key("EXTRA") : key("TASKS"), JSON.stringify(isExtra ? extras : tasks));
             uploadData();
-            loadTasks();
+            updateProgress();
         };
 
         const label = document.createElement("span");
-        label.innerText = item.name;
+        label.innerText = item.name + (item.target ? ` (${item.target})` : "");
+        label.style.color = item.done ? "#64748b" : "#e5e7eb";
 
         container.append(cb, label);
         container.insertAdjacentHTML('beforeend', mapBtnHtml);
