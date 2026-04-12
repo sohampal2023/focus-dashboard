@@ -2885,59 +2885,73 @@ function setupTasks() {
   document.getElementById("logBox").classList.remove("hidden");
   document.getElementById("reportBox").classList.add("hidden");
 }
-function loadTasks() {
+async function loadTasks() {
     const tList = document.getElementById("taskList");
     const eList = document.getElementById("extraList");
+    const taskBox = document.getElementById("taskBox");
+    const logBox = document.getElementById("logBox");
+
     if (!tList || !eList) return;
     
-    tList.innerHTML = "";
-    eList.innerHTML = "";
-
+    // Ensure the main boxes are visible
+    if(taskBox) taskBox.classList.remove("hidden");
+    if(logBox) logBox.classList.remove("hidden");
+    
+    tList.innerHTML = "<div style='font-size:10px; color:#38bdf8;'>Syncing...</div>";
+    
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    
-    // Get maps (Synced from cloud in initStudentDashboard)
-    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    const today = new Date().toLocaleDateString();
-    const currentDayMaps = dailyMaps[today] || {};
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
 
-    const renderItem = (item, listRef) => {
-        const container = document.createElement("div");
-        container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
-        
-        // 🔥 STABLE ID: Use the name of the subject as the key
-        const taskId = String(item.name).replace(/'/g, "\\'"); 
+    try {
+        // Fetch Maps from Server
+        const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+        const serverMaps = mapSnap.exists() ? mapSnap.val() : {};
 
-        let mapBtnHtml = "";
-        if (!item.name.startsWith("MOCK TEST:")) {
-            // Check if this subject name has a map in the cloud-synced data
-            if (currentDayMaps[taskId]) {
-                mapBtnHtml = `<button onclick="showByjusMap('${taskId}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold;">🗺 VIEW MAP</button>`;
-            } else {
-                mapBtnHtml = `<button onclick="openSubjectJourney('${taskId}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px;">+ SET JOURNEY</button>`;
+        tList.innerHTML = ""; 
+
+        const renderItem = (item, listRef) => {
+            const container = document.createElement("div");
+            container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
+            
+            // Clean ID matching
+            const taskId = String(item.id || item.name).replace(/'/g, "\\'"); 
+
+            let mapBtnHtml = "";
+            if (!item.name.startsWith("MOCK TEST:")) {
+                if (serverMaps[taskId]) {
+                    mapBtnHtml = `<button onclick="showByjusMap('${item.name.replace(/'/g, "\\'")}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold;">🗺 VIEW MAP</button>`;
+                } else {
+                    mapBtnHtml = `<button onclick="openSubjectJourney('${item.name.replace(/'/g, "\\'")}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px;">+ SET JOURNEY</button>`;
+                }
             }
-        }
 
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.checked = item.done;
-        cb.style.marginRight = "10px";
-        const label = document.createElement("span");
-        label.innerText = item.name;
+            const cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.checked = item.done;
+            cb.style.marginRight = "10px";
+            const label = document.createElement("span");
+            label.innerText = item.name;
 
-        cb.onchange = () => {
-            item.done = cb.checked;
-            save(tasks, extras);
-            loadTasks();
+            cb.onchange = () => {
+                item.done = cb.checked;
+                save(tasks, extras);
+                loadTasks();
+            };
+
+            container.append(cb, label);
+            container.insertAdjacentHTML('beforeend', mapBtnHtml);
+            listRef.append(container);
         };
 
-        container.append(cb, label);
-        container.insertAdjacentHTML('beforeend', mapBtnHtml);
-        listRef.append(container);
-    };
+        if(tasks.length === 0) tList.innerHTML = "<div style='color:#64748b; padding:10px;'>No tasks assigned.</div>";
+        tasks.forEach(t => renderItem(t, tList));
+        extras.forEach(e => renderItem(e, eList));
 
-    tasks.forEach(t => renderItem(t, tList));
-    extras.forEach(e => renderItem(e, eList));
+    } catch (e) {
+        console.error("Task render error:", e);
+        tList.innerHTML = "<div style='color:#ef4444;'>Sync Error. Try Refreshing.</div>";
+    }
 }
   window.addExtra = function() {
     let menu = "Select Subject for Extra Work:\n\n";
