@@ -2050,55 +2050,51 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
+    // 1. Force sections to be visible immediately to prevent the "Black Screen"
     const studentView = document.getElementById("studentView");
-    const controls = document.getElementById("studentControls");
-    const syncStatus = document.getElementById("syncStatus");
+    const taskBox = document.getElementById("taskBox");
+    const logBox = document.getElementById("logBox");
+    const studentControls = document.getElementById("studentControls");
 
     if (studentView) studentView.classList.remove("hidden");
-    if (controls) controls.classList.remove("hidden");
+    if (taskBox) taskBox.classList.remove("hidden");
+    if (logBox) logBox.classList.remove("hidden");
+    if (studentControls) studentControls.classList.remove("hidden");
 
     try {
-        syncStatus.innerText = "📥 Downloading Data...";
+        document.getElementById("syncStatus").innerText = "📥 Syncing...";
+        
+        // 2. Download from Server
         const serverData = await downloadData(currentUser.uid);
         
-        if (!serverData) {
-            syncStatus.innerText = "❌ Sync Failed";
-            return;
-        }
-
+        // 3. Handle New Day Logic
         const today = new Date().toLocaleDateString();
-
-        // Check for new day shift prompt
-        let goalDate = serverData.dailyGoalDate; 
+        let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
+        
         if (!goalDate || goalDate !== today) {
-            let shifts = prompt("New Day! Enter shifts (2hr each):", "3") || "3";
+            let shifts = prompt("New Day! Enter total shifts for today:", "3") || "3";
             localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
             localStorage.setItem(key("DAILY_GOAL_DATE"), today);
-            
-            // This clears yesterday's "Done" status for the new session
-            await update(ref(db, `users/${currentUser.uid}`), { 
-                dailyGoalDate: today, 
-                dailyShiftTarget: shifts 
-            });
+            await update(ref(db, `users/${currentUser.uid}`), { dailyGoalDate: today });
         }
 
-        // --- REFRESH UI ELEMENTS ---
+        // 4. Force Render all Components
         loadSubjectList();
-        await loadTasks(); // Wait for tasks to be rendered
-        updateProgress();
-        renderLogs();
-        runShiftTimer();
+        await loadTasks(); // This draws your Assigned & Extra work
+        updateProgress();  // This draws the Speedometer
+        renderLogs();      // This draws the Log table
+        runShiftTimer();   // This starts the Shift countdown
         
         if(typeof startIdle === "function") startIdle(1800);
 
         document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
         document.getElementById("loginBtn")?.classList.add("hidden");
         document.getElementById("logoutBtn")?.classList.remove("hidden");
-        syncStatus.innerText = "✅ Online";
+        document.getElementById("syncStatus").innerText = "✅ Online";
 
     } catch (error) {
-        console.error("Critical Init Error:", error);
-        syncStatus.innerText = "⚠️ Offline Mode";
+        console.error("Dashboard Init Error:", error);
+        document.getElementById("syncStatus").innerText = "⚠️ Load Error";
     }
 }
 // Helper to recalculate time based on shifts
