@@ -3901,6 +3901,7 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     saveSubjectData(subjectData); 
     uploadData(); 
 };
+// --- UPDATED FINAL DAY END LOGIC ---
 window.finalDayEnd = async function() {
     if(!confirm("End Day? This will move pending work to 'Due', clear all tasks, and LOG YOU OUT completely.")) return;
 
@@ -3943,33 +3944,34 @@ window.finalDayEnd = async function() {
         updates[`users/${currentUser.uid}/TASKS`] = "[]";
         updates[`users/${currentUser.uid}/EXTRA`] = "[]";
         updates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null;
-        updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; // Forces shift prompt on next login
+        updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; 
         updates[`users/${currentUser.uid}/SHIFT_END_TS`] = null;
+        updates[`users/${currentUser.uid}/DAILY_SHIFT_COUNT`] = null;
         updates[`users/${currentUser.uid}/CURRENT_SHIFT_LABEL`] = "No Shift Active";
+        updates[`users/${currentUser.uid}/stats`] = { percent: 0, rating: "Poor" };
 
         await update(ref(db), updates);
 
         // 5. BROWSER WIPE: Clear all local data
         localStorage.clear(); 
         
-        // Add a lock message so the user sees the session is ended
         const reportHTML = `
             <div class="card" style="background:#0f172a; border: 2px solid #38bdf8; text-align:center; padding:40px; border-radius:20px;">
-                <h2 style="color:#38bdf8; margin-bottom:10px;">DAY COMPLETED</h2>
-                <p style="color:#cbd5e1; margin-bottom:30px;">All progress synced. Your board is now fresh.</p>
-                <div style="font-size:14px; color:#64748b; margin-bottom:10px;">Account Status: <span style="color:#ef4444;">Logged Out</span></div>
+                <h2 style="color:#38bdf8; margin-bottom:10px;">SESSION TERMINATED</h2>
+                <p style="color:#cbd5e1; margin-bottom:30px;">All progress has been logged to your history. Database wiped for next session.</p>
+                <button onclick="location.reload()" style="background:#22c55e; color:white; padding:12px 24px; border:none; border-radius:8px; font-weight:bold; cursor:pointer;">
+                    LOGIN AGAIN
+                </button>
             </div>`;
         localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
 
-        // 6. LOGOUT: Force Firebase to forget the user
+        // 6. LOGOUT
         await signOut(auth);
-        
-        alert("Session Ended Successfully. You have been logged out.");
         location.reload(); 
 
     } catch (err) {
         console.error("Day End Error:", err);
-        alert("Error during logout: " + err.message);
+        alert("Logout failed: " + err.message);
     }
 };
  window.loadTasks = function() {
