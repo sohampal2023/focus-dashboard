@@ -2047,33 +2047,9 @@ async function loadNotices() {
     }
 }
 window.initStudentDashboard = function() {
-  window.askDailyBudget = async function() {
-    const todayStr = new Date().toLocaleDateString();
-    const existingGoal = localStorage.getItem("DAILY_GOAL_DATE");
+    // 🔥 NEW: Check for the daily budget/shift count as soon as the dashboard loads
+    askDailyBudget();
 
-    // Only ask if today is a new day and no goal is set
-    if (existingGoal !== todayStr) {
-        const shifts = prompt("Welcome! How many 2-hour shifts are you doing today? (e.g., 3)");
-        const shiftNum = parseFloat(shifts);
-
-        if (isNaN(shiftNum) || shiftNum <= 0) {
-            alert("Please enter a valid number to continue.");
-            return askDailyBudget(); // Force re-ask
-        }
-
-        // Save locally and to Firebase
-        localStorage.setItem("DAILY_GOAL_DATE", todayStr);
-        localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
-        
-        await update(ref(db, `users/${currentUser.uid}`), {
-            "DAILY_SHIFT_COUNT": shiftNum,
-            "DAILY_GOAL_DATE": todayStr
-        });
-        
-        alert(`Budget Set: ${shiftNum * 2} Hours Total.`);
-    }
-};
-    // 1. FORCE UI VISIBILITY (Wakes up the dashboard immediately)
     const studentView = document.getElementById("studentView");
     const studentControls = document.getElementById("studentControls");
     const taskBox = document.getElementById("taskBox");
@@ -2084,76 +2060,67 @@ window.initStudentDashboard = function() {
     if(taskBox) taskBox.classList.remove("hidden");
     if(logBox) logBox.classList.remove("hidden");
     
-    // Toggle login/logout buttons
     document.getElementById("loginBtn")?.classList.add("hidden");
     document.getElementById("logoutBtn")?.classList.remove("hidden");
 
-    // 2. HARD UNLOCK: Keep all sidebar buttons active 24/7
-    const sidebarButtons = document.querySelectorAll(".sidebar button");
-    sidebarButtons.forEach(btn => {
-        btn.disabled = false;
-        btn.style.opacity = "1";
-        btn.style.cursor = "pointer";
-        btn.style.filter = "none";
-    });
-
-    // 3. CLEANUP: Prevent duplicate listeners
-    if (window.studentUnsubscribe) window.studentUnsubscribe();
-
-    // 4. START REAL-TIME LIVE SYNC
+    // Start real-time sync
     const userRef = ref(db, `users/${currentUser.uid}`);
     window.studentUnsubscribe = onValue(userRef, (snapshot) => {
-        try {
-            const data = snapshot.val() || {};
-            const todayDate = new Date().toLocaleDateString();
-            const todayKey = todayDate.replace(/\//g, "-");
+        const data = snapshot.val() || {};
+        const todayDate = new Date().toLocaleDateString();
+        const todayKey = todayDate.replace(/\//g, "-");
 
-            // --- A. Sync Tasks to LocalStorage ---
-            localStorage.setItem(key("TASKS"), data.TASKS || "[]");
-            localStorage.setItem(key("EXTRA"), data.EXTRA || "[]");
-            
-            // --- B. Sync Daily Maps (For the MAP Button) ---
-            // This allows the student to see the '🗺 MAP' button immediately after Admin assignment
-            if (data.dailyMaps && data.dailyMaps[todayKey]) {
-                const mapStorage = {};
-                mapStorage[todayDate] = data.dailyMaps[todayKey];
-                localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(mapStorage));
-            }
-
-            // --- C. Trigger UI Render (Instant update across devices) ---
-            if (typeof window.loadTasks === "function") {
-                window.loadTasks();
-            }
-
-            // --- D. Sync Status Indicators ---
-            const shiftLabel = document.getElementById("currentShiftLabel");
-            if (shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
-            
-            const timeoutDisp = document.getElementById("timeoutCounter");
-            if (timeoutDisp) timeoutDisp.innerText = "Timeouts: " + (data.DAILY_TIMEOUTS || 0);
-
-            // --- E. Handle Admin Warnings ---
-            if (data.activeAlert) {
-                const msgEl = document.getElementById("rejectedMsg");
-                if(msgEl) msgEl.innerText = "Admin: " + data.activeAlert;
-                document.getElementById("rejectedPopup")?.classList.remove("hidden");
-            } else {
-                document.getElementById("rejectedPopup")?.classList.add("hidden");
-            }
-
-            document.getElementById("syncStatus").innerText = "Real-time Active";
-
-        } catch (err) {
-            console.error("Critical Sync Error:", err);
-            document.getElementById("syncStatus").innerText = "Sync Error - Check Console";
+        localStorage.setItem(key("TASKS"), data.TASKS || "[]");
+        
+        // Ensure shift count is synced from Admin or previous prompt
+        if(data.DAILY_SHIFT_COUNT) {
+            localStorage.setItem("DAILY_SHIFT_COUNT", data.DAILY_SHIFT_COUNT);
         }
-    }, (error) => {
-        console.error("Firebase Read Error:", error);
-        document.getElementById("syncStatus").innerText = "Offline";
+
+        if (typeof window.loadTasks === "function") {
+            window.loadTasks();
+        }
+        
+        // Update Shift UI
+        const shiftLabel = document.getElementById("currentShiftLabel");
+        if (shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
     });
 
-    // 5. Start Watchdog Session
     startIdle(1800);
+};
+  window.askDailyBudget = async function() {
+    const todayStr = new Date().toLocaleDateString();
+    
+    // 1. Check Firebase first to see if budget was already set today
+    const snap = await get(ref(db, `users/${currentUser.uid}`));
+    const data = snap.val() || {};
+    
+    // If it's a new day (date mismatch) or no goal is set, ask now
+    if (data.DAILY_GOAL_DATE !== todayStr) {
+        const shifts = prompt("Welcome! How many 2-hour shifts are you doing today? (e.g., 3)");
+        const shiftNum = parseFloat(shifts);
+
+        if (isNaN(shiftNum) || shiftNum <= 0) {
+            alert("Shift count is required to calculate your study map.");
+            return askDailyBudget(); 
+        }
+
+        // 2. Save to Firebase and LocalStorage
+        localStorage.setItem("DAILY_GOAL_DATE", todayStr);
+        localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
+        
+        await update(ref(db, `users/${currentUser.uid}`), {
+            "DAILY_SHIFT_COUNT": shiftNum,
+            "DAILY_GOAL_DATE": todayStr,
+            "TASKS": "[]" // Ensure a clean start for the new budget
+        });
+        
+        alert(`Target Set: ${shiftNum * 2} Hours. Please wait for Admin to assign subjects.`);
+    } else {
+        // If already set, just ensure local storage is in sync
+        localStorage.setItem("DAILY_SHIFT_COUNT", data.DAILY_SHIFT_COUNT);
+        localStorage.setItem("DAILY_GOAL_DATE", data.DAILY_GOAL_DATE);
+    }
 };
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
@@ -3481,15 +3448,8 @@ window.rejectRequest = async function(reqId) {
     
     alert("Request Rejected & Cleared.");
 };
-
 window.saveAdminJourney = async function() {
-    const sub = document.getElementById("admSub").value;
-    currentTasks.push({
-    id: taskId,
-    name: `${sub} | ${mod}: ${chap}`, // This shows in student list
-    subjectOnly: sub, // This is used for the Progress Table grouping
-    done: false
-});
+    const sub = document.getElementById("admSub").value; // The Subject Name
     const mod = document.getElementById("admMod").value || "Module 1";
     const chap = document.getElementById("admChap").value || "General";
     const topics = document.getElementById("admTopics").value;
@@ -3501,34 +3461,45 @@ window.saveAdminJourney = async function() {
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const targetUid = window.currentAdminTargetUid;
 
-    const displayLabel = `${sub} | ${mod}: ${chap} (${lines.slice(0,2).join(", ")}...)`;
+    // --- FIX: Formatting the Display Name to include Subject ---
+    const displayLabel = `${sub} | ${mod}: ${chap}`;
 
     const newMapData = lines.map(line => ({
         label: line.trim(),
-        module: `${mod}: ${chap}`,
+        module: `${mod}: ${chap}`, // Keeps context inside the map
         status: 'todo',
         dynamicMins: 30
     }));
 
+    // Fetch current tasks to append
     const taskSnap = await get(ref(db, `users/${targetUid}/TASKS`));
     let currentTasks = JSON.parse(taskSnap.val() || "[]");
-    currentTasks.push({ id: taskId, name: displayLabel, subjectOnly: sub, done: false });
+    
+    // Push the new task with subjectOnly for end-of-day grouping
+    currentTasks.push({ 
+        id: taskId, 
+        name: displayLabel, 
+        subjectOnly: sub, 
+        done: false 
+    });
 
-    // --- BATCH UPDATE: Save Work AND Delete Request ---
+    // --- BATCH UPDATE: Instant Sync ---
     const updates = {};
     updates[`users/${targetUid}/dailyMaps/${todayKey}/${taskId}`] = newMapData;
     updates[`users/${targetUid}/TASKS`] = JSON.stringify(currentTasks);
     
-    // If we filled this from a request, delete it now so it disappears
     if (window.currentRequestId) {
         updates[`users/${targetUid}/EXTRA_REQUESTS/${window.currentRequestId}`] = null;
     }
 
-    await update(ref(db), updates);
-    
-    alert("Manual Save Success. Request cleared.");
-    document.getElementById('adminControlCenter').remove();
-    window.currentRequestId = null; 
+    try {
+        await update(ref(db), updates);
+        alert(`SUCCESS: ${sub} Journey Pushed.`);
+        document.getElementById('adminControlCenter').remove();
+        window.currentRequestId = null; 
+    } catch(e) {
+        alert("Sync Error: " + e.message);
+    }
 };
 window.generateMapFromBulk = function() {
     const text = document.getElementById('bulkTextarea').value;
@@ -3957,18 +3928,18 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("End Day? This clears all subjects. Admin must re-assign tomorrow.")) return;
+    if(!confirm("End Day? This clears all subjects and maps for a fresh start tomorrow.")) return;
 
     const todayStr = new Date().toLocaleDateString();
     const todayKey = todayStr.replace(/\//g, "-");
     
-    // 1. Fetch current tasks to log them to progress table first
+    // 1. Fetch data to log progress
     const snapshot = await get(ref(db, `users/${currentUser.uid}`));
     const data = snapshot.val() || {};
     const tasks = JSON.parse(data.TASKS || "[]");
     const maps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
 
-    // 2. Logic to group by subject for the progress table
+    // 2. Group by subject for the Subject Wise Progress Table
     const summary = {}; 
     tasks.forEach(t => {
         const sub = t.subjectOnly || "General";
@@ -3986,20 +3957,35 @@ window.finalDayEnd = async function() {
         saveAutomatedSubjectProgress(s, summary[s].covered.join(", "), summary[s].uncovered.join(", "));
     }
 
-    // 4. THE HARD CLEAR
+    // 4. THE HARD CLEAR (Wipes everything from Firebase)
     const updates = {};
     updates[`users/${currentUser.uid}/TASKS`] = "[]";
-    updates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null;
-    updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; // Forces prompt on next login
-    
-    await update(ref(db), updates);
+    updates[`users/${currentUser.uid}/EXTRA`] = "[]";
+    updates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null; // 🔥 DELETE THE MAPS
+    updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; // Forces shift prompt tomorrow
+    updates[`users/${currentUser.uid}/CURRENT_SHIFT_LABEL`] = "No Shift Active";
+    updates[`users/${currentUser.uid}/SHIFT_END_TS`] = null;
 
-    // 5. Clear Local Storage
-    localStorage.removeItem("DAILY_GOAL_DATE");
-    localStorage.removeItem(key("TASKS"));
-    
-    alert("Day End Complete. Dashboard Cleared.");
-    location.reload();
+    try {
+        await update(ref(db), updates);
+
+        // 5. Clear Local Storage
+        localStorage.removeItem("DAILY_GOAL_DATE");
+        localStorage.removeItem("DAILY_SHIFT_COUNT");
+        localStorage.setItem(key("TASKS"), "[]");
+        localStorage.setItem(key("EXTRA"), "[]");
+        localStorage.removeItem(MAP_STORAGE_KEY()); 
+
+        alert("Day End Successful. Journey Cleared.");
+        
+        // Generate Report and Lock Screen
+        const reportHTML = `...`; // (Keep your existing report HTML logic here)
+        localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
+        
+        location.reload();
+    } catch (err) {
+        alert("Clear failed: " + err.message);
+    }
 };
  window.loadTasks = function() {
     const taskList = document.getElementById("taskList");
@@ -4077,6 +4063,7 @@ window.fillFromRequest = fillFromRequest;
 window.startCountdown = startCountdown;
   window.handleNodeAction = handleNodeAction;
   window.rejectRequest = rejectRequest;
+  window.askDailyBudget = askDailyBudget;
   window.adminPeekStudentMap = adminPeekStudentMap;
   </script>
 
