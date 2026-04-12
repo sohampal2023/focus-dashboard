@@ -699,8 +699,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     </div>
 
     <div id="nextDayBox" class="card hidden">
-      <h3>Enter Next Day Tasks</h3>
-      <div id="nextInputs"></div>
+      
       <button onclick="finalDayEnd()">Submit Day End</button>
     </div>
 
@@ -2077,52 +2076,39 @@ window.initStudentDashboard = function() {
 
     // 4. START REAL-TIME LIVE SYNC
     const userRef = ref(db, `users/${currentUser.uid}`);
-    window.studentUnsubscribe = onValue(userRef, (snapshot) => {
-        try {
-            const data = snapshot.val() || {};
-            const todayDate = new Date().toLocaleDateString();
-            const todayKey = todayDate.replace(/\//g, "-");
+    // --- Inside initStudentDashboard function ---
+window.studentUnsubscribe = onValue(userRef, (snapshot) => {
+    try {
+        const data = snapshot.val() || {};
+        const todayDate = new Date().toLocaleDateString();
+        const todayKey = todayDate.replace(/\//g, "-");
 
-            // --- A. Sync Tasks to LocalStorage ---
-            localStorage.setItem(key("TASKS"), data.TASKS || "[]");
-            localStorage.setItem(key("EXTRA"), data.EXTRA || "[]");
-            
-            // --- B. Sync Daily Maps (For the MAP Button) ---
-            // This allows the student to see the '🗺 MAP' button immediately after Admin assignment
-            if (data.dailyMaps && data.dailyMaps[todayKey]) {
-                const mapStorage = {};
-                mapStorage[todayDate] = data.dailyMaps[todayKey];
-                localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(mapStorage));
-            }
-
-            // --- C. Trigger UI Render (Instant update across devices) ---
-            if (typeof window.loadTasks === "function") {
-                window.loadTasks();
-            }
-
-            // --- D. Sync Status Indicators ---
-            const shiftLabel = document.getElementById("currentShiftLabel");
-            if (shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
-            
-            const timeoutDisp = document.getElementById("timeoutCounter");
-            if (timeoutDisp) timeoutDisp.innerText = "Timeouts: " + (data.DAILY_TIMEOUTS || 0);
-
-            // --- E. Handle Admin Warnings ---
-            if (data.activeAlert) {
-                const msgEl = document.getElementById("rejectedMsg");
-                if(msgEl) msgEl.innerText = "Admin: " + data.activeAlert;
-                document.getElementById("rejectedPopup")?.classList.remove("hidden");
-            } else {
-                document.getElementById("rejectedPopup")?.classList.add("hidden");
-            }
-
-            document.getElementById("syncStatus").innerText = "Real-time Active";
-
-        } catch (err) {
-            console.error("Critical Sync Error:", err);
-            document.getElementById("syncStatus").innerText = "Sync Error - Check Console";
+        // Sync Tasks & Extra
+        localStorage.setItem(key("TASKS"), data.TASKS || "[]");
+        localStorage.setItem(key("EXTRA"), data.EXTRA || "[]");
+        
+        // Sync Maps ONLY if they exist for today
+        if (data.dailyMaps && data.dailyMaps[todayKey]) {
+            const mapStorage = {};
+            mapStorage[todayDate] = data.dailyMaps[todayKey];
+            localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(mapStorage));
         }
-    }, (error) => {
+
+        // Standard UI Renders
+        if (typeof window.loadTasks === "function") window.loadTasks();
+
+        // Update indicators
+        const shiftLabel = document.getElementById("currentShiftLabel");
+        if (shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
+        
+        const timeoutDisp = document.getElementById("timeoutCounter");
+        if (timeoutDisp) timeoutDisp.innerText = "Timeouts: " + (data.DAILY_TIMEOUTS || 0);
+
+        document.getElementById("syncStatus").innerText = "Manual Flow Active";
+    } catch (err) {
+        console.error(err);
+    }
+}); (error) => {
         console.error("Firebase Read Error:", error);
         document.getElementById("syncStatus").innerText = "Offline";
     });
@@ -3965,80 +3951,67 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will move pending subtopics to 'Due' and clear your board.")) return;
+    if(!confirm("End Day? This will move pending subtopics to 'Due' and clear your current board.")) return;
 
     const todayStr = new Date().toLocaleDateString();
     const todayKey = todayStr.replace(/\//g, "-");
     
-    // 1. Fetch current data from Firebase
+    // 1. Fetch live data for report generation
     const snapshot = await get(ref(db, `users/${currentUser.uid}`));
     if (!snapshot.exists()) return;
-
     const data = snapshot.val();
+    
     const tasks = JSON.parse(data.TASKS || "[]");
     const maps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
 
-    // 2. Process Subjects: Separate Covered vs Due
+    // 2. LOGIC: Group by Subject Name (Covered vs Due)
     const subjectReport = {}; 
 
     tasks.forEach(task => {
-        // Use subjectOnly as the key (e.g., "IoT")
         const subName = task.subjectOnly || "General";
-        
         if (!subjectReport[subName]) {
             subjectReport[subName] = { covered: [], due: [] };
         }
 
-        // Check the map nodes associated with this taskId
         if (maps && maps[task.id]) {
             maps[task.id].forEach(node => {
                 if (node.status === 'done') {
                     subjectReport[subName].covered.push(node.label);
                 } else {
-                    // This covers 'todo', 'doing', or 'aborted' work
                     subjectReport[subName].due.push(node.label);
                 }
             });
         }
     });
 
-    // 3. Save to Subject Wise Progress Table (Automated Logging)
+    // 3. Save one row per subject into the Progress Table
     for (const sub in subjectReport) {
-        const coveredText = subjectReport[sub].covered.length > 0 
-            ? subjectReport[sub].covered.join(", ") 
-            : "None";
-            
-        const dueText = subjectReport[sub].due.length > 0 
-            ? subjectReport[sub].due.join(", ") 
-            : "None";
-
-        // Avoid logging empty rows if no work was even attempted for a subject
+        const coveredText = subjectReport[sub].covered.length > 0 ? subjectReport[sub].covered.join(", ") : "None";
+        const dueText = subjectReport[sub].due.length > 0 ? subjectReport[sub].due.join(", ") : "None";
+        
         if (coveredText !== "None" || dueText !== "None") {
             saveAutomatedSubjectProgress(sub, coveredText, dueText);
         }
     }
 
-    // 4. PREPARE THE CLEANUP (Firebase update)
+    // 4. THE HARD CLEAR (Wipes Firebase active state)
     const updates = {};
     updates[`users/${currentUser.uid}/TASKS`] = "[]";
     updates[`users/${currentUser.uid}/EXTRA`] = "[]";
-    updates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null; 
-    updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; 
+    updates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null; // Deletes maps
+    updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; // Forces shift prompt next time
     updates[`users/${currentUser.uid}/SHIFT_END_TS`] = null;
     updates[`users/${currentUser.uid}/CURRENT_SHIFT_LABEL`] = "No Shift Active";
+    updates[`users/${currentUser.uid}/PENALTY`] = "0"; // Reset penalty
+    updates[`users/${currentUser.uid}/DAILY_TIMEOUTS`] = 0; // Reset timeouts
 
     try {
         await update(ref(db), updates);
 
-        // 5. Local Storage Cleanup
-        localStorage.removeItem("DAILY_GOAL_DATE");
-        localStorage.removeItem("DAILY_SHIFT_COUNT");
-        localStorage.setItem(key("TASKS"), "[]");
-        localStorage.setItem(key("EXTRA"), "[]");
-        localStorage.removeItem(MAP_STORAGE_KEY());
+        // 5. Clear Local Storage to prevent "Midnight Autoreset"
+        localStorage.clear(); 
 
-        // 6. Final UI Lock (Optional: Redirect or show report)
-        alert("Board Cleared. Progress saved to Subject Table.");
+        alert("Day End Successful. Board Cleared.");
         location.reload(); 
     } catch (err) {
         alert("Cleanup Error: " + err.message);
