@@ -2049,38 +2049,123 @@ async function loadNotices() {
         console.error("Notice load error:", e);
     }
 }
+/* --- UPDATED STUDENT INITIALIZATION --- */
 async function initStudentDashboard() {
-    const serverData = await downloadData(currentUser.uid);
-    const today = new Date().toLocaleDateString();
+    const studentView = document.getElementById("studentView");
+    const controls = document.getElementById("studentControls");
+    const syncStatus = document.getElementById("syncStatus");
 
-    // Force unlock buttons and show containers
-    document.getElementById("studentView").classList.remove("hidden");
-    document.getElementById("taskBox").classList.remove("hidden");
+    // Force Visibility
+    if (studentView) studentView.classList.remove("hidden");
+    if (controls) controls.classList.remove("hidden");
 
-    // 🔥 THE FIX: If server doesn't have TODAY'S date, force prompt
-    if (!serverData.dailyGoalDate || serverData.dailyGoalDate !== today) {
+    try {
+        if (syncStatus) syncStatus.innerText = "📥 Syncing Cloud Data...";
+
+        // 1. Download fresh data from Server
+        const serverData = await downloadData(currentUser.uid);
+        if (!serverData) return;
+
+        const today = new Date().toLocaleDateString();
+        const serverGoalDate = serverData.dailyGoalDate;
+
+        // 2. 🔥 THE SHIFT PROMPT TRIGGER
+        // If server date is missing, reset, or from yesterday, it's a NEW DAY.
+        if (!serverGoalDate || serverGoalDate.startsWith("RESET") || serverGoalDate !== today) {
+            
+            // Wipe old shift memory
+            localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
+            localStorage.removeItem(key("SHIFT_END_TS"));
+            localStorage.removeItem(key("CURRENT_SHIFT_LABEL"));
+
+            // Prompt for new day configuration
+            let shifts = prompt("New Day Detected! Enter total shifts for today:", "1") || "1";
+            
+            localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
+            localStorage.setItem(key("DAILY_GOAL_DATE"), today);
+
+            // Sync the new day start to the Cloud
+            await update(ref(db, `users/${currentUser.uid}`), { 
+                dailyGoalDate: today,
+                dailyShiftTarget: shifts,
+                currentShiftLabel: "No Active Shift"
+            });
+        } else {
+            // Restore existing shift count if already set today
+            localStorage.setItem(key("DAILY_SHIFT_COUNT"), serverData.dailyShiftTarget || "1");
+        }
+
+        // 3. Render Dashboard Components
+        loadSubjectList();
+        await loadTasks();   
+        updateProgress();    
+        renderLogs();        
+        runShiftTimer();     
         
-        // 1. Wipe local memory of old shifts
-        localStorage.removeItem(key("DAILY_GOAL_DATE"));
-        localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
+        if(typeof startIdle === "function") startIdle(1800);
 
-        // 2. Ask for new shift
-        let shifts = prompt("New Day! Enter total shifts for today:", "1") || "1";
-        
-        // 3. Save to Cloud so handleNodeAction can use it
-        await update(ref(db, `users/${currentUser.uid}`), { 
-            dailyGoalDate: today,
-            dailyShiftTarget: shifts 
-        });
-        localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
-    } else {
-        localStorage.setItem(key("DAILY_SHIFT_COUNT"), serverData.dailyShiftTarget);
+        document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
+        if (syncStatus) syncStatus.innerText = "✅ Online & Synced";
+
+    } catch (error) {
+        console.error("Critical Init Error:", error);
+        if (syncStatus) syncStatus.innerText = "⚠️ Sync Error";
     }
-
-    await loadTasks(); 
-    updateProgress();
-    runShiftTimer();
 }
+
+/* --- UPDATED DAY END (CLEAN RESET) --- */
+window.finalDayEnd = async function() {
+    if(!confirm("End Day? This will sync all tasks and reset shifts globally.")) return;
+
+    try {
+        const nextDayTasks = [];
+        for (let i = 0; i < 7; i++) {
+            const sub = document.getElementById("nd_sub_" + i)?.value;
+            const top = document.getElementById("nd_top_" + i)?.value.trim();
+            if(sub && sub !== "") { 
+                nextDayTasks.push({ 
+                    id: "task_" + Date.now() + i, 
+                    name: sub, 
+                    target: top || "General Study", 
+                    done: false 
+                }); 
+            }
+        }
+
+        const p = calculate();
+
+        // 🔥 THE GLOBAL RESET PAYLOAD
+        const globalReset = {
+            TASKS: JSON.stringify(nextDayTasks), // Move tomorrow's tasks to current
+            EXTRA: "[]",
+            PENALTY: "0",
+            dailyGoalDate: "RESET_" + Date.now(), // Force shift prompt on next login
+            dailyShiftTarget: "", // Wipe the shift count
+            currentShiftLabel: "No Active Shift"
+        };
+
+        await update(ref(db, `users/${currentUser.uid}`), globalReset);
+
+        // Wipe local device memory
+        localStorage.clear(); 
+        
+        const reportHTML = `
+            <div class='card' style='text-align:center; padding:40px;'>
+                <h1 style='color:#38bdf8;'>${p.percent}%</h1>
+                <p>Day Summary Saved</p>
+                <button onclick='dismissReportLock()' style='background:#22c55e; color:white; padding:15px; width:100%; border:none; border-radius:8px; cursor:pointer;'>
+                    START NEW DAY / LOGIN
+                </button>
+            </div>`;
+            
+        localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
+        
+        signOut(auth).then(() => location.reload());
+
+    } catch (e) {
+        alert("Day End Failed: " + e.message);
+    }
+};
 // Helper to recalculate time based on shifts
 async function redistributeTimeForNewDay(shifts) {
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
