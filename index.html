@@ -2050,42 +2050,69 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // Basic UI Setup
+    // UI Setup
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 1. Download Core Data
     const serverData = await downloadData(currentUser.uid);
-    
-    // 2. 🔥 CLOUD SYNC: Pull today's maps from Firebase
     const today = new Date().toLocaleDateString();
     const todayKey = today.replace(/\//g, "-");
-    
+
+    // 1. 🔥 NEW DAY SHIFT PROMPT
+    let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
+    if (!goalDate || goalDate !== today) {
+        let shifts = prompt("New Day! Enter number of 2-hour shifts for today:", "3");
+        if (!shifts || isNaN(shifts)) shifts = "3";
+        
+        localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
+        localStorage.setItem(key("DAILY_GOAL_DATE"), today);
+        
+        // After getting shifts, we update the time budget for any journeys carried over
+        await redistributeTimeForNewDay(parseFloat(shifts));
+    }
+
+    // 2. Sync Journeys from Server (will be empty if Day End was successful)
     try {
         const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
         if (mapSnap.exists()) {
             let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
             localMaps[today] = mapSnap.val();
             localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
-            console.log("Journeys synced from Cloud.");
         }
-    } catch (e) {
-        console.error("Map Sync Failed", e);
-    }
+    } catch (e) { console.log("Map sync skipped"); }
 
-    // 3. Start Components
     loadSubjectList();
-    setupTasks(); 
-    loadTasks(); 
+    loadTasks();
     updateProgress();
     runShiftTimer();
     
-    // Unlock buttons
+    // Unlock Buttons
     const btns = ["bioBtn", "histBtn", "dayBtn", "noticeBtn", "leaveBtn"];
     btns.forEach(id => { if(document.getElementById(id)) document.getElementById(id).disabled = false; });
+}
+
+// Helper to recalculate time based on shifts
+async function redistributeTimeForNewDay(shifts) {
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    const totalMins = shifts * 120;
+    
+    const snap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    if (snap.exists()) {
+        let maps = snap.val();
+        let allPending = [];
+        Object.keys(maps).forEach(k => {
+            maps[k].forEach((n, i) => { if(n.status === 'todo') allPending.push({k, i}); });
+        });
+        
+        if (allPending.length > 0) {
+            const perTask = Math.floor(totalMins / allPending.length);
+            allPending.forEach(p => { maps[p.k][p.i].dynamicMins = perTask; });
+            await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), maps);
+        }
+    }
 }
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
@@ -3735,21 +3762,21 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will log all completed topics with their Module names.")) return;
+    if(!confirm("Submit Report and End Day? Completed journey topics will be saved to history and cleared from the map.")) return;
 
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    
+    const today = new Date().toLocaleDateString();
+    const todayKey = today.replace(/\//g, "-");
+
     try {
+        // 1. Fetch current maps to process completed topics
         const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
         const maps = snapshot.val() || {};
 
-        // Iterate through each subject map (taskId)
-        for (const taskId in maps) {
+        Object.keys(maps).forEach(taskId => {
             const nodes = maps[taskId];
             const completedByModule = {};
             const pendingByModule = {};
-            
-            // Group topics by Module name
+
             nodes.forEach(n => {
                 const modName = n.module || "General";
                 if (n.status === 'done') {
@@ -3761,31 +3788,52 @@ window.finalDayEnd = async function() {
                 }
             });
 
-            // Log each Module as a unique entry in the Subject Progress Table
+            // Save to Subject Progress Table
             Object.keys(completedByModule).forEach(mod => {
-                const subjectWithModule = `${currentMapSubject} [${mod}]`;
-                const coveredText = completedByModule[mod].join(", ");
-                const pendingText = pendingByModule[mod] ? pendingByModule[mod].join(", ") : "All Clear";
-                
-                // Use the existing helper to save into SUBJECT_WISE_TABLE
-                saveAutomatedSubjectProgress(subjectWithModule, coveredText, pendingText);
+                saveAutomatedSubjectProgress(
+                    `${taskId} [${mod}]`, 
+                    completedByModule[mod].join(", "), 
+                    pendingByModule[mod] ? pendingByModule[mod].join(", ") : "All Clear"
+                );
             });
-        }
+        });
 
-        // --- Standard Cleanup ---
+        // 2. 🔥 DELETE MAPS FROM SERVER & LOCAL
+        await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+        localStorage.removeItem(MAP_STORAGE_KEY());
+
+        // 3. Process Sidebar Tasks (Keep only Undone)
+        const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+        const remainingTasks = tasks.filter(t => !t.done);
+        localStorage.setItem(key("TASKS"), JSON.stringify(remainingTasks));
+        localStorage.setItem(key("EXTRA"), "[]");
+
+        // 4. Reset Daily Markers
         localStorage.removeItem(key("DAILY_GOAL_DATE"));
         localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
         localStorage.removeItem(key("SHIFT_END_TS"));
+        localStorage.setItem(key("PENALTY"), "0");
+
+        // 5. Final Sync and Logout
+        await uploadData();
         
-        // Remove maps from live DB as they are now in the history table
-        await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        
-        // Final logout/reload
-        location.reload();
+        // Lock screen with report
+        const p = calculate();
+        const reportHTML = `
+            <div class="card" style="background:#1e1b4b; text-align:center; padding:30px;">
+                <h2 style="color:#38bdf8;">DAY COMPLETED</h2>
+                <div style="font-size:60px; font-weight:800; color:#fff;">${p.percent}%</div>
+                <button onclick="dismissReportLock()" style="width:100%; background:#22c55e; padding:15px; border-radius:8px; color:white; border:none; cursor:pointer; font-weight:bold; margin-top:20px;">
+                    START NEW DAY / LOGIN
+                </button>
+            </div>`;
+        localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
+
+        signOut(auth).then(() => location.reload());
 
     } catch (e) {
         console.error("Day End Error:", e);
-        alert("Error finalizing day. Please check connection.");
+        alert("Error ending day. Check connection.");
     }
 };
 // --- ATTACH TO WINDOW ---
