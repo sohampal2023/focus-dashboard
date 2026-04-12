@@ -3736,8 +3736,6 @@ window.extendShiftDirectly = function() {
     showByjusMap(currentMapSubject);
     alert(`Success! Goal updated to ${newTotal} shifts. Time redistributed.`);
 };
-let activeMapTimer = null;
-
 window.startCountdown = function(allocatedMins) {
     if (activeMapTimer) clearInterval(activeMapTimer);
 
