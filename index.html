@@ -3296,62 +3296,110 @@ window.openSubjectJourney = function(subjectName, taskId) {
     modal.classList.remove("hidden");
 };
 let currentAdminTargetUid = null; 
-window.openAdminBulkMap = function(uid) {
+window.openAdminBulkMap = async function(uid) {
     window.currentAdminTargetUid = uid;
     
-    // Create the Dropdown Options from FIXED_SUBJECTS
+    // 1. Fetch live data for this specific student to show on the screen
+    const snap = await get(ref(db, `users/${uid}`));
+    const data = snap.val() || {};
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    
+    const existingMaps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
+    const extraRequests = data.EXTRA_REQUESTS || {};
+    
+    // Create Dropdown Options
     let subjectOptions = FIXED_SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join("");
 
-    // Create the Floating Window Overlay
-    const adminJourneyModal = document.createElement("div");
-    adminJourneyModal.id = "adminJourneyOverlay";
-    adminJourneyModal.className = "modal-overlay"; // Reuse your existing CSS
-    adminJourneyModal.innerHTML = `
-        <div class="modal-content" style="width:500px; border:2px solid #8b5cf6;">
-            <h3 style="color:#8b5cf6; margin-bottom:15px;">ASSIGN STUDY JOURNEY</h3>
+    // Create the Floating Control Center
+    const controlCenter = document.createElement("div");
+    controlCenter.id = "adminControlCenter";
+    controlCenter.className = "modal-overlay";
+    controlCenter.innerHTML = `
+        <div class="modal-content" style="width:850px; display:grid; grid-template-columns:1fr 1fr; gap:20px; border:2px solid #8b5cf6;">
             
-            <label style="font-size:12px; color:#94a3b8;">Select Subject:</label>
-            <select id="admSub" style="width:100%; padding:10px; margin-bottom:15px; background:#020617; color:white; border:1px solid #334155; border-radius:8px;">
-                ${subjectOptions}
-            </select>
+            <div style="border-right:1px solid #334155; padding-right:20px;">
+                <h3 style="color:#8b5cf6; margin-top:0;">ASSIGN NEW JOURNEY</h3>
+                
+                <label style="font-size:11px; color:#94a3b8;">Subject:</label>
+                <select id="admSub" style="width:100%; padding:8px; margin-bottom:10px; background:#020617; color:white; border:1px solid #334155; border-radius:6px;">
+                    ${subjectOptions}
+                </select>
 
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
-                <div>
-                    <label style="font-size:12px; color:#94a3b8;">Module Number:</label>
-                    <input id="admMod" type="text" placeholder="e.g. Module 1" style="width:100%; padding:10px; background:#020617; color:white; border:1px solid #334155; border-radius:8px;">
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:10px;">
+                    <input id="admMod" type="text" placeholder="Module #" style="width:100%; padding:8px; background:#020617; color:white; border:1px solid #334155; border-radius:6px;">
+                    <input id="admChap" type="text" placeholder="Chapter Name" style="width:100%; padding:8px; background:#020617; color:white; border:1px solid #334155; border-radius:6px;">
                 </div>
-                <div>
-                    <label style="font-size:12px; color:#94a3b8;">Chapter Name:</label>
-                    <input id="admChap" type="text" placeholder="e.g. Intro" style="width:100%; padding:10px; background:#020617; color:white; border:1px solid #334155; border-radius:8px;">
-                </div>
+
+                <label style="font-size:11px; color:#94a3b8;">Subtopics (One per line):</label>
+                <textarea id="admTopics" rows="10" style="width:100%; padding:10px; background:#020617; color:white; border:1px solid #334155; border-radius:6px; font-family:monospace; font-size:12px;"></textarea>
+                
+                <button onclick="saveAdminJourney()" style="background:#22c55e; margin-top:15px; font-weight:800;">MANUAL SAVE & PUSH</button>
             </div>
 
-            <label style="font-size:12px; color:#94a3b8;">Subtopics (One per line):</label>
-            <textarea id="admTopics" rows="8" style="width:100%; padding:10px; background:#020617; color:white; border:1px solid #334155; border-radius:8px; font-family:monospace;"></textarea>
+            <div style="overflow-y:auto; max-height:500px;">
+                <h3 style="color:#38bdf8; margin-top:0;">LIVE MONITOR & REQUESTS</h3>
+                
+                <div style="background:#1e293b; padding:10px; border-radius:8px; margin-bottom:15px;">
+                    <h4 style="margin:0 0 5px 0; font-size:12px; color:#facc15;">PENDING EXTRA REQUESTS</h4>
+                    <div id="admReqList">${Object.keys(extraRequests).length ? "" : "<span style='font-size:11px; color:#64748b;'>No requests</span>"}</div>
+                </div>
 
-            <div style="display:flex; gap:10px; margin-top:20px;">
-                <button onclick="saveAdminJourney()" style="background:#22c55e; flex:1;">LOCK & PUSH TO STUDENT</button>
-                <button onclick="document.getElementById('adminJourneyOverlay').remove()" style="background:#334155; width:80px;">CANCEL</button>
+                <div style="background:#0f172a; padding:10px; border-radius:8px;">
+                    <h4 style="margin:0 0 5px 0; font-size:12px; color:#4ade80;">ACTIVE TODAY'S MAPS</h4>
+                    <div id="admMapsList"></div>
+                </div>
+
+                <button onclick="document.getElementById('adminControlCenter').remove()" style="background:#334155; margin-top:20px;">CLOSE WINDOW</button>
             </div>
         </div>
     `;
-    document.body.appendChild(adminJourneyModal);
+    document.body.appendChild(controlCenter);
+
+    // Populate Requests
+    const reqDiv = document.getElementById("admReqList");
+    Object.entries(extraRequests).forEach(([id, req]) => {
+        reqDiv.innerHTML += `
+            <div style="font-size:12px; padding:5px; border-bottom:1px solid #334155; display:flex; justify-content:space-between; align-items:center;">
+                <span>${req.subject}</span>
+                <button onclick="fillFromRequest('${req.subject}', '${id}')" style="width:auto; padding:2px 8px; font-size:10px; background:#0ea5e9;">ASSIGN</button>
+            </div>
+        `;
+    });
+
+    // Populate Active Maps
+    const mapsDiv = document.getElementById("admMapsList");
+    Object.entries(existingMaps).forEach(([taskId, nodes]) => {
+        const done = nodes.filter(n => n.status === 'done').length;
+        mapsDiv.innerHTML += `
+            <div style="font-size:11px; margin-bottom:8px; border-left:2px solid #4ade80; padding-left:8px;">
+                <div style="color:#fff; font-weight:bold;">${nodes[0].module}</div>
+                <div style="color:#94a3b8;">Progress: ${done}/${nodes.length} Topics</div>
+            </div>
+        `;
+    });
 };
-  window.saveAdminJourney = async function() {
+ window.fillFromRequest = function(subject, reqId) {
+    document.getElementById("admSub").value = subject;
+    document.getElementById("admMod").focus();
+    // Store request ID to delete it after manual save
+    window.currentRequestId = reqId;
+};
+
+window.saveAdminJourney = async function() {
     const sub = document.getElementById("admSub").value;
     const mod = document.getElementById("admMod").value || "Module 1";
     const chap = document.getElementById("admChap").value || "General";
-    const text = document.getElementById("admTopics").value;
-    const lines = text.split('\n').filter(l => l.trim() !== "");
+    const topics = document.getElementById("admTopics").value;
+    const lines = topics.split('\n').filter(l => l.trim() !== "");
 
-    if (!lines.length) return alert("Enter subtopics!");
+    if (!lines.length) return alert("Error: Subtopics cannot be empty!");
 
     const taskId = "TASK_" + Date.now();
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const targetUid = window.currentAdminTargetUid;
 
-    // Create detailed text for student dashboard
-    const detail = `${sub} | ${mod}: ${chap} (${lines.slice(0,2).join(", ")}...)`;
+    // Create detailed UI text
+    const displayLabel = `${sub} | ${mod}: ${chap} (${lines.slice(0,2).join(", ")}...)`;
 
     const newMapData = lines.map(line => ({
         label: line.trim(),
@@ -3360,21 +3408,33 @@ window.openAdminBulkMap = function(uid) {
         dynamicMins: 30
     }));
 
-    // Fetch current tasks to append the new one
+    // 1. Fetch student's current TASKS
     const taskSnap = await get(ref(db, `users/${targetUid}/TASKS`));
-    let tasks = JSON.parse(taskSnap.val() || "[]");
-    
-    tasks.push({ id: taskId, name: detail, subjectOnly: sub, done: false });
+    let currentTasks = JSON.parse(taskSnap.val() || "[]");
 
-    // Update everything at once
-    const finalUpdates = {};
-    finalUpdates[`users/${targetUid}/dailyMaps/${todayKey}/${taskId}`] = newMapData;
-    finalUpdates[`users/${targetUid}/TASKS`] = JSON.stringify(tasks);
+    // 2. Add the new manual entry
+    currentTasks.push({
+        id: taskId,
+        name: displayLabel,
+        subjectOnly: sub,
+        done: false
+    });
 
-    await update(ref(db), finalUpdates);
+    // 3. Prepare Batch Update
+    const updates = {};
+    updates[`users/${targetUid}/dailyMaps/${todayKey}/${taskId}`] = newMapData;
+    updates[`users/${targetUid}/TASKS`] = JSON.stringify(currentTasks);
     
-    alert("Journey pushed! Reflecting on student side now.");
-    document.getElementById('adminJourneyOverlay').remove();
+    // If this was from a request, clear the request
+    if (window.currentRequestId) {
+        updates[`users/${targetUid}/EXTRA_REQUESTS/${window.currentRequestId}`] = null;
+    }
+
+    await update(ref(db), updates);
+    
+    alert("SUCCESS: Journey saved and pushed manually.");
+    document.getElementById('adminControlCenter').remove();
+    window.currentRequestId = null;
 };
 window.generateMapFromBulk = function() {
     const text = document.getElementById('bulkTextarea').value;
@@ -3758,8 +3818,8 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     saveSubjectData(subjectData); 
     uploadData(); 
 };
- window.finalDayEnd = async function() {
-    if(!confirm("Submit Day End and Log Progress?")) return;
+window.finalDayEnd = async function() {
+    if(!confirm("End Day and generate 1-row-per-subject report?")) return;
 
     const todayStr = new Date().toLocaleDateString();
     const todayKey = todayStr.replace(/\//g, "-");
@@ -3769,37 +3829,29 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     const tasks = JSON.parse(data.TASKS || "[]");
     const maps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
 
-    // Grouping Logic: Ensure only 1 row per unique subject
-    const tableConsolidation = {};
+    const summary = {}; // { "Power System": {covered: [], uncovered: []} }
 
     tasks.forEach(t => {
         if (t.done && maps[t.id]) {
-            const sub = t.subjectOnly || t.name.split(" | ")[0];
-            if (!tableConsolidation[sub]) {
-                tableConsolidation[sub] = { covered: [], uncovered: [] };
-            }
+            const subject = t.subjectOnly || "General";
+            if (!summary[subject]) summary[subject] = { covered: [], uncovered: [] };
 
             maps[t.id].forEach(node => {
-                if (node.status === 'done') {
-                    tableConsolidation[sub].covered.push(`[${node.module}] ${node.label}`);
-                } else {
-                    tableConsolidation[sub].uncovered.push(`[${node.module}] ${node.label}`);
-                }
+                if (node.status === 'done') summary[subject].covered.push(`[${node.module}] ${node.label}`);
+                else summary[subject].uncovered.push(`[${node.module}] ${node.label}`);
             });
         }
     });
 
-    // Save to Subject Wise Progress Table
-    for (const sub in tableConsolidation) {
+    for (const sub in summary) {
         saveAutomatedSubjectProgress(
-            sub,
-            tableConsolidation[sub].covered.join(", ") || "None",
-            tableConsolidation[sub].uncovered.join(", ") || "All Clear"
+            sub, 
+            summary[sub].covered.join(", ") || "None", 
+            summary[sub].uncovered.join(", ") || "All Clear"
         );
     }
 
-    // Cleanup and Logout
-    localStorage.removeItem(key("DAILY_GOAL_DATE"));
+    // Full cleanup
     await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
     await update(ref(db, `users/${currentUser.uid}`), { TASKS: "[]", EXTRA: "[]" });
     location.reload();
@@ -3890,6 +3942,9 @@ window.loadTasks = loadTasks;
 window.save = save; // Needed for checkbox updates
 window.startIdle = startIdle;
   window.saveAdminJourney = saveAdminJourney;
+  window.openAdminBulkMap = openAdminBulkMap;
+window.fillFromRequest = fillFromRequest;
+
   </script>
 
 </body>
