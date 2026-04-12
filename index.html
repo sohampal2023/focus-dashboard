@@ -2047,6 +2047,32 @@ async function loadNotices() {
     }
 }
 window.initStudentDashboard = function() {
+  window.askDailyBudget = async function() {
+    const todayStr = new Date().toLocaleDateString();
+    const existingGoal = localStorage.getItem("DAILY_GOAL_DATE");
+
+    // Only ask if today is a new day and no goal is set
+    if (existingGoal !== todayStr) {
+        const shifts = prompt("Welcome! How many 2-hour shifts are you doing today? (e.g., 3)");
+        const shiftNum = parseFloat(shifts);
+
+        if (isNaN(shiftNum) || shiftNum <= 0) {
+            alert("Please enter a valid number to continue.");
+            return askDailyBudget(); // Force re-ask
+        }
+
+        // Save locally and to Firebase
+        localStorage.setItem("DAILY_GOAL_DATE", todayStr);
+        localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
+        
+        await update(ref(db, `users/${currentUser.uid}`), {
+            "DAILY_SHIFT_COUNT": shiftNum,
+            "DAILY_GOAL_DATE": todayStr
+        });
+        
+        alert(`Budget Set: ${shiftNum * 2} Hours Total.`);
+    }
+};
     // 1. FORCE UI VISIBILITY (Wakes up the dashboard immediately)
     const studentView = document.getElementById("studentView");
     const studentControls = document.getElementById("studentControls");
@@ -3458,6 +3484,12 @@ window.rejectRequest = async function(reqId) {
 
 window.saveAdminJourney = async function() {
     const sub = document.getElementById("admSub").value;
+    currentTasks.push({
+    id: taskId,
+    name: `${sub} | ${mod}: ${chap}`, // This shows in student list
+    subjectOnly: sub, // This is used for the Progress Table grouping
+    done: false
+});
     const mod = document.getElementById("admMod").value || "Module 1";
     const chap = document.getElementById("admChap").value || "General";
     const topics = document.getElementById("admTopics").value;
@@ -3925,103 +3957,71 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("Submit Day End? This will clear all current tasks for a new start.")) return;
+    if(!confirm("End Day? This clears all subjects. Admin must re-assign tomorrow.")) return;
 
     const todayStr = new Date().toLocaleDateString();
     const todayKey = todayStr.replace(/\//g, "-");
     
-    // 1. Fetch current data for logging
+    // 1. Fetch current tasks to log them to progress table first
     const snapshot = await get(ref(db, `users/${currentUser.uid}`));
     const data = snapshot.val() || {};
-    
     const tasks = JSON.parse(data.TASKS || "[]");
     const maps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
 
-    // 2. Consolidate logic: 1 row per subject
+    // 2. Logic to group by subject for the progress table
     const summary = {}; 
     tasks.forEach(t => {
-        if (t.done && maps[t.id]) {
-            const subject = t.subjectOnly || "General";
-            if (!summary[subject]) summary[subject] = { covered: [], uncovered: [] };
-
+        const sub = t.subjectOnly || "General";
+        if (!summary[sub]) summary[sub] = { covered: [], uncovered: [] };
+        if (maps[t.id]) {
             maps[t.id].forEach(node => {
-                if (node.status === 'done') {
-                    summary[subject].covered.push(`[${node.module}] ${node.label}`);
-                } else {
-                    summary[subject].uncovered.push(`[${node.module}] ${node.label}`);
-                }
+                if (node.status === 'done') summary[sub].covered.push(node.label);
+                else summary[sub].uncovered.push(node.label);
             });
         }
     });
 
     // 3. Save to Progress Table
-    for (const sub in summary) {
-        saveAutomatedSubjectProgress(
-            sub, 
-            summary[sub].covered.join(", ") || "Completed", 
-            summary[sub].uncovered.join(", ") || "All Clear"
-        );
+    for (const s in summary) {
+        saveAutomatedSubjectProgress(s, summary[s].covered.join(", "), summary[s].uncovered.join(", "));
     }
 
-    // 4. THE CLEANUP: Reset everything for the next day
-    const cleanupUpdates = {};
-    cleanupUpdates[`users/${currentUser.uid}/TASKS`] = "[]";
-    cleanupUpdates[`users/${currentUser.uid}/EXTRA`] = "[]";
-    cleanupUpdates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null; // Delete today's maps
-    cleanupUpdates[`users/${currentUser.uid}/CURRENT_SHIFT_LABEL`] = "No Shift Active";
-    cleanupUpdates[`users/${currentUser.uid}/SHIFT_END_TS`] = null;
+    // 4. THE HARD CLEAR
+    const updates = {};
+    updates[`users/${currentUser.uid}/TASKS`] = "[]";
+    updates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null;
+    updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; // Forces prompt on next login
+    
+    await update(ref(db), updates);
 
-    try {
-        await update(ref(db), cleanupUpdates);
-        
-        // Clear local storage markers
-        localStorage.removeItem(key("DAILY_GOAL_DATE"));
-        localStorage.removeItem(key("SHIFT_END_TS"));
-        localStorage.setItem(key("TASKS"), "[]");
-        localStorage.setItem(key("EXTRA"), "[]");
-
-        alert("Day End Successful. Dashboard Cleared.");
-        location.reload();
-    } catch (err) {
-        alert("Cleanup Error: " + err.message);
-    }
+    // 5. Clear Local Storage
+    localStorage.removeItem("DAILY_GOAL_DATE");
+    localStorage.removeItem(key("TASKS"));
+    
+    alert("Day End Complete. Dashboard Cleared.");
+    location.reload();
 };
  window.loadTasks = function() {
-    const tList = document.getElementById("taskList");
-    if (!tList) return; 
-
-    tList.innerHTML = "";
+    const taskList = document.getElementById("taskList");
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     
-    // Get daily map data to check if button should be "MAP" or "SET JOURNEY"
-    // We fetch this from Firebase via onValue elsewhere, but check LocalStorage here
-    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    const today = new Date().toLocaleDateString();
+    taskList.innerHTML = ""; // Clear list
+    
+    if (tasks.length === 0) {
+        taskList.innerHTML = "<div style='color:#64748b; padding:20px;'>Waiting for Admin to assign subjects...</div>";
+        return;
+    }
 
-    tasks.forEach(t => {
-        const div = document.createElement("div");
-        div.style.cssText = "background:#0f172a; border:1px solid #1e293b; padding:12px; border-radius:10px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; color:white;";
-        
-        const taskId = t.id;
-        const cleanName = t.name.replace(/'/g, "\\'");
-
-        // Logic: If Admin pushed a map for this ID, show 🗺 MAP.
-        let hasMap = false;
-        if (dailyMaps[today] && dailyMaps[today][taskId]) hasMap = true;
-
-        const btnHtml = hasMap 
-            ? `<button onclick="showByjusMap('${cleanName}', '${taskId}')" style="width:auto; padding:4px 10px; background:#0ea5e9; border:none; color:white; border-radius:4px; font-size:10px; font-weight:bold; cursor:pointer;">🗺 MAP</button>`
-            : `<button onclick="openSubjectJourney('${cleanName}', '${taskId}')" style="width:auto; padding:4px 10px; background:#334155; border:none; color:white; border-radius:4px; font-size:10px; cursor:pointer;">+ SET JOURNEY</button>`;
-
-        div.innerHTML = `
-            <div style="display:flex; align-items:center; gap:10px;">
-                <input type="checkbox" ${t.done?'checked':''}>
-                <span style="font-size:13px;">${t.name}</span>
-            </div>
-            ${btnHtml}
-        `;
-        
-        tList.appendChild(div);
+    tasks.forEach(task => {
+        // Render tasks assigned by Admin (No student selection button here)
+        const item = document.createElement("div");
+        item.className = "task-item";
+        item.innerHTML = `
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <span>${task.name}</span>
+                <button onclick="showByjusMap('${task.subjectOnly}', '${task.id}')" style="background:#0ea5e9;">🗺 MAP</button>
+            </div>`;
+        taskList.appendChild(item);
     });
 };
 // --- ATTACH TO WINDOW ---
