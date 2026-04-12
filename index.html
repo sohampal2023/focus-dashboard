@@ -555,9 +555,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         </div>
     </div>
 </div>
-
-<div id="studentView">
-    <div id="studentView" class="hidden">
+  <div id="studentView" class="hidden">
         
         <div id="adminFeedbackBox" class="feedback-box hidden">...</div>
         <div id="leaveDashboardBox" class="hidden">...</div>
@@ -3023,43 +3021,25 @@ function getAccuracyRemark(acc) {
 
 
 // --- DAY END ---
-
 window.openDayEnd = function() {
-  clearInterval(idleTimer);
-  const idleBox = document.getElementById("idleBox");
-  if(idleBox) idleBox.classList.add("hidden");
-  
-  const nextInputs = document.getElementById("nextInputs");
-  
-  // 1. Generate Options for the Dropdown
-  let optionsHtml = `<option value="">Select Subject</option>`;
-  FIXED_SUBJECTS.forEach(sub => {
-    optionsHtml += `<option value="${sub}">${sub}</option>`;
-  });
 
-  nextInputs.innerHTML = `
-    <div style="margin-bottom:15px; color:#cbd5e1; font-size:13px; text-align:center">
-      Enter your plan for tomorrow. <br>
-      <span style="color:#facc15">Subject</span> is mandatory. <span style="color:#38bdf8">Topic</span> is your target.
-    </div>
-  `;
-  
-  // 2. Render Dropdowns instead of Text Inputs
-  for (let i = 0; i < 7; i++) {
-    nextInputs.innerHTML += `
-      <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:10px; margin-bottom:8px;">
-        
-        <select class="nextInput" id="nd_sub_${i}" style="margin:0; cursor:pointer; background:#0f172a; border:1px solid #334155; color:#e5e7eb;">
-           ${optionsHtml}
-        </select>
+  const nextDayBox = document.getElementById("nextDayBox");
+  const reportBox = document.getElementById("reportBox");
 
-        <input class="nextInput" id="nd_top_${i}" placeholder="Target Topic (e.g. Unit 1)" style="margin:0">
-      </div>
-    `;
+  if (!nextDayBox || !reportBox) {
+    console.error("DayEnd UI elements not found");
+    return;
   }
 
-  document.getElementById("nextDayBox").classList.remove("hidden");
-}
+  nextDayBox.classList.remove("hidden");
+  reportBox.classList.remove("hidden");
+
+  nextDayBox.innerHTML = `
+    <h3>Confirm Day End</h3>
+    <button onclick="finalDayEnd()">Submit Day End</button>
+  `;
+
+};
 function finalDayEnd() {
     if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
 
