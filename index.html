@@ -2111,7 +2111,7 @@ window.studentUnsubscribe = onValue(userRef, (snapshot) => {
 }); (error) => {
         console.error("Firebase Read Error:", error);
         document.getElementById("syncStatus").innerText = "Offline";
-    });
+    };
 
     // 5. Start Watchdog Session
     startIdle(1800);
