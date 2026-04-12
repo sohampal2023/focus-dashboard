@@ -2043,7 +2043,7 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // 1. --- UI VISIBILITY & ADMIN CHECK ---
+    // 1. --- UI VISIBILITY ---
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox")?.classList.remove("hidden");
     document.getElementById("logBox")?.classList.remove("hidden");
@@ -2052,38 +2052,25 @@ async function initStudentDashboard() {
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 2. --- DOWNLOAD DATA & LEAVE BALANCE ---
+    // 2. --- DOWNLOAD DATA ---
     const serverData = await downloadData(currentUser.uid);
-    
-    // Update Leave Balance UI from Firebase
-    const leaveBtn = document.getElementById("leaveBtn");
-    if(leaveBtn) {
-        const bal = serverData?.leaveBalance || 0;
-        leaveBtn.innerText = `Leave Bal: ${bal}`;
-    }
-
     if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
         location.reload(); 
         return; 
     }
 
-    // 3. --- SHIFT GOAL PROMPT (FORCE ASK IF DAY ENDED) ---
+    // 3. --- SHIFT PROMPT (RESTORED LOGIC) ---
     const todayStr = new Date().toLocaleDateString();
     let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
 
-    // If goalDate is missing, Day End was pressed. Force a new session setup.
+    // If goalDate is missing (Day End was pressed), ask for shifts
     if (!goalDate || goalDate !== todayStr) {
-        let askedShifts = prompt("START NEW SESSION: How many SHIFTS (2 hours each) for today?", "3");
+        let askedShifts = prompt("Enter number of shifts for today (2 hours each):", "3");
         if (!askedShifts || isNaN(askedShifts)) askedShifts = "3"; 
         
         localStorage.setItem(key("DAILY_SHIFT_COUNT"), askedShifts);
         localStorage.setItem(key("DAILY_GOAL_DATE"), todayStr);
         
-        // Reset state for new session
-        localStorage.setItem(key("PENALTY"), "0");
-        localStorage.setItem(key("IDLE_STRIKES"), "0");
-        localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
-
         await update(ref(db, `users/${currentUser.uid}`), { 
             dailyShiftTarget: askedShifts, 
             dailyGoalDate: todayStr,
@@ -2091,20 +2078,12 @@ async function initStudentDashboard() {
         });
     }
 
-    // 4. --- RECOVER BALANCES ---
+    // 4. --- RECOVER STATE ---
     dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
     document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
 
-    // 5. --- BIO BREAK / PENDING REASON CHECK ---
-    let logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    if (logs.length > 0 && logs[logs.length - 1].reason === "Pending") {
-        const userReason = prompt("Reason for previous break?", "Bio Break");
-        logs[logs.length - 1].reason = userReason || "Bio Break";
-        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-    }
-
-    // 6. --- RESUME OR START SHIFT TIMER ---
+    // 5. --- SHIFT TIMER RESUME ---
     const pausedRemaining = localStorage.getItem(key("PAUSED_SHIFT_REMAINING"));
     if (pausedRemaining && parseInt(pausedRemaining) > 0) {
         localStorage.setItem(key("SHIFT_END_TS"), Date.now() + parseInt(pausedRemaining));
@@ -2114,12 +2093,7 @@ async function initStudentDashboard() {
         localStorage.setItem(key("SHIFT_END_TS"), Date.now() + (totalMins * 60000));
     }
 
-    if (!logs.length || logs[logs.length - 1].logoutTS !== null) {
-        logs.push({ login: new Date().toLocaleString(), loginTS: Date.now(), logout: "-", logoutTS: null, reason: "-", completed: [] });
-        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-    }
-
-    // 7. --- COMPONENT START ---
+    // 6. --- COMPONENT START ---
     startIdle(1800);      
     loadSubjectList();    
     setupTasks(); 
@@ -2129,17 +2103,23 @@ async function initStudentDashboard() {
     runShiftTimer();      
     uploadData();
 
-    // 8. --- FORCE UNLOCK BUTTONS ---
-    const buttonsToUnlock = ["bioBtn", "histBtn", "dayBtn", "leaveBtn", "noticeBtn", "refreshBtn"];
-    buttonsToUnlock.forEach(id => {
+    // 7. --- ENABLE ALL SIDEBAR BUTTONS ---
+    const buttons = ["bioBtn", "histBtn", "dayBtn", "leaveBtn", "noticeBtn", "refreshBtn"];
+    buttons.forEach(id => {
         const btn = document.getElementById(id);
         if(btn) {
             btn.disabled = false;
             btn.style.opacity = "1";
-            btn.style.pointerEvents = "auto";
             btn.style.cursor = "pointer";
         }
     });
+
+    // RE-ENABLE SUBJECT PROGRESS BUTTON
+    const progBtn = document.querySelector("button[onclick='toggleSubjectProgress()']");
+    if(progBtn) {
+        progBtn.disabled = false;
+        progBtn.style.opacity = "1";
+    }
 }
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
@@ -3400,7 +3380,7 @@ let activeMapTimer = null;
 window.showByjusMap = function(subjectName, taskId) {
     const uniqueKey = taskId || subjectName;
     currentMapSubject = subjectName;
-    window.currentMapTaskId = uniqueKey; // Ensure global tracking
+    window.currentMapTaskId = uniqueKey; 
     
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
@@ -3424,35 +3404,43 @@ window.showByjusMap = function(subjectName, taskId) {
     const container = document.getElementById("mapContainer");
     container.innerHTML = "";
     
+    // --- RESTORED HEADER LOGIC ---
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
-        <div style="display:flex; flex-direction:column; gap:4px;">
+        <div style="display:flex; flex-direction:column; gap:5px; width:100%;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-weight:bold; color:#38bdf8;">${subjectName}</span>
-                <button onclick="addNewSubTopic('${uniqueKey.replace(/'/g, "\\'")}')" style="background:#16a34a; font-size:9px; padding:4px 8px; border-radius:4px; border:none; color:white;">➕ TOPIC</button>
+                <span style="font-size:1.1rem; color:#38bdf8; font-weight:bold;">${subjectName}</span>
+                <button onclick="addNewSubTopic('${uniqueKey.replace(/'/g, "\\'")}')" style="background:#16a34a; font-size:9px; padding:4px 10px; border-radius:4px; border:none; color:white;">➕ TOPIC</button>
+            </div>
+            <div style="font-size:10px; color:#94a3b8; border-top:1px solid #1e293b; padding-top:5px; margin-top:5px;">
+                STUDIED: ${usedTime}m | REMAINING: ${remainTime}m | TOTAL BUDGET: ${totalDayMins}m
             </div>
         </div>
     `;
 
     (dailyMaps[today][uniqueKey] || []).forEach((node, idx) => {
         const isFinished = node.status === 'done';
+        const isDoing = node.status === 'doing';
         const displayMins = isFinished ? node.dynamicMins : evenAlloc;
         
         const row = document.createElement("div");
         row.style.cssText = "display:flex; align-items:center; margin-bottom:30px; gap:15px;";
         row.innerHTML = `
-            <div class="node-circle status-${node.status}" style="width:45px; height:45px;">
-                ${isFinished ? '✔' : idx+1}
+            <div class="node-circle status-${node.status}" style="width:45px; height:45px; display:flex; align-items:center; justify-content:center;">
+                ${isFinished ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:11px; color:#000;">--:--</span>' : idx+1}
             </div>
             <div style="flex-grow:1; background:#0f172a; padding:15px; border-radius:12px; border:1px solid #1e293b;">
-                <div style="font-weight:bold; color:#fff;">${node.label}</div>
-                <div style="font-size:11px; color:#38bdf8; font-weight:900;">${displayMins}m</div>
+                <div style="font-weight:bold; color:#fff; font-size:13px;">${node.label}</div>
+                <div style="font-size:11px; color:#38bdf8; font-weight:900;">${isFinished ? 'Used: ' : ''}${displayMins}m</div>
                 <div style="margin-top:10px;">
-                    ${!isFinished ? `<button onclick="handleNodeAction(${idx}, 'start', ${displayMins})" style="background:#0ea5e9; padding:5px 12px; font-size:10px;">START</button>` : ''}
+                    ${!isFinished ? 
+                        `<button onclick="handleNodeAction(${idx}, '${isDoing ? 'done' : 'start'}', ${displayMins})" style="background:${isDoing ? '#16a34a' : '#0ea5e9'}; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px;">${isDoing ? 'DONE' : 'START'}</button>` 
+                        : `<span style="color:#4ade80; font-size:10px;">● COMPLETED</span>`}
                 </div>
             </div>
         `;
         container.appendChild(row);
+        if (isDoing) startCountdown(displayMins);
     });
     document.getElementById("byjusMapBox").classList.remove("hidden");
 };
