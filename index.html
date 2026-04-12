@@ -3782,96 +3782,75 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
 };
 window.finalDayEnd = async function() {
     // 1. --- FINAL CONFIRMATION ---
-    if(!confirm("End Day? This will log completed topics, clear all 'Extra Work', and reset the map for a fresh start tomorrow.")) return;
+    if(!confirm("Submit Daily Report? \n- Completed Topics -> Saved to Progress\n- Extra Work -> Cleared\n- Map -> Reset\n- Undone Tasks -> Kept for Tomorrow")) return;
 
     const today = new Date().toLocaleDateString();
     const todayKey = today.replace(/\//g, "-");
 
     try {
-        // 2. --- PROCESS MAP JOURNEYS TO HISTORY ---
-        // We fetch the current maps to see what was finished today
+        // 2. --- SAVE COMPLETED JOURNEY DATA TO SUBJECT PROGRESS ---
         const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        const maps = snapshot.val() || {};
+        if (snapshot.exists()) {
+            const maps = snapshot.val();
+            for (const taskId in maps) {
+                const nodes = maps[taskId];
+                const completed = nodes.filter(n => n.status === 'done').map(n => n.label);
+                const pending = nodes.filter(n => n.status !== 'done').map(n => n.label);
 
-        Object.keys(maps).forEach(taskId => {
-            const nodes = maps[taskId];
-            const completedByModule = {};
-            const pendingByModule = {};
-
-            nodes.forEach(n => {
-                const modName = n.module || "General";
-                if (n.status === 'done') {
-                    if (!completedByModule[modName]) completedByModule[modName] = [];
-                    completedByModule[modName].push(n.label);
-                } else {
-                    if (!pendingByModule[modName]) pendingByModule[modName] = [];
-                    pendingByModule[modName].push(n.label);
+                if (completed.length > 0) {
+                    saveAutomatedSubjectProgress(
+                        `${taskId}`, 
+                        completed.join(", "), 
+                        pending.length > 0 ? pending.join(", ") : "All Clear"
+                    );
                 }
-            });
+            }
+        }
 
-            // Log each Module's work into the Subject Progress Table (Permanent History)
-            Object.keys(completedByModule).forEach(mod => {
-                // Formatting: "Subject Name [Module Name]"
-                saveAutomatedSubjectProgress(
-                    `${taskId} [${mod}]`, 
-                    completedByModule[mod].join(", "), 
-                    pendingByModule[mod] ? pendingByModule[mod].join(", ") : "All Clear"
-                );
-            });
-        });
-
-        // 3. --- SERVER & LOCAL CLEANUP ---
-        // 🔥 WIPE MAPS: This ensures the "Set Journey" button reappears tomorrow
+        // 3. --- CLEANUP SERVER DATA ---
+        // Wipe the maps from the server so they don't show up tomorrow
         await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        localStorage.removeItem(MAP_STORAGE_KEY());
 
-        // 🔥 RESET EXTRA WORK: Clears the accumulated list from your screenshot
+        // 4. --- CLEANUP LOCAL STORAGE ---
+        // Clear Extra Work completely
         localStorage.setItem(key("EXTRA"), "[]");
+        
+        // Filter Assigned Tasks: Keep ONLY the ones that were NOT checked
+        const currentTasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+        const tasksToCarryForward = currentTasks.filter(t => t.done === false);
+        localStorage.setItem(key("TASKS"), JSON.stringify(tasksToCarryForward));
 
-        // 4. --- TASK FILTERING ---
-        // Keep only tasks that were NOT checked (Undone)
-        const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-        const remainingTasks = tasks.filter(t => !t.done);
-        localStorage.setItem(key("TASKS"), JSON.stringify(remainingTasks));
-
-        // 5. --- RESET DAILY MARKERS ---
+        // 5. --- RESET DAILY COUNTERS ---
         localStorage.removeItem(key("DAILY_GOAL_DATE"));
         localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
         localStorage.removeItem(key("SHIFT_END_TS"));
-        localStorage.removeItem(key("CURRENT_SHIFT_LABEL"));
+        localStorage.removeItem(MAP_STORAGE_KEY());
         localStorage.setItem(key("PENALTY"), "0");
-        localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
-        localStorage.setItem(key("IDLE_STRIKES"), "0");
 
-        // 6. --- FINAL SYNC & REPORT ---
-        await uploadData(); // Final push of remaining tasks and penalty reset
-        
+        // 6. --- FINAL PUSH TO SERVER ---
+        // Ensure the server knows about the remaining tasks before we logout
+        await uploadData();
+
+        // 7. --- GENERATE REPORT & LOCK ---
         const p = calculate();
         const reportHTML = `
-            <div style="padding:20px; max-width:500px; margin:0 auto;">
-                <div class="card" style="background:#1e1b4b; border-color:#6366f1; text-align:center; padding:30px;">
-                    <h2 style="color:#a5b4fc; margin-bottom:10px;">DAY COMPLETED</h2>
-                    <div style="font-size:14px; color:#c7d2fe; margin-bottom:20px;">All data synced to cloud</div>
-                    
-                    <div style="font-size:60px; font-weight:800; color:#38bdf8; line-height:1;">${p.percent}%</div>
-                    <div style="font-size:24px; color:#e0e7ff; margin-bottom:20px; font-weight:bold;">${getLabel(p.percent)}</div>
-                    
-                    <button onclick="dismissReportLock()" style="width:100%; background:#22c55e; padding:15px; font-size:16px; font-weight:bold; color:white; border:none; border-radius:8px; cursor:pointer;">
-                        START NEW DAY / LOGIN
-                    </button>
-                </div>
+            <div class="card" style="background:#0f172a; border:2px solid #38bdf8; text-align:center; padding:40px; border-radius:15px;">
+                <h2 style="color:#38bdf8; margin-bottom:20px;">REPORT FOR ${today}</h2>
+                <div style="font-size:72px; font-weight:900; color:#fff; margin-bottom:10px;">${p.percent}%</div>
+                <div style="font-size:20px; color:#94a3b8; margin-bottom:30px;">Rating: ${getLabel(p.percent)}</div>
+                <button onclick="dismissReportLock()" style="background:#22c55e; color:white; padding:15px 30px; border:none; border-radius:10px; font-weight:800; cursor:pointer; width:100%;">START NEW DAY</button>
             </div>`;
-
+        
         localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
 
-        // 7. --- LOGOUT ---
-        signOut(auth).then(() => {
-            location.reload(); 
-        });
+        // 8. --- LOGOUT ---
+        setTimeout(() => {
+            signOut(auth).then(() => location.reload());
+        }, 1000);
 
     } catch (e) {
-        console.error("Critical Day End Error:", e);
-        alert("Failed to close day. Check internet and try again.");
+        console.error("Day End Error:", e);
+        alert("Sync error. Please try again.");
     }
 };
 // --- ATTACH TO WINDOW ---
