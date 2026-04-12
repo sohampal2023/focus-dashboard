@@ -2050,32 +2050,51 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // 1. --- FORCE UI VISIBILITY ---
+    // --- STEP 1: FORCE UI VISIBILITY IMMEDIATELY ---
+    // We remove "hidden" from everything first so you don't see a blank screen
     const studentView = document.getElementById("studentView");
     const taskBox = document.getElementById("taskBox");
+    const logBox = document.getElementById("logBox");
+    const studentControls = document.getElementById("studentControls");
+
     if (studentView) studentView.classList.remove("hidden");
     if (taskBox) taskBox.classList.remove("hidden");
+    if (logBox) logBox.classList.remove("hidden");
+    if (studentControls) studentControls.classList.remove("hidden");
 
-    // 2. --- DOWNLOAD DATA ---
+    // --- STEP 2: FORCE UNLOCK ALL SIDEBAR BUTTONS ---
+    // This looks for every button in the sidebar and forces it to be clickable
+    const allButtons = document.querySelectorAll(".sidebar button");
+    allButtons.forEach(btn => {
+        btn.disabled = false;
+        btn.style.opacity = "1";
+        btn.style.cursor = "pointer";
+        btn.style.filter = "none";
+        btn.style.pointerEvents = "auto";
+    });
+
+    // --- STEP 3: SYNC DATA FROM SERVER ---
     const serverData = await downloadData(currentUser.uid);
     const today = new Date().toLocaleDateString();
     const todayKey = today.replace(/\//g, "-");
 
-    // 3. --- 🔥 THE HARD UNLOCK FIX ---
-    // This finds the button by searching for the text "Subject Progress"
-    const allBtns = document.getElementsByTagName("button");
-    for (let btn of allBtns) {
-        if (btn.innerText.includes("Subject Progress") || btn.getAttribute("onclick")?.includes("toggleSubjectProgress")) {
-            btn.disabled = false;
-            btn.style.opacity = "1";
-            btn.style.cursor = "pointer";
-            btn.style.filter = "none";
-            btn.style.pointerEvents = "auto"; // Fixes clicks if they were blocked
-            console.log("Subject Progress Button Unlocked");
-        }
+    // --- STEP 4: SHIFT PROMPT FOR NEW DAY ---
+    let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
+    if (!goalDate || goalDate !== today) {
+        let shifts = prompt("New Day! Enter number of 2-hour shifts for today:", "3");
+        if (!shifts || isNaN(shifts)) shifts = "3";
+        
+        localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
+        localStorage.setItem(key("DAILY_GOAL_DATE"), today);
+        
+        // Sync this shift info to server
+        await update(ref(db, `users/${currentUser.uid}`), { 
+            dailyShiftTarget: shifts, 
+            dailyGoalDate: today 
+        });
     }
 
-    // 4. --- MULTI-DEVICE MAP SYNC ---
+    // --- STEP 5: SYNC JOURNEY MAPS ---
     try {
         const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
         if (mapSnap.exists()) {
@@ -2083,23 +2102,20 @@ async function initStudentDashboard() {
             localMaps[today] = mapSnap.val();
             localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
         }
-    } catch (e) { console.error("Map Sync Failed"); }
+    } catch (e) { console.log("Map sync skipped"); }
 
-    // 5. --- START COMPONENTS ---
+    // --- STEP 6: START COMPONENTS ---
     loadSubjectList();
-    setupTasks(); 
     loadTasks();
     updateProgress();
     runShiftTimer();
-    
-    // Unlock remaining buttons
-    const navBtns = ["bioBtn", "histBtn", "dayBtn", "noticeBtn", "leaveBtn"];
-    navBtns.forEach(id => {
-        const b = document.getElementById(id);
-        if(b) { b.disabled = false; b.style.opacity = "1"; }
-    });
-}
+    startIdle(1800); // Start the Watchdog Timer
 
+    // Final UI Check
+    document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
+    document.getElementById("logoutBtn").classList.remove("hidden");
+    document.getElementById("loginBtn").classList.add("hidden");
+}
 // Helper to recalculate time based on shifts
 async function redistributeTimeForNewDay(shifts) {
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
