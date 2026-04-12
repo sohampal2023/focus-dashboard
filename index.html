@@ -3297,12 +3297,16 @@ window.generateMapFromBulk = function() {
     }
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    if(data.dailyMaps && data.dailyMaps[todayKey]) {
+    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify({[new Date().toLocaleDateString()]: data.dailyMaps[todayKey]}));
+}
     const targetUid = window.currentAdminTargetUid || currentUser.uid;
     const uniqueTaskId = "TASK_" + Date.now();
 
-    // Create detailed name: SUBJECT [MODULE]: Topic1, Topic2...
+    // FIX: Explicitly use window.currentMapSubject string to avoid [object HTML...]
+    const subjectTitle = String(window.currentMapSubject);
     const summary = lines.slice(0, 3).join(", ") + (lines.length > 3 ? "..." : "");
-    const detailedName = `${window.currentMapSubject} [${moduleName}]: ${summary}`;
+    const detailedName = `${subjectTitle} [${moduleName}]: ${summary}`;
 
     const newMapData = lines.map(line => ({
         label: line.trim(),
@@ -3707,28 +3711,41 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
     location.reload();
 };
-  window.loadTasks = function() {
+ window.loadTasks = function() {
     const tList = document.getElementById("taskList");
-    const eList = document.getElementById("extraList");
     if (!tList) return; 
 
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-
     tList.innerHTML = "";
-    eList.innerHTML = "";
-
-    if (tasks.length === 0 && extras.length === 0) {
-        tList.innerHTML = `<div style="padding:20px; border:1px dashed #334155; border-radius:10px; color:#64748b; text-align:center;">
-            NO TASKS ASSIGNED. <br> Admin must "Set Journey" to show topics.
-        </div>`;
-        return;
-    }
+    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+    
+    // Get daily map data to check if button should be "MAP" or "SET JOURNEY"
+    // We fetch this from Firebase via onValue elsewhere, but check LocalStorage here
+    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    const today = new Date().toLocaleDateString();
 
     tasks.forEach(t => {
         const div = document.createElement("div");
-        div.style.cssText = "background:#0f172a; border:1px solid #1e293b; padding:12px; border-radius:10px; margin-bottom:10px; color:white;";
-        div.innerHTML = `<input type="checkbox" ${t.done?'checked':''}> <span>${t.name}</span>`;
+        div.style.cssText = "background:#0f172a; border:1px solid #1e293b; padding:12px; border-radius:10px; margin-bottom:10px; display:flex; align-items:center; justify-content:space-between; color:white;";
+        
+        const taskId = t.id;
+        const cleanName = t.name.replace(/'/g, "\\'");
+
+        // Logic: If Admin pushed a map for this ID, show 🗺 MAP.
+        let hasMap = false;
+        if (dailyMaps[today] && dailyMaps[today][taskId]) hasMap = true;
+
+        const btnHtml = hasMap 
+            ? `<button onclick="showByjusMap('${cleanName}', '${taskId}')" style="width:auto; padding:4px 10px; background:#0ea5e9; border:none; color:white; border-radius:4px; font-size:10px; font-weight:bold; cursor:pointer;">🗺 MAP</button>`
+            : `<button onclick="openSubjectJourney('${cleanName}', '${taskId}')" style="width:auto; padding:4px 10px; background:#334155; border:none; color:white; border-radius:4px; font-size:10px; cursor:pointer;">+ SET JOURNEY</button>`;
+
+        div.innerHTML = `
+            <div style="display:flex; align-items:center; gap:10px;">
+                <input type="checkbox" ${t.done?'checked':''}>
+                <span style="font-size:13px;">${t.name}</span>
+            </div>
+            ${btnHtml}
+        `;
+        
         tList.appendChild(div);
     });
 };
