@@ -791,18 +791,22 @@ onAuthStateChanged(auth, async (user) => {
 
     if (user) {
         currentUser = user;
-        document.getElementById("syncStatus").innerText = "Session Restored";
+        document.getElementById("syncStatus").innerText = "Syncing...";
         
         if (user.email === ADMIN_EMAIL) {
             initAdminDashboard();
         } else {
-            // Check if we need to ask for shifts before showing dashboard
-            const snap = await get(ref(db, `users/${user.uid}`));
+            // --- CRITICAL: FETCH FRESH DATA TO CHECK SHIFT STATUS ---
+            const userRef = ref(db, `users/${user.uid}`);
+            const snap = await get(userRef);
             const userData = snap.val() || {};
-            
-            // If DAILY_GOAL_DATE is missing, it means Day End was pressed previously
+
+            // ONLY ask if DAILY_GOAL_DATE is empty (this happens only after Day End)
             if (!userData.DAILY_GOAL_DATE) {
                 await askDailyBudget();
+            } else {
+                // If it exists, just ensure LocalStorage is synced so refreshes don't break
+                localStorage.setItem("DAILY_SHIFT_COUNT", userData.DAILY_SHIFT_COUNT);
             }
             
             initStudentDashboard();
@@ -810,7 +814,6 @@ onAuthStateChanged(auth, async (user) => {
     } else {
         currentUser = null;
         document.getElementById("loginBtn")?.classList.remove("hidden");
-        document.getElementById("studentView")?.classList.add("hidden");
     }
 });
 
@@ -2088,26 +2091,25 @@ window.studentUnsubscribe = onValue(userRef, (snapshot) => {
     startIdle(1800);
 };
 window.askDailyBudget = async function() {
-    const shifts = prompt("Welcome back! How many 2-hour shifts are you doing for this new session? (e.g., 3)");
+    const shifts = prompt("New Session Detected! How many 2-hour shifts are you doing? (e.g., 3)");
     const shiftNum = parseFloat(shifts);
 
     if (isNaN(shiftNum) || shiftNum <= 0) {
-        alert("A valid shift count is required to start.");
+        alert("Shift count is mandatory to build your journey.");
         return window.askDailyBudget(); 
     }
 
+    // Set the date flag. This prevents the prompt from appearing on refresh.
     const todayStr = new Date().toLocaleDateString();
     
-    // Save to Firebase to "unlock" the portal
     await update(ref(db, `users/${currentUser.uid}`), {
         "DAILY_SHIFT_COUNT": shiftNum,
-        "DAILY_GOAL_DATE": todayStr,
+        "DAILY_GOAL_DATE": todayStr, // This acts as our "Already Asked" flag
         "TASKS": "[]",
         "EXTRA": "[]"
     });
     
     localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
-    alert(`Target Set: ${shiftNum * 2} Hours. Portal Ready.`);
 };
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
@@ -3909,71 +3911,63 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will move pending subtopics to 'Due' and clear your current board.")) return;
+    if(!confirm("End Day? This clears everything and will ask for shifts on your next login.")) return;
 
     const todayStr = new Date().toLocaleDateString();
     const todayKey = todayStr.replace(/\//g, "-");
     
-    // 1. Fetch live data for report generation
     const snapshot = await get(ref(db, `users/${currentUser.uid}`));
-    if (!snapshot.exists()) return;
-    const data = snapshot.val();
-    
+    const data = snapshot.val() || {};
     const tasks = JSON.parse(data.TASKS || "[]");
     const maps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
 
-    // 2. LOGIC: Group by Subject Name (Covered vs Due)
-    const subjectReport = {}; 
-
-    tasks.forEach(task => {
-        const subName = task.subjectOnly || "General";
-        if (!subjectReport[subName]) {
-            subjectReport[subName] = { covered: [], due: [] };
-        }
-
-        if (maps && maps[task.id]) {
-            maps[task.id].forEach(node => {
-                if (node.status === 'done') {
-                    subjectReport[subName].covered.push(node.label);
-                } else {
-                    subjectReport[subName].due.push(node.label);
-                }
+    // 1. Process and save the report
+    const report = {}; 
+    tasks.forEach(t => {
+        const sub = t.subjectOnly || "General";
+        if (!report[sub]) report[sub] = { covered: [], due: [] };
+        if (maps[t.id]) {
+            maps[t.id].forEach(n => {
+                if (n.status === 'done') report[sub].covered.push(n.label);
+                else report[sub].due.push(n.label);
             });
         }
     });
 
-    // 3. Save one row per subject into the Progress Table
-    for (const sub in subjectReport) {
-        const coveredText = subjectReport[sub].covered.length > 0 ? subjectReport[sub].covered.join(", ") : "None";
-        const dueText = subjectReport[sub].due.length > 0 ? subjectReport[sub].due.join(", ") : "None";
-        
-        if (coveredText !== "None" || dueText !== "None") {
-            saveAutomatedSubjectProgress(sub, coveredText, dueText);
-        }
+    for (const s in report) {
+        saveAutomatedSubjectProgress(
+            s, 
+            report[s].covered.join(", ") || "None", 
+            report[s].due.join(", ") || "None"
+        );
     }
 
-    // 4. THE HARD CLEAR (Wipes Firebase active state)
+    // 2. THE WIPE: Delete DAILY_GOAL_DATE so the next login triggers the prompt
     const updates = {};
     updates[`users/${currentUser.uid}/TASKS`] = "[]";
     updates[`users/${currentUser.uid}/EXTRA`] = "[]";
-    updates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null; // Deletes maps
-    updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; // Forces shift prompt next time
+    updates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null;
+    updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; // Forces prompt next time
     updates[`users/${currentUser.uid}/SHIFT_END_TS`] = null;
     updates[`users/${currentUser.uid}/CURRENT_SHIFT_LABEL`] = "No Shift Active";
-    updates[`users/${currentUser.uid}/PENALTY`] = "0"; // Reset penalty
-    updates[`users/${currentUser.uid}/DAILY_TIMEOUTS`] = 0; // Reset timeouts
 
-    try {
-        await update(ref(db), updates);
-
-        // 5. Clear Local Storage to prevent "Midnight Autoreset"
-        localStorage.clear(); 
-
-        alert("Day End Successful. Board Cleared.");
-        location.reload(); 
-    } catch (err) {
-        alert("Cleanup Error: " + err.message);
-    }
+    await update(ref(db), updates);
+    
+    // 3. Clear LocalStorage and create the Locked Report
+    const finalScore = calculate().percent;
+    const reportHTML = `
+        <div class="card" style="background:#1e1b4b; text-align:center; padding:30px;">
+            <h2 style="color:#38bdf8;">SESSION COMPLETE</h2>
+            <div style="font-size:50px; font-weight:800; color:white;">${finalScore}%</div>
+            <p style="color:#94a3b8;">All progress has been synced to your Subject History.</p>
+        </div>`;
+    
+    localStorage.clear();
+    localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
+    
+    signOut(auth).then(() => {
+        location.reload();
+    });
 };
  window.loadTasks = function() {
     const taskList = document.getElementById("taskList");
