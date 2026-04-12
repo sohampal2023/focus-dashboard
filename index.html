@@ -791,35 +791,37 @@ const FIXED_SUBJECTS = [
   "GOVT_ENGLISH"
 ];
 window.askDailyBudget = async function() {
-
     const todayStr = new Date().toLocaleDateString();
+    const userRef = ref(db, `users/${currentUser.uid}`);
+    
+    try {
+        const snap = await get(userRef);
+        const user = snap.val() || {};
 
-    const snap = await get(ref(db, `users/${currentUser.uid}`));
-    const user = snap.val() || {};
+        // If goal already exists for today in Firebase, sync to local and exit
+        if (user.DAILY_GOAL_DATE === todayStr && user.DAILY_SHIFT_COUNT) {
+            localStorage.setItem("DAILY_SHIFT_COUNT", user.DAILY_SHIFT_COUNT);
+            return;
+        }
 
-    // ✅ If already set today → DO NOT ASK AGAIN
-    if (user.DAILY_GOAL_DATE === todayStr) {
-        localStorage.setItem("DAILY_SHIFT_COUNT", user.DAILY_SHIFT_COUNT);
-        return;
+        // Otherwise, Force the prompt
+        let shiftNum = 0;
+        while (shiftNum <= 0 || isNaN(shiftNum)) {
+            const shifts = prompt("NEW DAY DETECTED\nEnter total shifts for today (1 shift = 2 hrs):", "3");
+            if (shifts === null) continue; // Prevent cancelling
+            shiftNum = parseInt(shifts);
+        }
+
+        // Save to Firebase and LocalStorage
+        await update(userRef, {
+            DAILY_SHIFT_COUNT: shiftNum,
+            DAILY_GOAL_DATE: todayStr
+        });
+        localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
+        
+    } catch (e) {
+        console.error("Budget Error:", e);
     }
-
-    // 🔴 NEW DAY → FORCE ASK
-    const shifts = prompt("New Day: Enter number of shifts:");
-    const shiftNum = parseInt(shifts);
-
-    if (isNaN(shiftNum) || shiftNum <= 0) {
-        alert("Valid shift required.");
-        return window.askDailyBudget();
-    }
-
-    // ✅ Save in Firebase
-    await update(ref(db, `users/${currentUser.uid}`), {
-        DAILY_SHIFT_COUNT: shiftNum,
-        DAILY_GOAL_DATE: todayStr
-    });
-
-    // ✅ Save locally (avoid repeat prompt)
-    localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
 };
 
 // --- GLOBAL VARIABLES ---
@@ -2049,78 +2051,38 @@ async function loadNotices() {
         console.error("Notice load error:", e);
     }
 }
-window.initStudentDashboard = function() {
+window.initStudentDashboard = async function() {
     const userRef = ref(db, `users/${currentUser.uid}`);
     
-    // 1. Check Firebase first to see if this is a fresh start or a refresh (F5)
-    get(userRef).then(async (snap) => {
-        const data = snap.val() || {};
+    // 1. Initial Data Fetch
+    const snap = await get(userRef);
+    const data = snap.val() || {};
+
+    // 2. Force Daily Budget Check
+    await window.askDailyBudget();
+
+    // 3. Setup Real-time Listener
+    if (window.studentUnsubscribe) window.studentUnsubscribe();
+    window.studentUnsubscribe = onValue(userRef, (snapshot) => {
+        const liveData = snapshot.val() || {};
         
-        // If DAILY_GOAL_DATE is missing, Day End was pressed. Ask for shifts.
-        if (!data.DAILY_GOAL_DATE) {
-            await askDailyBudget(); 
-        } else {
-            // It's a refresh. Sync the shift count to LocalStorage for the UI logic.
-            localStorage.setItem("DAILY_SHIFT_COUNT", data.DAILY_SHIFT_COUNT);
-        }
+        // Sync critical keys to LocalStorage for logic consistency
+        if(liveData.TASKS) localStorage.setItem(key("TASKS"), liveData.TASKS);
+        if(liveData.EXTRA) localStorage.setItem(key("EXTRA"), liveData.EXTRA);
+        if(liveData.PENALTY) penalty = parseInt(liveData.PENALTY) || 0;
 
-        // 2. Start the Real-Time Sync Listener
-        if (window.studentUnsubscribe) window.studentUnsubscribe();
-        
-        window.studentUnsubscribe = onValue(userRef, (snapshot) => {
-            try {
-                const liveData = snapshot.val() || {};
-                const todayDate = new Date().toLocaleDateString();
-                const todayKey = todayDate.replace(/\//g, "-");
+        // UI visibility
+        document.getElementById("studentView").classList.remove("hidden");
+        document.getElementById("studentControls").classList.remove("hidden");
+        document.getElementById("loginBtn").classList.add("hidden");
+        document.getElementById("logoutBtn").classList.remove("hidden");
 
-                // Sync Task Data
-                localStorage.setItem(key("TASKS"), liveData.TASKS || "[]");
-                localStorage.setItem(key("EXTRA"), liveData.EXTRA || "[]");
-                
-                // Sync the Map for the specific session active in Firebase
-                const sessionDate = liveData.DAILY_GOAL_DATE || todayDate;
-                const sessionKey = sessionDate.replace(/\//g, "-");
-                
-                if (liveData.dailyMaps && liveData.dailyMaps[sessionKey]) {
-                    const mapStorage = {};
-                    mapStorage[sessionDate] = liveData.dailyMaps[sessionKey];
-                    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(mapStorage));
-                }
-
-                // --- UI VISIBILITY CONTROL ---
-                document.getElementById("studentView")?.classList.remove("hidden");
-                document.getElementById("studentControls")?.classList.remove("hidden");
-                document.getElementById("taskBox")?.classList.remove("hidden");
-                document.getElementById("logBox")?.classList.remove("hidden");
-                document.getElementById("loginBtn")?.classList.add("hidden");
-                document.getElementById("logoutBtn")?.classList.remove("hidden");
-
-                if (typeof window.loadTasks === "function") window.loadTasks();
-
-                // Unlock all sidebar buttons
-                document.querySelectorAll(".sidebar button").forEach(btn => {
-                    btn.disabled = false;
-                    btn.style.opacity = "1";
-                });
-
-                // Update Real-time Status Indicators
-                const shiftLabel = document.getElementById("currentShiftLabel");
-                if (shiftLabel) shiftLabel.innerText = liveData.CURRENT_SHIFT_LABEL || "No Shift Active";
-                
-                const timeoutDisp = document.getElementById("timeoutCounter");
-                if (timeoutDisp) timeoutDisp.innerText = "Timeouts: " + (liveData.DAILY_TIMEOUTS || 0);
-
-                document.getElementById("syncStatus").innerText = "Session Active";
-            } catch (err) {
-                console.error("Sync Error:", err);
-            }
-        }, (error) => {
-            console.error("Firebase Read Error:", error);
-            document.getElementById("syncStatus").innerText = "Offline";
-        });
+        // Render functions
+        window.loadTasks(); 
+        updateProgress();
+        runShiftTimer();
     });
 
-    // 3. Kick off the Watchdog
     startIdle(1800);
 };
 window.dismissFeedback = async function() {
@@ -3960,27 +3922,69 @@ window.finalDayEnd = async function() {
   signOut(auth).then(() => location.reload());
 };
  window.loadTasks = function() {
-    const taskList = document.getElementById("taskList");
+    const tList = document.getElementById("taskList");
+    const eList = document.getElementById("extraList");
+    if (!tList || !eList) return;
+
+    tList.innerHTML = "";
+    eList.innerHTML = "";
+
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-    
-    taskList.innerHTML = ""; // Clear list
-    
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+
     if (tasks.length === 0) {
-        taskList.innerHTML = "<div style='color:#64748b; padding:20px;'>Waiting for Admin to assign subjects...</div>";
-        return;
+        tList.innerHTML = `<div style="color:#64748b; font-size:12px; padding:10px; border:1px dashed #334155; border-radius:8px;">
+            Waiting for Admin to assign tasks...</div>`;
     }
 
-    tasks.forEach(task => {
-        // Render tasks assigned by Admin (No student selection button here)
-        const item = document.createElement("div");
-        item.className = "task-item";
-        item.innerHTML = `
-            <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span>${task.name}</span>
-                <button onclick="showByjusMap('${task.subjectOnly}', '${task.id}')" style="background:#0ea5e9;">🗺 MAP</button>
-            </div>`;
-        taskList.appendChild(item);
-    });
+    const renderItem = (item, listRef, isExtra) => {
+        const container = document.createElement("div");
+        container.style.cssText = "display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; background:#0f172a; padding:8px; border-radius:8px; border:1px solid #1e293b;";
+        
+        const leftSide = document.createElement("div");
+        leftSide.style.display = "flex";
+        leftSide.style.alignItems = "center";
+        leftSide.style.gap = "10px";
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = item.done;
+        cb.style.cursor = "pointer";
+
+        const label = document.createElement("span");
+        label.innerText = item.name;
+        label.style.fontSize = "13px";
+        if (item.done) label.style.color = "#4ade80";
+
+        cb.onchange = () => {
+            if (cb.checked) {
+                const remark = prompt(`Completion details for ${item.name}:`, "Topics covered...");
+                const dueVal = prompt(`Pending/Due topics:`, "None");
+                item.comment = remark || "-";
+                item.due = dueVal || "-";
+                saveAutomatedSubjectProgress(item.subjectOnly || item.name, item.comment, item.due);
+            }
+            item.done = cb.checked;
+            save(tasks, extras);
+        };
+
+        leftSide.append(cb, label);
+        container.append(leftSide);
+
+        // Add MAP button if taskId exists
+        if (item.id && !item.name.startsWith("MOCK TEST:")) {
+            const mapBtn = document.createElement("button");
+            mapBtn.innerText = "🗺 MAP";
+            mapBtn.style.cssText = "width:auto; padding:4px 10px; font-size:10px; background:#0ea5e9; margin:0;";
+            mapBtn.onclick = () => showByjusMap(item.subjectOnly || item.name, item.id);
+            container.append(mapBtn);
+        }
+
+        listRef.append(container);
+    };
+
+    tasks.forEach(t => renderItem(t, tList, false));
+    extras.forEach(e => renderItem(e, eList, true));
 };
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
