@@ -2872,35 +2872,37 @@ function setupTasks() {
   document.getElementById("logBox").classList.remove("hidden");
   document.getElementById("reportBox").classList.add("hidden");
 }
-function loadTasks() {
+async function loadTasks() {
     const tList = document.getElementById("taskList");
     const eList = document.getElementById("extraList");
     if (!tList || !eList) return;
     
-    tList.innerHTML = "";
+    tList.innerHTML = "Syncing with Server...";
     eList.innerHTML = "";
 
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    
-    // Check local storage (now synced with Cloud)
-    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    const today = new Date().toLocaleDateString();
-    const currentDayMaps = dailyMaps[today] || {};
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+
+    // 🔥 FETCH JOURNEYS DIRECTLY FROM SERVER
+    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    const serverMaps = mapSnap.exists() ? mapSnap.val() : {};
+
+    tList.innerHTML = ""; // Clear the "Syncing" text
 
     const renderItem = (item, listRef) => {
         const container = document.createElement("div");
-        container.style.cssText = "display:flex; align-items:center; margin-bottom:10px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
+        container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
         
-        const cleanName = item.name.replace(/'/g, "\\'");
-        const taskId = String(item.id || cleanName); 
+        const taskId = String(item.id || item.name.replace(/'/g, "\\'")); 
 
+        // IF THE SERVER HAS THIS ID, SHOW "VIEW MAP"
         let mapBtnHtml = "";
         if (!item.name.startsWith("MOCK TEST:")) {
-            if (currentDayMaps[taskId]) {
-                mapBtnHtml = `<button onclick="showByjusMap('${cleanName}', '${taskId}')" style="width:auto; padding:6px 14px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold; cursor:pointer;">🗺 VIEW MAP</button>`;
+            if (serverMaps[taskId]) {
+                mapBtnHtml = `<button onclick="showByjusMap('${item.name}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold;">🗺 VIEW MAP</button>`;
             } else {
-                mapBtnHtml = `<button onclick="openSubjectJourney('${cleanName}', '${taskId}')" style="width:auto; padding:6px 14px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px; cursor:pointer;">+ SET JOURNEY</button>`;
+                mapBtnHtml = `<button onclick="openSubjectJourney('${item.name}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px;">+ SET JOURNEY</button>`;
             }
         }
 
@@ -2911,7 +2913,6 @@ function loadTasks() {
 
         const label = document.createElement("span");
         label.innerText = item.name;
-        label.style.fontSize = "13px";
 
         cb.onchange = () => {
             item.done = cb.checked;
@@ -3276,18 +3277,14 @@ window.openSubjectJourney = function(subjectName, taskId) {
     modal.classList.remove("hidden");
 };
 window.generateMapFromBulk = function() {
-    const moduleName = prompt("Which Module are these sub-topics for?", "Module 1");
+    const moduleName = prompt("Module Name?", "Module 1");
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
     
-    if (!moduleName || lines.length === 0) {
-        alert("Module and Topics are required.");
-        return;
-    }
+    if (!moduleName || lines.length === 0) return;
 
-    const today = new Date().toLocaleDateString();
-    const todayKey = today.replace(/\//g, "-");
-    const uniqueKey = String(window.currentMapTaskId);
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    const taskId = String(window.currentMapTaskId);
 
     const nodesArray = lines.map((line) => ({
         label: line.trim(),
@@ -3297,25 +3294,13 @@ window.generateMapFromBulk = function() {
         dynamicMins: 0 
     }));
 
-    // 1. Save Locally for instant UI update
-    let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    if (!localMaps[today]) localMaps[today] = {};
-    localMaps[today][uniqueKey] = nodesArray;
-    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
-
-    // 2. Save to Cloud
-    const updatePayload = {};
-    updatePayload[uniqueKey] = nodesArray;
-
-    update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), updatePayload)
+    // SAVE ONLY TO FIREBASE
+    update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}/${taskId}`), nodesArray)
     .then(() => {
         document.getElementById('bulkInputModal').classList.add('hidden');
-        loadTasks(); // Instantly changes button to "VIEW MAP"
-        showByjusMap(currentMapSubject, uniqueKey); 
+        loadTasks(); // This will now fetch from Cloud to show the button
     })
-    .catch((error) => {
-        alert("Cloud Error: " + error.message);
-    });
+    .catch(e => alert("Server Error: " + e.message));
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
 window.addNewSubTopic = async function(taskId) {
