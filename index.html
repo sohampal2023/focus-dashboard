@@ -253,7 +253,12 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     0% { transform: translate(-50%, -100%) scale(0.5); opacity:0; } 
     100% { transform: translate(-50%, 0) scale(1); opacity:1; } 
 }
-
+/* Add this exactly as shown */
+.hidden { 
+    display: none !important; 
+    visibility: hidden !important; 
+    opacity: 0 !important;
+}
 /* --- FEEDBACK & LEAVE DASHBOARD BOXES --- */
 .feedback-box {
     border: 1px solid #a855f7; background: #2e1065; color: #e9d5ff;
@@ -3873,81 +3878,75 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
 };
 // --- UPDATED AUTH LISTENER ---
 onAuthStateChanged(auth, async (user) => {
-    // 1. Check for the "Day End" Lock Screen first
-    const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
-    if (lockedReport) {
-        document.body.innerHTML = lockedReport;
-        return;
-    }
+    const studentView = document.getElementById("studentView");
+    const studentControls = document.getElementById("studentControls");
+    const adminBox = document.getElementById("adminBox");
+    const loginBtn = document.getElementById("loginBtn");
+    const logoutBtn = document.getElementById("logoutBtn");
+    const statusBox = document.getElementById("statusBox");
+    const syncStatus = document.getElementById("syncStatus");
 
     if (user) {
         currentUser = user;
-        // Hide Login, Show Logout
-        document.getElementById("loginBtn").classList.add("hidden");
-        document.getElementById("logoutBtn").classList.remove("hidden");
+        loginBtn.classList.add("hidden");
+        logoutBtn.classList.remove("hidden");
 
         if (user.email === ADMIN_EMAIL) {
             initAdminDashboard();
         } else {
+            // Only show content if a student is actually logged in
+            studentView.classList.remove("hidden");
+            studentControls.classList.remove("hidden");
             initStudentDashboard(); 
         }
     } else {
-        // --- THIS HANDLES THE "LOGGED OUT" STATE IN YOUR PICTURE ---
+        // --- THIS FORCES THE BLANK STATE ---
         currentUser = null;
         
-        // Hide all main content areas
-        document.getElementById("studentView").classList.add("hidden");
-        document.getElementById("studentControls").classList.add("hidden");
-        document.getElementById("adminBox").classList.add("hidden");
+        // Hide EVERYTHING
+        studentView.classList.add("hidden");
+        studentControls.classList.add("hidden");
+        adminBox.classList.add("hidden");
         
-        // Show only the Secure Login button
-        document.getElementById("loginBtn").classList.remove("hidden");
-        document.getElementById("logoutBtn").classList.add("hidden");
+        // Show only login button
+        loginBtn.classList.remove("hidden");
+        logoutBtn.classList.add("hidden");
         
-        // Update Status Box
-        document.getElementById("statusBox").innerText = "Logged out";
-        document.getElementById("syncStatus").innerText = "Offline";
+        // Reset Text
+        statusBox.innerText = "Logged out";
+        statusBox.style.color = "#94a3b8";
+        syncStatus.innerText = "Offline";
     }
 });
-
 // --- UPDATED FINAL DAY END (FOR HARD LOGOUT) ---
 window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will wipe the board and perform a HARD LOGOUT.")) return;
+    if(!confirm("End Day? This will wipe the board and HARD LOGOUT.")) return;
 
     try {
-        const todayStr = new Date().toLocaleDateString();
-        const todayKey = todayStr.replace(/\//g, "-");
+        const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
 
-        // 1. ARCHIVE DATA (Before wipe)
-        const snapshot = await get(ref(db, `users/${currentUser.uid}`));
-        if (snapshot.exists()) {
-            const data = snapshot.val();
-            const tasks = JSON.parse(data.TASKS || "[]");
-            const maps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
-
-            // Logic to move map nodes to Subject Progress Table
-            // (Same as previous logic to ensure "Covered/Due" is saved)
-        }
-
-        // 2. WIPE FIREBASE SESSION
+        // 1. Wipe Active Data in Firebase
         const updates = {};
         updates[`users/${currentUser.uid}/TASKS`] = "[]";
         updates[`users/${currentUser.uid}/EXTRA`] = "[]";
         updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; 
-        updates[`users/${currentUser.uid}/CURRENT_SHIFT_LABEL`] = "No Shift Active";
         updates[`users/${currentUser.uid}/SHIFT_END_TS`] = null;
+        updates[`users/${currentUser.uid}/stats`] = { percent: 0, rating: "Poor" };
 
         await update(ref(db), updates);
 
-        // 3. CLEAR BROWSER & LOGOUT
+        // 2. Local Cleanup
         localStorage.clear(); 
-        await signOut(auth); // This triggers the "Logged Out" view automatically
         
-        alert("Day Ended. Board Cleared.");
+        // 3. Final Logout and Refresh
+        await signOut(auth);
+        
+        // This forces the browser to re-evaluate the auth state and show the blank screen
         location.reload(); 
 
     } catch (err) {
-        alert("Logout Error: " + err.message);
+        console.error(err);
+        alert("Logout failed. Check connection.");
     }
 };
  window.loadTasks = function() {
