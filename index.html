@@ -2043,66 +2043,73 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // 1. --- FORCE UI VISIBILITY ---
+    // 1. --- UI VISIBILITY & ADMIN CHECK ---
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox")?.classList.remove("hidden");
     document.getElementById("logBox")?.classList.remove("hidden");
-    
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 2. --- SERVER DATA CHECK ---
+    // 2. --- DOWNLOAD DATA & LEAVE BALANCE ---
     const serverData = await downloadData(currentUser.uid);
+    
+    // Update Leave Balance UI from Firebase
+    const leaveBtn = document.getElementById("leaveBtn");
+    if(leaveBtn) {
+        const bal = serverData?.leaveBalance || 0;
+        leaveBtn.innerText = `Leave Bal: ${bal}`;
+    }
+
     if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
         location.reload(); 
         return; 
     }
 
-    // 3. --- SHIFT GOAL PROMPT (The Fix) ---
+    // 3. --- SHIFT GOAL PROMPT (FORCE ASK IF DAY ENDED) ---
     const todayStr = new Date().toLocaleDateString();
     let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
 
-    // If goalDate is missing or different, it means a NEW day or a Restart after Day End
+    // If goalDate is missing, Day End was pressed. Force a new session setup.
     if (!goalDate || goalDate !== todayStr) {
-        let askedShifts = prompt("START NEW SESSION: How many SHIFTS (2 hours each) will you conduct today?", "3");
+        let askedShifts = prompt("START NEW SESSION: How many SHIFTS (2 hours each) for today?", "3");
         if (!askedShifts || isNaN(askedShifts)) askedShifts = "3"; 
         
         localStorage.setItem(key("DAILY_SHIFT_COUNT"), askedShifts);
         localStorage.setItem(key("DAILY_GOAL_DATE"), todayStr);
         
-        // Save to Firebase so Admin sees your target
+        // Reset state for new session
+        localStorage.setItem(key("PENALTY"), "0");
+        localStorage.setItem(key("IDLE_STRIKES"), "0");
+        localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
+
         await update(ref(db, `users/${currentUser.uid}`), { 
             dailyShiftTarget: askedShifts, 
             dailyGoalDate: todayStr,
-            penalty: 0 // Reset penalty on new day
+            penalty: 0
         });
     }
 
-    // 4. --- RECOVER STATE & BALANCES ---
+    // 4. --- RECOVER BALANCES ---
     dailyTimeouts = parseInt(localStorage.getItem(key("DAILY_TIMEOUTS")) || "0"); 
     document.getElementById("timeoutCounter").innerText = "Timeouts: " + dailyTimeouts;
-    
-    // Recovery of Penalties
     penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
 
     // 5. --- BIO BREAK / PENDING REASON CHECK ---
     let logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if (logs.length > 0 && logs[logs.length - 1].reason === "Pending") {
-        const userReason = prompt("Welcome back! Reason for the break?", "Bio Break");
+        const userReason = prompt("Reason for previous break?", "Bio Break");
         logs[logs.length - 1].reason = userReason || "Bio Break";
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // 6. --- RESUME SHIFT TIMER ---
+    // 6. --- RESUME OR START SHIFT TIMER ---
     const pausedRemaining = localStorage.getItem(key("PAUSED_SHIFT_REMAINING"));
     if (pausedRemaining && parseInt(pausedRemaining) > 0) {
-        const newEnd = Date.now() + parseInt(pausedRemaining);
-        localStorage.setItem(key("SHIFT_END_TS"), newEnd);
+        localStorage.setItem(key("SHIFT_END_TS"), Date.now() + parseInt(pausedRemaining));
         localStorage.removeItem(key("PAUSED_SHIFT_REMAINING"));
     } else if (!localStorage.getItem(key("SHIFT_END_TS"))) {
-        // If no timer exists, start it based on the Shift Count
         const totalMins = (parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3) * 120;
         localStorage.setItem(key("SHIFT_END_TS"), Date.now() + (totalMins * 60000));
     }
@@ -2112,7 +2119,7 @@ async function initStudentDashboard() {
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // 7. --- BOOTUP COMPONENTS ---
+    // 7. --- COMPONENT START ---
     startIdle(1800);      
     loadSubjectList();    
     setupTasks(); 
@@ -2122,13 +2129,14 @@ async function initStudentDashboard() {
     runShiftTimer();      
     uploadData();
 
-    // 8. --- CRITICAL: FORCE UNLOCK ALL BUTTONS ---
-    const buttonsToUnlock = ["bioBtn", "histBtn", "dayBtn", "leaveBtn", "noticeBtn"];
+    // 8. --- FORCE UNLOCK BUTTONS ---
+    const buttonsToUnlock = ["bioBtn", "histBtn", "dayBtn", "leaveBtn", "noticeBtn", "refreshBtn"];
     buttonsToUnlock.forEach(id => {
         const btn = document.getElementById(id);
         if(btn) {
             btn.disabled = false;
             btn.style.opacity = "1";
+            btn.style.pointerEvents = "auto";
             btn.style.cursor = "pointer";
         }
     });
