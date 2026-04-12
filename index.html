@@ -2050,71 +2050,50 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // --- STEP 1: FORCE UI VISIBILITY IMMEDIATELY ---
-    // We remove "hidden" from everything first so you don't see a blank screen
+    // 1. FORCE UI VISIBILITY (Stops the blank screen)
     const studentView = document.getElementById("studentView");
     const taskBox = document.getElementById("taskBox");
-    const logBox = document.getElementById("logBox");
-    const studentControls = document.getElementById("studentControls");
+    const controls = document.getElementById("studentControls");
+    const idleBox = document.getElementById("idleBox");
 
     if (studentView) studentView.classList.remove("hidden");
     if (taskBox) taskBox.classList.remove("hidden");
-    if (logBox) logBox.classList.remove("hidden");
-    if (studentControls) studentControls.classList.remove("hidden");
+    if (controls) controls.classList.remove("hidden");
+    if (idleBox) idleBox.classList.remove("hidden");
 
-    // --- STEP 2: FORCE UNLOCK ALL SIDEBAR BUTTONS ---
-    // This looks for every button in the sidebar and forces it to be clickable
-    const allButtons = document.querySelectorAll(".sidebar button");
-    allButtons.forEach(btn => {
+    // 2. FORCE UNLOCK SIDEBAR
+    document.querySelectorAll(".sidebar button").forEach(btn => {
         btn.disabled = false;
         btn.style.opacity = "1";
-        btn.style.cursor = "pointer";
-        btn.style.filter = "none";
         btn.style.pointerEvents = "auto";
     });
 
-    // --- STEP 3: SYNC DATA FROM SERVER ---
+    // 3. SYNC FROM SERVER
     const serverData = await downloadData(currentUser.uid);
     const today = new Date().toLocaleDateString();
-    const todayKey = today.replace(/\//g, "-");
 
-    // --- STEP 4: SHIFT PROMPT FOR NEW DAY ---
+    // 4. SHIFT PROMPT
     let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
     if (!goalDate || goalDate !== today) {
-        let shifts = prompt("New Day! Enter number of 2-hour shifts for today:", "3");
+        let shifts = prompt("New Day! Enter shifts (2hr each):", "3");
         if (!shifts || isNaN(shifts)) shifts = "3";
-        
         localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
         localStorage.setItem(key("DAILY_GOAL_DATE"), today);
         
-        // Sync this shift info to server
-        await update(ref(db, `users/${currentUser.uid}`), { 
-            dailyShiftTarget: shifts, 
-            dailyGoalDate: today 
-        });
+        // Push shift info to server
+        await update(ref(db, `users/${currentUser.uid}`), { dailyGoalDate: today, dailyShiftTarget: shifts });
     }
 
-    // --- STEP 5: SYNC JOURNEY MAPS ---
-    try {
-        const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        if (mapSnap.exists()) {
-            let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-            localMaps[today] = mapSnap.val();
-            localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
-        }
-    } catch (e) { console.log("Map sync skipped"); }
-
-    // --- STEP 6: START COMPONENTS ---
+    // 5. RENDER CONTENT
     loadSubjectList();
-    loadTasks();
+    loadTasks();      // This draws the subjects you saved at Day End
     updateProgress();
     runShiftTimer();
-    startIdle(1800); // Start the Watchdog Timer
+    startIdle(1800);  // Shows the Watchdog
 
-    // Final UI Check
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
-    document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("loginBtn").classList.add("hidden");
+    document.getElementById("logoutBtn").classList.remove("hidden");
 }
 // Helper to recalculate time based on shifts
 async function redistributeTimeForNewDay(shifts) {
@@ -3797,93 +3776,66 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    // 1. --- FINAL CONFIRMATION ---
-    if(!confirm("Submit Daily Report? \n- Completed Topics -> Saved to History\n- Extra Work -> Cleared\n- Map -> Reset for Tomorrow\n- Undone Tasks -> Kept in Sidebar")) return;
+    if(!confirm("Submit Report and End Day?")) return;
 
     const today = new Date().toLocaleDateString();
     const todayKey = today.replace(/\//g, "-");
 
     try {
-        // 2. --- SAVE COMPLETED JOURNEY DATA TO SUBJECT PROGRESS ---
-        const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        if (snapshot.exists()) {
-            const maps = snapshot.val();
-            for (const taskId in maps) {
-                const nodes = maps[taskId];
-                const completed = nodes.filter(n => n.status === 'done').map(n => n.label);
-                const pending = nodes.filter(n => n.status !== 'done').map(n => n.label);
-
-                if (completed.length > 0) {
-                    saveAutomatedSubjectProgress(
-                        `${taskId}`, 
-                        completed.join(", "), 
-                        pending.length > 0 ? pending.join(", ") : "All Clear"
-                    );
-                }
+        // 1. COLLECT NEXT DAY TASKS FROM DROPDOWNS
+        const nextTasks = [];
+        for (let i = 0; i < 7; i++) {
+            const sub = document.getElementById("nd_sub_" + i).value;
+            const top = document.getElementById("nd_top_" + i).value.trim();
+            if(sub) { 
+                nextTasks.push({ 
+                    id: "task_" + Date.now() + i, // Unique ID
+                    name: sub, 
+                    target: top, 
+                    done: false, 
+                    comment: "", 
+                    due: "" 
+                }); 
             }
         }
 
-        // 3. --- CLEANUP SERVER JOURNEYS ---
-        // We delete today's maps so they don't reappear tomorrow
-        await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-
-        // 4. --- CLEANUP LOCAL STORAGE ---
-        // Clear Extra Work completely
-        localStorage.setItem(key("EXTRA"), "[]");
-        
-        // Filter Assigned Tasks: Keep only the ones that were NOT finished
+        // 2. PROCESS CURRENT DATA
         const currentTasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-        const tasksToCarryForward = currentTasks.filter(t => t.done === false);
+        const undone = currentTasks.filter(t => !t.done);
         
-        // If everything was done, we keep the default "Study" and "Revise" so the sidebar isn't empty
-        if (tasksToCarryForward.length === 0) {
-            tasksToCarryForward.push(
-                { name: "Study", done: false, comment: "", due: "" },
-                { name: "Revise", done: false, comment: "", due: "" }
-            );
-        }
-        localStorage.setItem(key("TASKS"), JSON.stringify(tasksToCarryForward));
+        // Merge Undone from today + New for tomorrow
+        const finalNextDayList = [...undone, ...nextTasks];
 
-        // 5. --- RESET DAILY MARKERS ---
-        localStorage.removeItem(key("DAILY_GOAL_DATE"));
-        localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
-        localStorage.removeItem(key("SHIFT_END_TS"));
-        localStorage.removeItem(MAP_STORAGE_KEY());
-        localStorage.setItem(key("PENALTY"), "0");
-        localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
-        localStorage.setItem(key("IDLE_STRIKES"), "0");
-
-        // 6. --- FINAL SYNC TO SERVER ---
-        // This is crucial: we update the server with the NEW task list before logging out
+        // 3. WIPE SERVER MAPS & EXTRAS
+        await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+        
+        // 4. SYNC TO SERVER & LOCAL
         await update(ref(db, `users/${currentUser.uid}`), {
-            TASKS: JSON.stringify(tasksToCarryForward),
+            TASKS: JSON.stringify(finalNextDayList),
             EXTRA: "[]",
-            PENALTY: "0",
-            DAILY_TIMEOUTS: "0"
+            NEXT_TASKS: "[]", // Clear the staging area
+            PENALTY: "0"
         });
 
-        // 7. --- GENERATE REPORT & LOCK ---
-        const p = calculate();
-        const reportHTML = `
-            <div class="card" style="background:#0f172a; border:2px solid #38bdf8; text-align:center; padding:40px; border-radius:15px;">
-                <h2 style="color:#38bdf8; margin-bottom:20px;">REPORT FOR ${today}</h2>
-                <div style="font-size:72px; font-weight:900; color:#fff; margin-bottom:10px;">${p.percent}%</div>
-                <div style="font-size:20px; color:#94a3b8; margin-bottom:30px;">Rating: ${getLabel(p.percent)}</div>
-                <button onclick="dismissReportLock()" style="background:#22c55e; color:white; padding:15px 30px; border:none; border-radius:10px; font-weight:800; cursor:pointer; width:100%;">START NEW DAY</button>
-            </div>`;
+        localStorage.setItem(key("TASKS"), JSON.stringify(finalNextDayList));
+        localStorage.setItem(key("EXTRA"), "[]");
         
-        localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
+        // 5. RESET MARKERS
+        localStorage.removeItem(key("DAILY_GOAL_DATE"));
+        localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
 
-        // 8. --- LOGOUT ---
-        setTimeout(() => {
-            signOut(auth).then(() => {
-                location.reload(); 
-            });
-        }, 1500);
+        // 6. LOGOUT
+        const p = calculate();
+        const reportHTML = `<div class="card" style="text-align:center; padding:30px; background:#0f172a; border:1px solid #38bdf8;">
+            <h2 style="color:#38bdf8;">REPORT: ${p.percent}%</h2>
+            <button onclick="dismissReportLock()" style="background:#22c55e; color:white; padding:10px 20px; border:none; border-radius:8px; cursor:pointer; width:100%; font-weight:bold; margin-top:20px;">START NEW DAY</button>
+        </div>`;
+        localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
+        
+        signOut(auth).then(() => location.reload());
 
     } catch (e) {
-        console.error("Day End Error:", e);
-        alert("Sync error. Please try again.");
+        alert("Error: " + e.message);
     }
 };
 // --- ATTACH TO WINDOW ---
