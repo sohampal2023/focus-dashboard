@@ -3547,15 +3547,25 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
     const uniqueKey = window.currentMapTaskId;
 
     try {
-        // 1. Fetch Fresh Data
+        // 1. Fetch Fresh Data from Firebase
         const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        let dailyMaps = snapshot.val() || {};
+        if (!snapshot.exists()) throw new Error("No journey data found on server.");
+        
+        let dailyMaps = snapshot.val();
         let nodes = dailyMaps[uniqueKey];
 
+        // Guard: Ensure the specific subject and node index exist
+        if (!nodes || !nodes[idx]) {
+            console.error("Node not found at index:", idx, "for key:", uniqueKey);
+            throw new Error("Target topic not found. Please refresh.");
+        }
+
         if (action === 'start') {
-            // Reset any other "doing" nodes to "todo" globally
+            // Reset any other "doing" nodes to "todo" globally across all subjects
             Object.keys(dailyMaps).forEach(k => {
-                dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
+                if (Array.isArray(dailyMaps[k])) {
+                    dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
+                }
             });
             nodes[idx].status = 'doing';
             localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
@@ -3566,29 +3576,34 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
             const actualUsedMins = startTS ? Math.max(1, Math.floor((Date.now() - startTS) / 60000)) : currentAllocatedMins;
             
             nodes[idx].status = 'done';
-            nodes[idx].dynamicMins = actualUsedMins; // Record actual time taken
-            nodes[idx].completedAt = new Date().toLocaleTimeString(); // Record completion IST time
+            nodes[idx].dynamicMins = actualUsedMins; 
+            nodes[idx].completedAt = new Date().toLocaleTimeString(); 
 
             // --- GLOBAL REDISTRIBUTION ---
             const savedMins = currentAllocatedMins - actualUsedMins;
             let pendingNodes = [];
 
-            // Find every "todo" node across ALL subjects
+            // Safe iteration over all subjects to find 'todo' nodes
             Object.keys(dailyMaps).forEach(subjKey => {
-                dailyMaps[subjKey].forEach((node, nodeIdx) => {
-                    if (node.status === 'todo') {
-                        pendingNodes.push({ sKey: subjKey, nIdx: nodeIdx });
-                    }
-                });
+                const subjNodes = dailyMaps[subjKey];
+                if (Array.isArray(subjNodes)) {
+                    subjNodes.forEach((node, nodeIdx) => {
+                        if (node && node.status === 'todo') {
+                            pendingNodes.push({ sKey: subjKey, nIdx: nodeIdx });
+                        }
+                    });
+                }
             });
 
-            // If we saved time or went over, split the difference among remaining nodes
+            // Distribute saved/over-limit time
             if (pendingNodes.length > 0) {
                 const adjustment = savedMins / pendingNodes.length;
                 pendingNodes.forEach(target => {
                     let tNode = dailyMaps[target.sKey][target.nIdx];
-                    let currentVal = tNode.dynamicMins || currentAllocatedMins;
-                    tNode.dynamicMins = Math.max(5, Math.round(currentVal + adjustment));
+                    if (tNode) {
+                        let currentVal = tNode.dynamicMins || currentAllocatedMins;
+                        tNode.dynamicMins = Math.max(5, Math.round(currentVal + adjustment));
+                    }
                 });
             }
 
@@ -3601,21 +3616,21 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
             localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
         }
 
-        // 2. Save to Firebase
+        // 2. Save back to Firebase
         await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps);
 
-        // 3. Update Local Storage for sidebar consistency
+        // 3. Sync Local Storage
         let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
         localMaps[today] = dailyMaps;
         localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
 
         // 4. Refresh UI
         showByjusMap(currentMapSubject, uniqueKey);
-        loadTasks();
+        if (typeof loadTasks === "function") loadTasks();
 
     } catch (e) {
-        console.error("Action Error:", e);
-        alert("Failed to update status. Check connection.");
+        console.error("Action Error Detail:", e);
+        alert(e.message || "Failed to update status. Check connection.");
     }
 };
 /* --- 3. OPTION TO ADD NEW SHIFT MID-DAY --- */
