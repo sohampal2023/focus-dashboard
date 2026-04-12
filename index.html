@@ -772,74 +772,45 @@ const FIXED_SUBJECTS = [
 ];
 
 onAuthStateChanged(auth, async (user) => {
-    // -------------------------------------------------------------------
-    // 🔒 CHECK FOR LOCKED REPORT FIRST (FIXED LAYOUT)
-    // -------------------------------------------------------------------
+    // 1. Check for locked report view
     const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
-    
-   if (lockedReport) {
-
-    // Reset everything safely
-    document.body.innerHTML = `
-      <div style="
-        min-height:100vh;
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        background:#020617;
-        padding:20px;
-      ">
-        <div style="width:100%;max-width:520px">
-          ${lockedReport}
-          <div style="margin-top:15px;text-align:center">
-            <button 
-              onclick="dismissReportLock()" 
-              style="
-                padding:12px 20px;
-                background:#0ea5e9;
-                border:none;
-                border-radius:8px;
-                color:white;
-                font-size:14px;
-                cursor:pointer;
-              ">
-              Login & Start New Day
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-    return;
-}
-
-    // -------------------------------------------------------------------
-    // NORMAL FLOW (Reset Layout if not locked)
-    // -------------------------------------------------------------------
-    // Reset Grid Layout
-    document.querySelector(".app").style.display = "grid"; 
-    document.querySelector(".main").style.width = "auto";
-    document.querySelector(".main").style.display = "block"; // Reset from flex
-
-    const sidebar = document.querySelector(".sidebar");
-    if(sidebar) sidebar.classList.remove("hidden");
+    if (lockedReport) {
+        document.body.innerHTML = `
+          <div style="min-height:100vh; display:flex; justify-content:center; align-items:center; background:#020617; padding:20px;">
+            <div style="width:100%;max-width:520px">
+              ${lockedReport}
+              <div style="margin-top:15px;text-align:center">
+                <button onclick="dismissReportLock()" style="padding:12px 20px; background:#0ea5e9; border:none; border-radius:8px; color:white; font-size:14px; cursor:pointer;">
+                  Login & Start New Session
+                </button>
+              </div>
+            </div>
+          </div>`;
+        return;
+    }
 
     if (user) {
         currentUser = user;
         document.getElementById("syncStatus").innerText = "Session Restored";
-
+        
         if (user.email === ADMIN_EMAIL) {
             initAdminDashboard();
         } else {
+            // Check if we need to ask for shifts before showing dashboard
+            const snap = await get(ref(db, `users/${user.uid}`));
+            const userData = snap.val() || {};
+            
+            // If DAILY_GOAL_DATE is missing, it means Day End was pressed previously
+            if (!userData.DAILY_GOAL_DATE) {
+                await askDailyBudget();
+            }
+            
             initStudentDashboard();
         }
     } else {
         currentUser = null;
-        document.getElementById("statusBox").innerText = "Logged out";
-        document.getElementById("loginBtn").classList.remove("hidden");
-        document.getElementById("logoutBtn").classList.add("hidden");
-        
-        document.getElementById("studentView").classList.add("hidden");
-        document.getElementById("reportBox").classList.add("hidden");
+        document.getElementById("loginBtn")?.classList.remove("hidden");
+        document.getElementById("studentView")?.classList.add("hidden");
     }
 });
 
@@ -2116,40 +2087,27 @@ window.studentUnsubscribe = onValue(userRef, (snapshot) => {
     // 5. Start Watchdog Session
     startIdle(1800);
 };
+window.askDailyBudget = async function() {
+    const shifts = prompt("Welcome back! How many 2-hour shifts are you doing for this new session? (e.g., 3)");
+    const shiftNum = parseFloat(shifts);
 
-  window.askDailyBudget = async function() {
+    if (isNaN(shiftNum) || shiftNum <= 0) {
+        alert("A valid shift count is required to start.");
+        return window.askDailyBudget(); 
+    }
+
     const todayStr = new Date().toLocaleDateString();
     
-    // 1. Check Firebase first to see if budget was already set today
-    const snap = await get(ref(db, `users/${currentUser.uid}`));
-    const data = snap.val() || {};
+    // Save to Firebase to "unlock" the portal
+    await update(ref(db, `users/${currentUser.uid}`), {
+        "DAILY_SHIFT_COUNT": shiftNum,
+        "DAILY_GOAL_DATE": todayStr,
+        "TASKS": "[]",
+        "EXTRA": "[]"
+    });
     
-    // If it's a new day (date mismatch) or no goal is set, ask now
-    if (data.DAILY_GOAL_DATE !== todayStr) {
-        const shifts = prompt("Welcome! How many 2-hour shifts are you doing today? (e.g., 3)");
-        const shiftNum = parseFloat(shifts);
-
-        if (isNaN(shiftNum) || shiftNum <= 0) {
-            alert("Shift count is required to calculate your study map.");
-            return askDailyBudget(); 
-        }
-
-        // 2. Save to Firebase and LocalStorage
-        localStorage.setItem("DAILY_GOAL_DATE", todayStr);
-        localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
-        
-        await update(ref(db, `users/${currentUser.uid}`), {
-            "DAILY_SHIFT_COUNT": shiftNum,
-            "DAILY_GOAL_DATE": todayStr,
-            "TASKS": "[]" // Ensure a clean start for the new budget
-        });
-        
-        alert(`Target Set: ${shiftNum * 2} Hours. Please wait for Admin to assign subjects.`);
-    } else {
-        // If already set, just ensure local storage is in sync
-        localStorage.setItem("DAILY_SHIFT_COUNT", data.DAILY_SHIFT_COUNT);
-        localStorage.setItem("DAILY_GOAL_DATE", data.DAILY_GOAL_DATE);
-    }
+    localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
+    alert(`Target Set: ${shiftNum * 2} Hours. Portal Ready.`);
 };
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
