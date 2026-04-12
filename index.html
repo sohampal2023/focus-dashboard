@@ -2054,7 +2054,7 @@ async function initStudentDashboard() {
 
     // 2. --- DOWNLOAD DATA & LEAVE BALANCE ---
     const serverData = await downloadData(currentUser.uid);
-    const leaveDisplay = document.querySelector("button[onclick='requestLeave()']") || document.getElementById("leaveBtn");
+    const leaveDisplay = document.querySelector("button[onclick='requestLeave()']");
     if (leaveDisplay) {
         leaveDisplay.innerText = `Leave Bal: ${serverData?.leaveBalance || 0}`;
     }
@@ -2064,7 +2064,7 @@ async function initStudentDashboard() {
         return; 
     }
 
-    // 3. --- SHIFT PROMPT (RESETS IF DAY ENDED) ---
+    // 3. --- SHIFT PROMPT ---
     const todayStr = new Date().toLocaleDateString();
     let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
 
@@ -2076,9 +2076,8 @@ async function initStudentDashboard() {
         await update(ref(db, `users/${currentUser.uid}`), { dailyShiftTarget: askedShifts, dailyGoalDate: todayStr, penalty: 0 });
     }
 
-    // 4. --- CRITICAL: BIO BREAK REASON CHECK ---
+    // 4. --- BIO BREAK REASON CHECK ---
     let logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    // If the last log entry is still "Pending", it means you just returned from a Bio Break
     if (logs.length > 0 && logs[logs.length - 1].reason === "Pending") {
         const userReason = prompt("Welcome back! Provide reason for previous break:", "Bio Break");
         logs[logs.length - 1].reason = userReason || "Bio Break";
@@ -2095,11 +2094,6 @@ async function initStudentDashboard() {
         localStorage.setItem(key("SHIFT_END_TS"), Date.now() + (totalMins * 60000));
     }
 
-    if (!logs.length || logs[logs.length - 1].logoutTS !== null) {
-        logs.push({ login: new Date().toLocaleString(), loginTS: Date.now(), logout: "-", logoutTS: null, reason: "-", completed: [] });
-        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-    }
-
     // 6. --- COMPONENT START ---
     startIdle(1800);      
     loadSubjectList();    
@@ -2110,16 +2104,33 @@ async function initStudentDashboard() {
     runShiftTimer();      
     uploadData();
 
-    // 7. --- UNLOCK ALL SIDEBAR BUTTONS ---
-    const buttons = ["bioBtn", "histBtn", "dayBtn", "noticeBtn", "refreshBtn"];
-    buttons.forEach(id => {
+    // 7. --- THE "HARD UNLOCK" FOR ALL BUTTONS ---
+    const buttonsToUnlock = [
+        "bioBtn", "histBtn", "dayBtn", "noticeBtn", "refreshBtn", "leaveBtn"
+    ];
+    
+    buttonsToUnlock.forEach(id => {
         const btn = document.getElementById(id);
         if(btn) {
             btn.disabled = false;
             btn.style.opacity = "1";
             btn.style.cursor = "pointer";
+            btn.style.filter = "none";
         }
     });
+
+    // --- SPECIFIC FIX FOR THE SUBJECT PROGRESS BUTTON ---
+    // This finds the button even if it has no ID by searching for the text "Subject Progress"
+    const allButtons = document.getElementsByTagName("button");
+    for (let btn of allButtons) {
+        if (btn.innerText.includes("Subject Progress") || btn.getAttribute("onclick")?.includes("toggleSubjectProgress")) {
+            btn.disabled = false;
+            btn.style.opacity = "1";
+            btn.style.cursor = "pointer";
+            btn.style.filter = "none"; // Removes any "greyed out" CSS filter
+            btn.classList.remove("disabled"); // Removes any CSS class that might be blocking it
+        }
+    }
 }
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
