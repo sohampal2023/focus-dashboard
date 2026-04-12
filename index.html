@@ -2050,33 +2050,59 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // 1. Force container visibility
+    // --- 1. IMMEDIATE UI FORCE (Do this first!) ---
     const studentView = document.getElementById("studentView");
+    const controls = document.getElementById("studentControls");
     const taskBox = document.getElementById("taskBox");
+    const logBox = document.getElementById("logBox");
+
+    // Remove "hidden" class from everything immediately
     if (studentView) studentView.classList.remove("hidden");
+    if (controls) controls.classList.remove("hidden");
     if (taskBox) taskBox.classList.remove("hidden");
+    if (logBox) logBox.classList.remove("hidden");
 
-    // 2. Download Data from Server
-    const serverData = await downloadData(currentUser.uid);
-    
-    // 3. If server has tasks, force them into local storage
-    if (serverData && serverData.TASKS) {
-        localStorage.setItem(key("TASKS"), serverData.TASKS);
-    }
-
-    // 4. Force Unlock Sidebar Buttons
-    document.querySelectorAll(".sidebar button").forEach(btn => {
+    // --- 2. HARD-UNLOCK ALL SIDEBAR BUTTONS ---
+    // This finds every button in your sidebar/controls and forces it to be active
+    const sidebarButtons = document.querySelectorAll(".sidebar button, #studentControls button");
+    sidebarButtons.forEach(btn => {
         btn.disabled = false;
         btn.style.opacity = "1";
+        btn.style.pointerEvents = "auto";
+        btn.style.display = "block"; // Ensure they aren't set to display:none
     });
 
-    // 5. Run standard components
-    loadSubjectList();
-    loadTasks(); // This will now draw the tasks we just pulled
-    updateProgress();
-    runShiftTimer();
-    
-    document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
+    // --- 3. DATA SYNC (Now we do the risky server stuff) ---
+    try {
+        const serverData = await downloadData(currentUser.uid);
+        const today = new Date().toLocaleDateString();
+
+        // Check for new day shift prompt
+        let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
+        if (!goalDate || goalDate !== today) {
+            let shifts = prompt("New Day! Enter shifts (2hr each):", "3") || "3";
+            localStorage.setItem(key("DAILY_SHIFT_COUNT"), shifts);
+            localStorage.setItem(key("DAILY_GOAL_DATE"), today);
+            await update(ref(db, `users/${currentUser.uid}`), { dailyGoalDate: today, dailyShiftTarget: shifts });
+        }
+
+        // --- 4. RENDER COMPONENTS ---
+        loadSubjectList();
+        loadTasks();
+        updateProgress();
+        runShiftTimer();
+        
+        // Start Watchdog if function exists
+        if(typeof startIdle === "function") startIdle(1800);
+
+        document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
+        document.getElementById("loginBtn")?.classList.add("hidden");
+        document.getElementById("logoutBtn")?.classList.remove("hidden");
+
+    } catch (error) {
+        console.error("Data Load Error, but UI is unlocked:", error);
+        // Even if the server fails, the buttons are already unlocked from Step 2
+    }
 }
 // Helper to recalculate time based on shifts
 async function redistributeTimeForNewDay(shifts) {
@@ -2879,11 +2905,16 @@ function setupTasks() {
   document.getElementById("reportBox").classList.add("hidden");
 }
 async function loadTasks() {
+    
     const tList = document.getElementById("taskList");
     const eList = document.getElementById("extraList");
     if (!tList || !eList) return;
     
-    const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+    let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+    if (tasks.length === 0) {
+        tList.innerHTML = "<div style='color:#64748b; padding:10px;'>No assigned tasks.</div>";
+        return;
+    }
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
 
