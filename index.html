@@ -2020,19 +2020,19 @@ async function loadNotices() {
 window.initStudentDashboard = function() {
     const userRef = ref(db, `users/${currentUser.uid}`);
     
-    // 1. FIRST: Check Firebase to see if this is a fresh login or just a refresh
+    // 1. Check Firebase first to see if this is a fresh start or a refresh (F5)
     get(userRef).then(async (snap) => {
         const data = snap.val() || {};
         
-        // If DAILY_GOAL_DATE is missing, it means Day End was pressed. Prompt for shifts.
+        // If DAILY_GOAL_DATE is missing, Day End was pressed. Ask for shifts.
         if (!data.DAILY_GOAL_DATE) {
             await askDailyBudget(); 
         } else {
-            // It's a refresh. Sync the shift count to LocalStorage so the UI knows the budget.
+            // It's a refresh. Sync the shift count to LocalStorage for the UI logic.
             localStorage.setItem("DAILY_SHIFT_COUNT", data.DAILY_SHIFT_COUNT);
         }
 
-        // 2. NOW start the Real-Time Sync
+        // 2. Start the Real-Time Sync Listener
         if (window.studentUnsubscribe) window.studentUnsubscribe();
         
         window.studentUnsubscribe = onValue(userRef, (snapshot) => {
@@ -2041,18 +2041,21 @@ window.initStudentDashboard = function() {
                 const todayDate = new Date().toLocaleDateString();
                 const todayKey = todayDate.replace(/\//g, "-");
 
-                // Sync Core Data
+                // Sync Task Data
                 localStorage.setItem(key("TASKS"), liveData.TASKS || "[]");
                 localStorage.setItem(key("EXTRA"), liveData.EXTRA || "[]");
                 
-                // Sync specific session maps
-                if (liveData.dailyMaps && liveData.dailyMaps[todayKey]) {
+                // Sync the Map for the specific session active in Firebase
+                const sessionDate = liveData.DAILY_GOAL_DATE || todayDate;
+                const sessionKey = sessionDate.replace(/\//g, "-");
+                
+                if (liveData.dailyMaps && liveData.dailyMaps[sessionKey]) {
                     const mapStorage = {};
-                    mapStorage[todayDate] = liveData.dailyMaps[todayKey];
+                    mapStorage[sessionDate] = liveData.dailyMaps[sessionKey];
                     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(mapStorage));
                 }
 
-                // UI Visibility & Renders
+                // --- UI VISIBILITY CONTROL ---
                 document.getElementById("studentView")?.classList.remove("hidden");
                 document.getElementById("studentControls")?.classList.remove("hidden");
                 document.getElementById("taskBox")?.classList.remove("hidden");
@@ -2062,13 +2065,13 @@ window.initStudentDashboard = function() {
 
                 if (typeof window.loadTasks === "function") window.loadTasks();
 
-                // Sidebar Unlock
+                // Unlock all sidebar buttons
                 document.querySelectorAll(".sidebar button").forEach(btn => {
                     btn.disabled = false;
                     btn.style.opacity = "1";
                 });
 
-                // Update Status Text
+                // Update Real-time Status Indicators
                 const shiftLabel = document.getElementById("currentShiftLabel");
                 if (shiftLabel) shiftLabel.innerText = liveData.CURRENT_SHIFT_LABEL || "No Shift Active";
                 
@@ -2085,7 +2088,7 @@ window.initStudentDashboard = function() {
         });
     });
 
-    // 3. Start Watchdog Session
+    // 3. Kick off the Watchdog
     startIdle(1800);
 };
 window.dismissFeedback = async function() {
