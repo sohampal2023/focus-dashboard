@@ -2050,40 +2050,42 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // 1. Basic UI Setup
+    // Basic UI Setup
     document.getElementById("studentView").classList.remove("hidden");
-    document.getElementById("taskBox")?.classList.remove("hidden");
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
 
-    // 2. 🔥 FORCE SYNC FROM SERVER
-    // This ensures Device B pulls the "dailyMaps" that Device A created
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    // 1. Download Core Data
+    const serverData = await downloadData(currentUser.uid);
     
-    // Store in a global variable or update local cache for immediate use
-    if (mapSnap.exists()) {
-        const today = new Date().toLocaleDateString();
-        let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-        localMaps[today] = mapSnap.val();
-        localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
+    // 2. 🔥 CLOUD SYNC: Pull today's maps from Firebase
+    const today = new Date().toLocaleDateString();
+    const todayKey = today.replace(/\//g, "-");
+    
+    try {
+        const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+        if (mapSnap.exists()) {
+            let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+            localMaps[today] = mapSnap.val();
+            localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
+            console.log("Journeys synced from Cloud.");
+        }
+    } catch (e) {
+        console.error("Map Sync Failed", e);
     }
 
-    // 3. Initialize Components
+    // 3. Start Components
     loadSubjectList();
     setupTasks(); 
-    loadTasks(); // This will now see the server data
+    loadTasks(); 
     updateProgress();
     runShiftTimer();
     
     // Unlock buttons
-    const buttonsToUnlock = ["bioBtn", "histBtn", "dayBtn", "noticeBtn", "leaveBtn"];
-    buttonsToUnlock.forEach(id => {
-        const btn = document.getElementById(id);
-        if(btn) btn.disabled = false;
-    });
+    const btns = ["bioBtn", "histBtn", "dayBtn", "noticeBtn", "leaveBtn"];
+    btns.forEach(id => { if(document.getElementById(id)) document.getElementById(id).disabled = false; });
 }
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
@@ -2856,37 +2858,36 @@ function setupTasks() {
   document.getElementById("logBox").classList.remove("hidden");
   document.getElementById("reportBox").classList.add("hidden");
 }
-async function loadTasks() {
+function loadTasks() {
     const tList = document.getElementById("taskList");
     const eList = document.getElementById("extraList");
     if (!tList || !eList) return;
     
-    tList.innerHTML = "<div style='font-size:10px; color:#38bdf8;'>Syncing Server...</div>";
-    
+    tList.innerHTML = "";
+    eList.innerHTML = "";
+
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-
-    // 🔥 ALWAYS FETCH LIVE FROM SERVER
-    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-    const serverMaps = mapSnap.exists() ? mapSnap.val() : {};
-
-    tList.innerHTML = ""; 
+    
+    // Get maps (Synced from cloud in initStudentDashboard)
+    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    const today = new Date().toLocaleDateString();
+    const currentDayMaps = dailyMaps[today] || {};
 
     const renderItem = (item, listRef) => {
         const container = document.createElement("div");
         container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
         
-        // 🔥 STABLE ID: Use item.id if it exists, otherwise use the Name
-        const taskId = String(item.id || item.name).replace(/'/g, "\\'"); 
+        // 🔥 STABLE ID: Use the name of the subject as the key
+        const taskId = String(item.name).replace(/'/g, "\\'"); 
 
         let mapBtnHtml = "";
         if (!item.name.startsWith("MOCK TEST:")) {
-            // Check server data
-            if (serverMaps[taskId]) {
-                mapBtnHtml = `<button onclick="showByjusMap('${item.name.replace(/'/g, "\\'")}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold;">🗺 VIEW MAP</button>`;
+            // Check if this subject name has a map in the cloud-synced data
+            if (currentDayMaps[taskId]) {
+                mapBtnHtml = `<button onclick="showByjusMap('${taskId}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#0ea5e9; border:none; color:white; border-radius:6px; font-weight:bold;">🗺 VIEW MAP</button>`;
             } else {
-                mapBtnHtml = `<button onclick="openSubjectJourney('${item.name.replace(/'/g, "\\'")}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px;">+ SET JOURNEY</button>`;
+                mapBtnHtml = `<button onclick="openSubjectJourney('${taskId}', '${taskId}')" style="width:auto; padding:5px 12px; font-size:10px; margin-left:auto; background:#334155; border:none; color:white; border-radius:6px;">+ SET JOURNEY</button>`;
             }
         }
 
@@ -3260,19 +3261,16 @@ window.openSubjectJourney = function(subjectName, taskId) {
     modal.classList.remove("hidden");
 };
 window.generateMapFromBulk = function() {
-    const moduleName = prompt("Which Module are these sub-topics for?", "Module 1");
+    const moduleName = prompt("Module Name?", "Module 1");
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
     
-    if (!moduleName || lines.length === 0) {
-        alert("Module and Topics are required.");
-        return;
-    }
+    if (!moduleName || lines.length === 0) return;
 
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const taskId = String(window.currentMapTaskId);
+    const today = new Date().toLocaleDateString();
+    const todayKey = today.replace(/\//g, "-");
+    const taskId = String(window.currentMapTaskId); // This is now the Subject Name
 
-    // This is the array of topics
     const nodesArray = lines.map((line) => ({
         label: line.trim(),
         module: moduleName.trim(),
@@ -3281,22 +3279,23 @@ window.generateMapFromBulk = function() {
         dynamicMins: 0 
     }));
 
-    // 🔥 FIX: Wrap the array in an OBJECT for Firebase update
+    // 1. Update Local Storage for instant UI change
+    let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
+    if (!localMaps[today]) localMaps[today] = {};
+    localMaps[today][taskId] = nodesArray;
+    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
+
+    // 2. Push to Firebase Cloud using Subject Name as key
     const updatePayload = {};
     updatePayload[taskId] = nodesArray;
 
-    // Save directly to the server path
     update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), updatePayload)
     .then(() => {
         document.getElementById('bulkInputModal').classList.add('hidden');
-        // Refresh the sidebar by fetching from server
         loadTasks(); 
-        // Open the map
-        showByjusMap(currentMapSubject, taskId);
+        showByjusMap(taskId, taskId);
     })
-    .catch((error) => {
-        alert("Server Error: " + error.message);
-    });
+    .catch((error) => alert("Cloud Error: " + error.message));
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
 window.addNewSubTopic = async function(taskId) {
