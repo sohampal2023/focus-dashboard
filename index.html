@@ -2914,14 +2914,10 @@ function loadTasks() {
     const tList = document.getElementById("taskList");
     const eList = document.getElementById("extraList");
     if (!tList || !eList) return;
-    
-    tList.innerHTML = "";
-    eList.innerHTML = "";
+    tList.innerHTML = ""; eList.innerHTML = "";
 
     const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    
-    // Get the local map data
     const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     const today = new Date().toLocaleDateString();
     const currentDayMaps = dailyMaps[today] || {};
@@ -2931,9 +2927,8 @@ function loadTasks() {
         container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
         
         const cleanName = item.name.replace(/'/g, "\\'");
-        const taskId = String(item.id || cleanName); 
+        const taskId = String(item.id || cleanName); // Matches the uniqueKey
 
-        // Button Logic: Check if Map exists for this specific ID
         let mapBtnHtml = "";
         if (!item.name.startsWith("MOCK TEST:")) {
             if (currentDayMaps[taskId]) {
@@ -2947,22 +2942,11 @@ function loadTasks() {
         cb.type = "checkbox";
         cb.checked = item.done;
         cb.style.marginRight = "10px";
-
         const label = document.createElement("span");
         label.innerText = item.name;
-        label.style.fontSize = "13px";
 
         cb.onchange = () => {
             item.done = cb.checked;
-            if (cb.checked) {
-                const rem = prompt("Details?", " ");
-                const due = prompt("Pending?", " ");
-                item.comment = rem || "-";
-                item.due = due || "-";
-                if (!currentDayMaps[taskId]) {
-                    saveAutomatedSubjectProgress(item.name, item.comment, item.due);
-                }
-            }
             save(tasks, extras);
             loadTasks();
         };
@@ -3335,7 +3319,7 @@ window.generateMapFromBulk = function() {
 
     const today = new Date().toLocaleDateString();
     const todayKey = today.replace(/\//g, "-");
-    const uniqueKey = String(window.currentMapTaskId);
+    const uniqueKey = String(window.currentMapTaskId); // Force string ID
 
     const nodesArray = lines.map((line) => ({
         label: line.trim(),
@@ -3345,29 +3329,22 @@ window.generateMapFromBulk = function() {
         dynamicMins: 0 
     }));
 
-    // 1. Update Local Storage immediately so the sidebar button changes
+    // Update Local Storage immediately
     let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
     if (!localMaps[today]) localMaps[today] = {};
     localMaps[today][uniqueKey] = nodesArray;
     localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
 
-    // 2. Update Firebase
     const updatePayload = {};
     updatePayload[uniqueKey] = nodesArray;
 
     update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), updatePayload)
     .then(() => {
         document.getElementById('bulkInputModal').classList.add('hidden');
-        
-        // 3. Refresh the Task List so "Set Journey" becomes "View Map"
         loadTasks(); 
-        
-        // 4. Open the Map
         showByjusMap(currentMapSubject, uniqueKey);
     })
-    .catch((error) => {
-        alert("Sync Error: " + error.message);
-    });
+    .catch((err) => alert("Sync Error: " + err.message));
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
 window.addNewSubTopic = async function(taskId) {
@@ -3544,24 +3521,22 @@ window.showByjusMap = async function(subjectName, taskId) {
 window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
     const today = new Date().toLocaleDateString();
     const todayKey = today.replace(/\//g, "-");
-    const uniqueKey = window.currentMapTaskId;
+    const uniqueKey = String(window.currentMapTaskId);
 
     try {
-        // 1. Fetch Fresh Data from Firebase
         const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        if (!snapshot.exists()) throw new Error("No journey data found on server.");
+        if (!snapshot.exists()) throw new Error("Journey data missing. Refreshing...");
         
         let dailyMaps = snapshot.val();
         let nodes = dailyMaps[uniqueKey];
 
-        // Guard: Ensure the specific subject and node index exist
         if (!nodes || !nodes[idx]) {
-            console.error("Node not found at index:", idx, "for key:", uniqueKey);
-            throw new Error("Target topic not found. Please refresh.");
+             // If ID mismatch occurs, try to find by subject name fallback
+             location.reload(); 
+             return;
         }
 
         if (action === 'start') {
-            // Reset any other "doing" nodes to "todo" globally across all subjects
             Object.keys(dailyMaps).forEach(k => {
                 if (Array.isArray(dailyMaps[k])) {
                     dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
@@ -3572,41 +3547,33 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
 
         } else if (action === 'done') {
             const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
-            // Calculate actual minutes taken
             const actualUsedMins = startTS ? Math.max(1, Math.floor((Date.now() - startTS) / 60000)) : currentAllocatedMins;
             
             nodes[idx].status = 'done';
             nodes[idx].dynamicMins = actualUsedMins; 
             nodes[idx].completedAt = new Date().toLocaleTimeString(); 
 
-            // --- GLOBAL REDISTRIBUTION ---
+            // Global redistribution
             const savedMins = currentAllocatedMins - actualUsedMins;
             let pendingNodes = [];
-
-            // Safe iteration over all subjects to find 'todo' nodes
-            Object.keys(dailyMaps).forEach(subjKey => {
-                const subjNodes = dailyMaps[subjKey];
-                if (Array.isArray(subjNodes)) {
-                    subjNodes.forEach((node, nodeIdx) => {
-                        if (node && node.status === 'todo') {
-                            pendingNodes.push({ sKey: subjKey, nIdx: nodeIdx });
-                        }
+            Object.keys(dailyMaps).forEach(sKey => {
+                if (Array.isArray(dailyMaps[sKey])) {
+                    dailyMaps[sKey].forEach((n, nIdx) => {
+                        if (n && n.status === 'todo') pendingNodes.push({ sKey, nIdx });
                     });
                 }
             });
 
-            // Distribute saved/over-limit time
             if (pendingNodes.length > 0) {
-                const adjustment = savedMins / pendingNodes.length;
-                pendingNodes.forEach(target => {
-                    let tNode = dailyMaps[target.sKey][target.nIdx];
-                    if (tNode) {
-                        let currentVal = tNode.dynamicMins || currentAllocatedMins;
-                        tNode.dynamicMins = Math.max(5, Math.round(currentVal + adjustment));
+                const adj = savedMins / pendingNodes.length;
+                pendingNodes.forEach(t => {
+                    let targetNode = dailyMaps[t.sKey][t.nIdx];
+                    if (targetNode) {
+                        let cur = targetNode.dynamicMins || currentAllocatedMins;
+                        targetNode.dynamicMins = Math.max(5, Math.round(cur + adj));
                     }
                 });
             }
-
             if(activeMapTimer) clearInterval(activeMapTimer);
             localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
 
@@ -3616,21 +3583,17 @@ window.handleNodeAction = async function(idx, action, currentAllocatedMins) {
             localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
         }
 
-        // 2. Save back to Firebase
         await update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps);
-
-        // 3. Sync Local Storage
         let localMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
         localMaps[today] = dailyMaps;
         localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(localMaps));
 
-        // 4. Refresh UI
         showByjusMap(currentMapSubject, uniqueKey);
-        if (typeof loadTasks === "function") loadTasks();
+        loadTasks();
 
     } catch (e) {
-        console.error("Action Error Detail:", e);
-        alert(e.message || "Failed to update status. Check connection.");
+        alert(e.message);
+        location.reload();
     }
 };
 /* --- 3. OPTION TO ADD NEW SHIFT MID-DAY --- */
