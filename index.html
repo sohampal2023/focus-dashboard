@@ -790,40 +790,6 @@ const FIXED_SUBJECTS = [
   "GOVT_SCIENCE",
   "GOVT_ENGLISH"
 ];
-window.askDailyBudget = async function() {
-    const todayStr = new Date().toLocaleDateString();
-    const userRef = ref(db, `users/${currentUser.uid}`);
-    
-    try {
-        const snap = await get(userRef);
-        const user = snap.val() || {};
-
-        // If goal already exists for today in Firebase, sync to local and exit
-        if (user.DAILY_GOAL_DATE === todayStr && user.DAILY_SHIFT_COUNT) {
-            localStorage.setItem("DAILY_SHIFT_COUNT", user.DAILY_SHIFT_COUNT);
-            return;
-        }
-
-        // Otherwise, Force the prompt
-        let shiftNum = 0;
-        while (shiftNum <= 0 || isNaN(shiftNum)) {
-            const shifts = prompt("NEW DAY DETECTED\nEnter total shifts for today (1 shift = 2 hrs):", "3");
-            if (shifts === null) continue; // Prevent cancelling
-            shiftNum = parseInt(shifts);
-        }
-
-        // Save to Firebase and LocalStorage
-        await update(userRef, {
-            DAILY_SHIFT_COUNT: shiftNum,
-            DAILY_GOAL_DATE: todayStr
-        });
-        localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
-        
-    } catch (e) {
-        console.error("Budget Error:", e);
-    }
-};
-
 // --- GLOBAL VARIABLES ---
 let currentUser = null; 
 let currentMapSubject = "";
@@ -2051,40 +2017,7 @@ async function loadNotices() {
         console.error("Notice load error:", e);
     }
 }
-window.initStudentDashboard = async function() {
-    const userRef = ref(db, `users/${currentUser.uid}`);
-    
-    // 1. Initial Data Fetch
-    const snap = await get(userRef);
-    const data = snap.val() || {};
 
-    // 2. Force Daily Budget Check
-    await window.askDailyBudget();
-
-    // 3. Setup Real-time Listener
-    if (window.studentUnsubscribe) window.studentUnsubscribe();
-    window.studentUnsubscribe = onValue(userRef, (snapshot) => {
-        const liveData = snapshot.val() || {};
-        
-        // Sync critical keys to LocalStorage for logic consistency
-        if(liveData.TASKS) localStorage.setItem(key("TASKS"), liveData.TASKS);
-        if(liveData.EXTRA) localStorage.setItem(key("EXTRA"), liveData.EXTRA);
-        if(liveData.PENALTY) penalty = parseInt(liveData.PENALTY) || 0;
-
-        // UI visibility
-        document.getElementById("studentView").classList.remove("hidden");
-        document.getElementById("studentControls").classList.remove("hidden");
-        document.getElementById("loginBtn").classList.add("hidden");
-        document.getElementById("logoutBtn").classList.remove("hidden");
-
-        // Render functions
-        window.loadTasks(); 
-        updateProgress();
-        runShiftTimer();
-    });
-
-    startIdle(1800);
-};
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
     document.getElementById("adminFeedbackBox").classList.add("hidden");
@@ -3921,7 +3854,80 @@ window.finalDayEnd = async function() {
   // Logout
   signOut(auth).then(() => location.reload());
 };
- window.loadTasks = function() {
+// 1. UPDATED: Forced Daily Shift Budget Logic
+window.askDailyBudget = async function() {
+    const todayStr = new Date().toLocaleDateString();
+    const userRef = ref(db, `users/${currentUser.uid}`);
+    
+    try {
+        const snap = await get(userRef);
+        const user = snap.val() || {};
+
+        // If goal already exists for today, sync to local and exit
+        if (user.DAILY_GOAL_DATE === todayStr && user.DAILY_SHIFT_COUNT) {
+            localStorage.setItem("DAILY_SHIFT_COUNT", user.DAILY_SHIFT_COUNT);
+            return;
+        }
+
+        // FORCE ASK: Loop until valid number is provided
+        let shiftNum = 0;
+        while (shiftNum <= 0 || isNaN(shiftNum)) {
+            const shifts = prompt("NEW DAY DETECTED\nEnter total shifts for today (1 shift = 2 hrs):", "3");
+            if (shifts === null) continue; 
+            shiftNum = parseInt(shifts);
+        }
+
+        // Save to Firebase and LocalStorage
+        await update(userRef, {
+            DAILY_SHIFT_COUNT: shiftNum,
+            DAILY_GOAL_DATE: todayStr
+        });
+        localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
+        
+    } catch (e) {
+        console.error("Budget Error:", e);
+    }
+};
+
+// 2. UPDATED: Initialization Sequence
+window.initStudentDashboard = async function() {
+    const userRef = ref(db, `users/${currentUser.uid}`);
+    
+    // Step A: Force Daily Budget Check first
+    await window.askDailyBudget();
+
+    // Step B: Setup Real-time Listener for Dashboard Data
+    if (window.studentUnsubscribe) window.studentUnsubscribe();
+    
+    window.studentUnsubscribe = onValue(userRef, (snapshot) => {
+        const liveData = snapshot.val() || {};
+        
+        // Sync critical keys for rendering
+        if(liveData.TASKS) localStorage.setItem(key("TASKS"), liveData.TASKS);
+        if(liveData.EXTRA) localStorage.setItem(key("EXTRA"), liveData.EXTRA);
+        if(liveData.PENALTY) penalty = parseInt(liveData.PENALTY) || 0;
+
+        // Make the student dashboard visible
+        const studentView = document.getElementById("studentView");
+        const taskBox = document.getElementById("taskBox");
+        if (studentView) studentView.classList.remove("hidden");
+        if (taskBox) taskBox.classList.remove("hidden");
+
+        // Refresh UI Elements
+        window.loadTasks(); 
+        updateProgress();
+        runShiftTimer();
+        
+        document.getElementById("statusBox").innerText = currentUser.email;
+        document.getElementById("syncStatus").innerText = "Session Active";
+    });
+
+    // Start Watchdog
+    startIdle(1800);
+};
+
+// 3. UPDATED: Task List Rendering logic (Fixes the Blank Screen)
+window.loadTasks = function() {
     const tList = document.getElementById("taskList");
     const eList = document.getElementById("extraList");
     if (!tList || !eList) return;
@@ -3933,33 +3939,36 @@ window.finalDayEnd = async function() {
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
 
     if (tasks.length === 0) {
-        tList.innerHTML = `<div style="color:#64748b; font-size:12px; padding:10px; border:1px dashed #334155; border-radius:8px;">
-            Waiting for Admin to assign tasks...</div>`;
+        tList.innerHTML = `<div style="color:#64748b; font-size:14px; padding:20px; text-align:center; border:1px dashed #334155; border-radius:12px;">
+            Waiting for Admin to assign today's subjects...</div>`;
     }
 
-    const renderItem = (item, listRef, isExtra) => {
+    const renderItem = (item, listRef) => {
         const container = document.createElement("div");
-        container.style.cssText = "display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; background:#0f172a; padding:8px; border-radius:8px; border:1px solid #1e293b;";
+        container.style.cssText = "display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; background:#0f172a; padding:12px; border-radius:10px; border:1px solid #1e293b;";
         
         const leftSide = document.createElement("div");
         leftSide.style.display = "flex";
         leftSide.style.alignItems = "center";
-        leftSide.style.gap = "10px";
+        leftSide.style.gap = "12px";
 
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.checked = item.done;
+        cb.style.width = "18px";
+        cb.style.height = "18px";
         cb.style.cursor = "pointer";
 
         const label = document.createElement("span");
         label.innerText = item.name;
-        label.style.fontSize = "13px";
+        label.style.fontWeight = "600";
+        label.style.fontSize = "14px";
         if (item.done) label.style.color = "#4ade80";
 
         cb.onchange = () => {
             if (cb.checked) {
-                const remark = prompt(`Completion details for ${item.name}:`, "Topics covered...");
-                const dueVal = prompt(`Pending/Due topics:`, "None");
+                const remark = prompt(`Completed: ${item.name}. Details?`, "Done");
+                const dueVal = prompt(`Any pending topics?`, "None");
                 item.comment = remark || "-";
                 item.due = dueVal || "-";
                 saveAutomatedSubjectProgress(item.subjectOnly || item.name, item.comment, item.due);
@@ -3971,11 +3980,11 @@ window.finalDayEnd = async function() {
         leftSide.append(cb, label);
         container.append(leftSide);
 
-        // Add MAP button if taskId exists
+        // Render MAP button for Journeys
         if (item.id && !item.name.startsWith("MOCK TEST:")) {
             const mapBtn = document.createElement("button");
             mapBtn.innerText = "🗺 MAP";
-            mapBtn.style.cssText = "width:auto; padding:4px 10px; font-size:10px; background:#0ea5e9; margin:0;";
+            mapBtn.style.cssText = "width:auto; padding:6px 12px; font-size:11px; background:#0ea5e9; border:none; color:white; border-radius:6px; margin:0; cursor:pointer; font-weight:bold;";
             mapBtn.onclick = () => showByjusMap(item.subjectOnly || item.name, item.id);
             container.append(mapBtn);
         }
@@ -3983,8 +3992,8 @@ window.finalDayEnd = async function() {
         listRef.append(container);
     };
 
-    tasks.forEach(t => renderItem(t, tList, false));
-    extras.forEach(e => renderItem(e, eList, true));
+    tasks.forEach(t => renderItem(t, tList));
+    extras.forEach(e => renderItem(e, eList));
 };
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
