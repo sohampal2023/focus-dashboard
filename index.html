@@ -3313,35 +3313,30 @@ window.openSubjectJourney = function(subjectName, taskId) {
 window.generateMapFromBulk = function() {
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
+    if (lines.length === 0) return;
+
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    const uniqueKey = window.currentMapTaskId;
     
-    if (lines.length === 0) {
-        alert("Please enter topics.");
-        return;
-    }
+    // Determine the Module (Assigned or Extra)
+    const isExtra = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]").some(e => e.id == uniqueKey);
+    const moduleName = isExtra ? "Extra Work" : "Assigned Tasks";
 
-    const today = new Date().toLocaleDateString();
-    let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    
-    if (!dailyMaps[today]) dailyMaps[today] = {};
-
-    // Use Task ID as unique key to allow multiple same-name subjects
-    const uniqueKey = window.currentMapTaskId || currentMapSubject;
-
-    dailyMaps[today][uniqueKey] = lines.map((line, index) => ({
-        id: Date.now() + index,
+    const newMapData = lines.map((line, index) => ({
         label: line.trim(),
         status: 'todo',
         completedAt: null,
-        history: [],
-        dynamicMins: null
+        dynamicMins: null,
+        module: moduleName // Provision to see which module this belongs to
     }));
 
-    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
-    document.getElementById('bulkInputModal').classList.add('hidden');
-    
-    uploadData();
-    loadTasks();
-    showByjusMap(currentMapSubject, uniqueKey);
+    // SAVE TO SERVER IRRESPECTIVE OF DEVICE
+    update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}/${uniqueKey}`), newMapData)
+    .then(() => {
+        document.getElementById('bulkInputModal').classList.add('hidden');
+        loadTasks();
+        showByjusMap(currentMapSubject, uniqueKey);
+    });
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
 window.addNewSubTopic = function(subjectName) {
@@ -3387,180 +3382,103 @@ window.addNewSubTopic = function(subjectName) {
 let activeMapTimer = null; 
 
 /* --- 1. THE MAP RENDERER (CLEAN FINISH + TIMER DISPLAY) --- */
-window.showByjusMap = function(subjectName, taskId) {
-    const uniqueKey = taskId || subjectName;
-    currentMapSubject = subjectName;
-    window.currentMapTaskId = uniqueKey; 
-    
-    const dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    const today = new Date().toLocaleDateString();
-    const shiftCount = parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3;
-    const totalDayMins = shiftCount * 120;
+window.showByjusMap = async function(subjectName, taskId) {
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    const dailyMaps = snapshot.val() || {};
+    const nodes = dailyMaps[taskId] || [];
 
-    let allSubjects = Object.keys(dailyMaps[today] || {});
-    let doneNodes = [];
-    let pendingNodes = [];
-    allSubjects.forEach(s => {
-        (dailyMaps[today][s] || []).forEach(n => {
-            if (n.status === 'done') doneNodes.push(n);
-            else pendingNodes.push(n);
-        });
-    });
-
-    const usedTime = doneNodes.reduce((s, n) => s + (n.dynamicMins || 0), 0);
-    const remainTime = Math.max(0, totalDayMins - usedTime);
-    const evenAlloc = pendingNodes.length > 0 ? Math.floor(remainTime / pendingNodes.length) : 0;
-    
     const container = document.getElementById("mapContainer");
     container.innerHTML = "";
     
-    // Header Logic
+    // Provision to show Module Name
+    const moduleType = nodes[0]?.module || "General";
+
     const headerTitle = document.getElementById("currentMapSubject");
     headerTitle.innerHTML = `
-        <div style="display:flex; flex-direction:column; gap:5px; width:100%;">
+        <div style="display:flex; flex-direction:column; gap:4px;">
             <div style="display:flex; justify-content:space-between; align-items:center;">
-                <span style="font-size:1.1rem; color:#38bdf8; font-weight:bold;">${subjectName}</span>
-                <button onclick="addNewSubTopic('${uniqueKey.replace(/'/g, "\\'")}')" style="background:#16a34a; font-size:9px; padding:4px 10px; border-radius:4px; border:none; color:white;">➕ TOPIC</button>
+                <span style="font-weight:bold; color:#38bdf8;">${subjectName}</span>
+                <span style="font-size:9px; background:#334155; padding:2px 6px; border-radius:10px; color:#94a3b8;">${moduleType}</span>
             </div>
-            <div style="font-size:10px; color:#94a3b8; border-top:1px solid #1e293b; padding-top:5px; margin-top:5px;">
-                STUDIED: ${usedTime}m | REMAINING: ${remainTime}m | TOTAL BUDGET: ${totalDayMins}m
+            <div style="font-size:10px; color:#94a3b8; border-top:1px solid #1e293b; padding-top:5px; margin-top:10px;">
+                SERVER SYNC ACTIVE | EDITABLE ON ANY DEVICE
             </div>
         </div>
     `;
 
-    (dailyMaps[today][uniqueKey] || []).forEach((node, idx) => {
-        const isFinished = node.status === 'done';
+    nodes.forEach((node, idx) => {
         const isDoing = node.status === 'doing';
-        const displayMins = isFinished ? node.dynamicMins : evenAlloc;
-        
+        const isDone = node.status === 'done';
         const row = document.createElement("div");
-        row.style.cssText = "display:flex; align-items:center; margin-bottom:30px; gap:15px;";
+        row.style.cssText = "display:flex; align-items:center; margin-bottom:25px; gap:12px;";
         row.innerHTML = `
-            <div class="node-circle status-${node.status}" style="width:45px; height:45px; display:flex; align-items:center; justify-content:center;">
-                ${isFinished ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:11px; color:#000; font-weight:bold;">--:--</span>' : idx+1}
+            <div class="node-circle status-${node.status}" style="width:40px; height:40px; display:flex; align-items:center; justify-content:center;">
+                ${isDone ? '✔' : isDoing ? '<span id="miniTimer" style="font-size:10px; color:#000;">--:--</span>' : idx+1}
             </div>
-            <div style="flex-grow:1; background:#0f172a; padding:15px; border-radius:12px; border:1px solid ${isDoing ? '#facc15' : '#1e293b'};">
-                <div style="font-weight:bold; color:#fff; font-size:13px; text-transform:uppercase;">${node.label}</div>
-                <div style="font-size:11px; color:#38bdf8; font-weight:900;">${isFinished ? 'Used: ' : ''}${displayMins}m</div>
-                <div style="margin-top:10px;">
-                    ${!isFinished ? (
-                        isDoing ? 
-                        `<div style="display:flex; gap:8px;">
-                            <button onclick="handleNodeAction(${idx}, 'done', ${displayMins})" style="background:#16a34a; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold;">DONE</button>
-                            <button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold;">ABORT</button>
-                         </div>` : 
-                        `<button onclick="handleNodeAction(${idx}, 'start', ${displayMins})" style="background:#0ea5e9; padding:5px 12px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold;">START</button>`
-                    ) : `<span style="color:#4ade80; font-size:10px; font-weight:bold;">● COMPLETED</span>`}
+            <div style="flex-grow:1; background:#0f172a; padding:12px; border-radius:10px; border:1px solid #1e293b;">
+                <div style="font-weight:bold; color:#fff; font-size:12px;">${node.label}</div>
+                <div style="margin-top:8px; display:flex; gap:5px;">
+                    ${!isDone ? `<button onclick="handleNodeAction(${idx}, '${isDoing ? 'done' : 'start'}', ${node.dynamicMins || 0})" style="background:${isDoing ? '#16a34a' : '#0ea5e9'}; padding:4px 10px; font-size:10px; color:white; border:none; border-radius:4px;">${isDoing ? 'DONE' : 'START'}</button>` : ''}
+                    ${isDoing ? `<button onclick="handleNodeAction(${idx}, 'abort')" style="background:#dc2626; padding:4px 10px; font-size:10px; color:white; border:none; border-radius:4px;">ABORT</button>` : ''}
                 </div>
             </div>
         `;
         container.appendChild(row);
-        if (isDoing) startCountdown(displayMins);
+        if (isDoing) startCountdown(node.dynamicMins || 30);
     });
     document.getElementById("byjusMapBox").classList.remove("hidden");
 };
 
 /* --- 2. GLOBAL REDISTRIBUTION (REMAINING TIME FOCUS) --- */
+
 window.handleNodeAction = function(idx, action, currentAllocatedMins) {
-    const today = new Date().toLocaleDateString();
-    let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    
-    // --- CRITICAL: USE UNIQUE TASK ID KEY ---
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const uniqueKey = window.currentMapTaskId;
-    if (!uniqueKey || !dailyMaps[today] || !dailyMaps[today][uniqueKey]) {
-        console.error("Task ID not found in mapping.");
-        return;
-    }
-    
-    let nodes = dailyMaps[today][uniqueKey];
 
-    if (action === 'start') {
-        // Ensure only one task is active across ALL subjects globally
-        Object.keys(dailyMaps[today]).forEach(key => {
-            dailyMaps[today][key].forEach(n => { 
-                if(n.status === 'doing') n.status = 'todo'; 
+    // Fetch fresh from server to ensure multi-device sync
+    get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`)).then((snapshot) => {
+        let dailyMaps = snapshot.val() || {};
+        let nodes = dailyMaps[uniqueKey];
+
+        if (action === 'start') {
+            Object.keys(dailyMaps).forEach(k => {
+                dailyMaps[k].forEach(n => { if(n.status === 'doing') n.status = 'todo'; });
             });
-        });
-        nodes[idx].status = 'doing';
-        localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
-        
-    } else if (action === 'done') {
-        const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
-        const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
-        const difference = currentAllocatedMins - actualUsedMins; 
+            nodes[idx].status = 'doing';
+            localStorage.setItem(key("CURRENT_ACTIVE_TOPIC_TS"), Date.now());
+        } else if (action === 'done') {
+            const startTS = parseInt(localStorage.getItem(key("CURRENT_ACTIVE_TOPIC_TS")));
+            const actualUsedMins = Math.max(1, Math.floor((Date.now() - startTS) / 60000));
+            nodes[idx].status = 'done';
+            nodes[idx].dynamicMins = actualUsedMins;
+            nodes[idx].completedAt = new Date().toLocaleTimeString();
 
-        nodes[idx].status = 'done';
-        nodes[idx].dynamicMins = actualUsedMins; 
-        nodes[idx].completedAt = new Date().toLocaleTimeString();
-
-        // 1. CHECK FOR FULL JOURNEY COMPLETION (AUTO-TICK SIDEBAR)
-        const allFinished = nodes.every(n => n.status === 'done');
-        
-        if (allFinished) {
-            let tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-            let extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-            
-            // Logic: Tick only the row that matches THIS specific Unique ID
-            const tickRow = (list) => {
-                list.forEach(t => {
-                    // Match by ID if exists, fallback to name for older tasks
-                    if ((t.id && String(t.id) === String(uniqueKey)) || t.name === currentMapSubject) {
-                        t.done = true;
-                    }
+            // Redistribution logic (Simplified for Server Sync)
+            const diff = currentAllocatedMins - actualUsedMins;
+            let pending = [];
+            Object.keys(dailyMaps).forEach(k => {
+                dailyMaps[k].forEach((n, i) => { if(n.status === 'todo') pending.push({k, i}); });
+            });
+            if(pending.length > 0) {
+                const adj = diff / pending.length;
+                pending.forEach(p => {
+                    let t = dailyMaps[p.k][p.i];
+                    t.dynamicMins = Math.max(5, Math.round((t.dynamicMins || currentAllocatedMins) + adj));
                 });
-            };
-
-            tickRow(tasks);
-            tickRow(extras);
-            
-            localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
-            localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-
-            // Log Final Completion to Subject Progress Table
-            const totalTime = nodes.reduce((s, n) => s + (n.dynamicMins || 0), 0);
-            saveAutomatedSubjectProgress(currentMapSubject, `Completed (${totalTime}m)`, "None - All Clear");
+            }
+            if(activeMapTimer) clearInterval(activeMapTimer);
+        } else if (action === 'abort') {
+            nodes[idx].status = 'todo';
+            if(activeMapTimer) clearInterval(activeMapTimer);
         }
 
-        // 2. GLOBAL REDISTRIBUTION LOGIC
-        let pending = [];
-        Object.keys(dailyMaps[today]).forEach(subKey => {
-            dailyMaps[today][subKey].forEach((n, i) => { 
-                if (n.status === 'todo') pending.push({ key: subKey, index: i }); 
-            });
+        // Push back to Server
+        update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), dailyMaps).then(() => {
+            showByjusMap(currentMapSubject, uniqueKey);
+            loadTasks();
         });
-
-        if (pending.length > 0 && difference !== 0) {
-            const adj = difference / pending.length;
-            pending.forEach(p => {
-                let target = dailyMaps[today][p.key][p.index];
-                if (!target.history) target.history = [];
-                const oldVal = target.dynamicMins || currentAllocatedMins;
-                const newVal = Math.max(5, Math.round(oldVal + adj));
-                
-                // Only strike and update if time actually changed
-                if (newVal !== Math.round(oldVal)) {
-                    target.history.push(Math.round(oldVal));
-                    target.dynamicMins = newVal;
-                }
-            });
-        }
-
-        if(activeMapTimer) clearInterval(activeMapTimer);
-        localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
-
-    } else if (action === 'abort') {
-        nodes[idx].status = 'todo';
-        if(activeMapTimer) clearInterval(activeMapTimer);
-        localStorage.removeItem(key("CURRENT_ACTIVE_TOPIC_TS"));
-    }
-
-    // Save update back to unique key
-    dailyMaps[today][uniqueKey] = nodes;
-    localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(dailyMaps));
-    
-    uploadData();
-    showByjusMap(currentMapSubject, uniqueKey); // Re-render with ID
-    loadTasks(); // Update sidebar ticks
+    });
 };
 /* --- 3. OPTION TO ADD NEW SHIFT MID-DAY --- */
 window.extendShiftDirectly = function() {
@@ -3744,31 +3662,31 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     saveSubjectData(subjectData); 
     uploadData(); 
 };
-  window.finalDayEnd = function() {
-    if(!confirm("Submit Report & End Day?")) return;
+ window.finalDayEnd = async function() {
+    if(!confirm("Submit final report and clear maps?")) return;
 
-    const today = new Date().toLocaleDateString();
-    let dailyMaps = JSON.parse(localStorage.getItem(MAP_STORAGE_KEY()) || "{}");
-    
-    // Log any unfinished work as "DUE" before clearing
-    Object.keys(dailyMaps[today] || {}).forEach(sub => {
-        const nodes = dailyMaps[today][sub];
-        const pending = nodes.filter(n => n.status !== 'done');
-        if (pending.length > 0) {
-            const done = nodes.filter(n => n.status === 'done').map(n => n.label).join(", ") || "None";
-            const due = pending.map(n => n.label).join(", ");
-            saveAutomatedSubjectProgress(sub, `Partial: ${done}`, `DUE: ${due}`);
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    const maps = snapshot.val() || {};
+
+    // For each subject, log only the topic names that were completed
+    Object.keys(maps).forEach(taskId => {
+        const nodes = maps[taskId];
+        const doneNames = nodes.filter(n => n.status === 'done').map(n => n.label).join(", ");
+        const dueNames = nodes.filter(n => n.status !== 'done').map(n => n.label).join(", ");
+        
+        if (doneNames || dueNames) {
+            saveAutomatedSubjectProgress(
+                nodes[0].module === "Extra Work" ? `(EXTRA) ${nodes[0].label}` : nodes[0].label, 
+                doneNames || "None", 
+                dueNames || "All Clear"
+            );
         }
     });
 
-    // Reset Penalties and Local Storage
-    localStorage.setItem(key("PENALTY"), "0");
-    localStorage.setItem(key("IDLE_STRIKES"), "0");
+    // Clear and Logout
     localStorage.removeItem(key("DAILY_GOAL_DATE"));
-    localStorage.removeItem(MAP_STORAGE_KEY());
-    
-    uploadData();
-    // Generate Report HTML and Lock... (standard report code)
+    await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
     location.reload();
 };
 // --- ATTACH TO WINDOW ---
