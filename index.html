@@ -3817,7 +3817,7 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will reset all shifts and sync tasks to all devices.")) return;
+    if(!confirm("End Day? This will sync all tasks and reset shifts globally.")) return;
 
     try {
         const nextDayTasks = [];
@@ -3837,37 +3837,28 @@ window.finalDayEnd = async function() {
         const p = calculate();
         const todayStr = new Date().toLocaleDateString();
 
-        // 1. 🔥 THE GLOBAL RESET
-        // We set dailyGoalDate to empty and clear the Shift Target on the server
+        // 🔥 THE GLOBAL RESET: This clears "Shift 3" and saves "Assigned Tasks"
         const globalReset = {
-            TASKS: JSON.stringify(nextDayTasks),
+            TASKS: JSON.stringify(nextDayTasks), // Saves your selected subjects
             EXTRA: "[]",
             PENALTY: "0",
-            dailyGoalDate: "", // Resets the date so next login asks for shifts
-            dailyShiftTarget: "", // Resets the shift count on server
+            dailyGoalDate: "RESET_" + Date.now(), // Forces a fresh login
+            dailyShiftTarget: "", // Wipes the "3"
             currentShiftLabel: "No Active Shift"
         };
 
         await update(ref(db, `users/${currentUser.uid}`), globalReset);
 
-        // 2. 🔥 LOCAL RESET
-        // Clear the specific keys that are causing the "Shift 3" error
-        localStorage.removeItem(key("DAILY_GOAL_DATE"));
-        localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
-        localStorage.removeItem(key("SHIFT_END_TS"));
-        localStorage.removeItem(key("CURRENT_SHIFT_LABEL"));
+        // Clear this device's memory specifically
+        localStorage.clear(); 
         
-        localStorage.setItem(key("TASKS"), JSON.stringify(nextDayTasks));
-        localStorage.setItem(key("EXTRA"), "[]");
-        
-        // 3. Close Session & Lock
         const reportHTML = `<div class='card' style='text-align:center; padding:40px;'><h1 style='color:#38bdf8;'>${p.percent}%</h1><button onclick='dismissReportLock()' style='background:#22c55e; color:white; padding:15px; width:100%; border:none; border-radius:8px; cursor:pointer;'>START NEW DAY</button></div>`;
         localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
         
         signOut(auth).then(() => location.reload());
 
     } catch (e) {
-        alert("Day End Reset Failed: " + e.message);
+        alert("Day End Failed: " + e.message);
     }
 };
 // --- ATTACH TO WINDOW ---
