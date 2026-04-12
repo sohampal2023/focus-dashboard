@@ -774,7 +774,18 @@ const FIXED_SUBJECTS = [
 onAuthStateChanged(auth, async (user) => {
     const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
     if (lockedReport) {
-        document.body.innerHTML = `<div style="min-height:100vh; display:flex; justify-content:center; align-items:center; background:#020617; padding:20px;"><div style="width:100%;max-width:520px">${lockedReport}<div style="margin-top:15px;text-align:center"><button onclick="dismissReportLock()" style="padding:12px 20px; background:#0ea5e9; border:none; border-radius:8px; color:white; font-size:14px; cursor:pointer;">Login & Start New Session</button></div></div></div>`;
+        // This completely removes the dashboard and shows only the report
+        document.body.innerHTML = `
+          <div style="min-height:100vh; display:flex; justify-content:center; align-items:center; background:#020617; padding:20px;">
+            <div style="width:100%;max-width:520px">
+              ${lockedReport}
+              <div style="margin-top:15px;text-align:center">
+                <button onclick="dismissReportLock()" style="padding:12px 20px; background:#0ea5e9; border:none; border-radius:8px; color:white; cursor:pointer;">
+                  Login & Start New Session
+                </button>
+              </div>
+            </div>
+          </div>`;
         return;
     }
 
@@ -3891,7 +3902,7 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("End Day? This clears everything and will ask for shifts on your next login.")) return;
+    if(!confirm("End Day? This clears all current tasks and will move pending work to 'Due'.")) return;
 
     const todayStr = new Date().toLocaleDateString();
     const todayKey = todayStr.replace(/\//g, "-");
@@ -3901,7 +3912,16 @@ window.finalDayEnd = async function() {
     const tasks = JSON.parse(data.TASKS || "[]");
     const maps = data.dailyMaps ? data.dailyMaps[todayKey] : {};
 
-    // 1. Process and save the report
+    // 1. Calculate Score and Time for the final report
+    const p = calculate(); 
+    let totalMillis = 0;
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    logs.forEach(l => {
+        if (l.loginTS && l.logoutTS) totalMillis += (l.logoutTS - l.loginTS);
+    });
+    const timeStr = `${Math.floor(totalMillis / 3600000)} hr ${Math.floor((totalMillis % 3600000) / 60000)} min`;
+
+    // 2. Process Subject Report logic (Keep your grouping logic here)
     const report = {}; 
     tasks.forEach(t => {
         const sub = t.subjectOnly || "General";
@@ -3913,41 +3933,44 @@ window.finalDayEnd = async function() {
             });
         }
     });
-
     for (const s in report) {
-        saveAutomatedSubjectProgress(
-            s, 
-            report[s].covered.join(", ") || "None", 
-            report[s].due.join(", ") || "None"
-        );
+        saveAutomatedSubjectProgress(s, report[s].covered.join(", ") || "None", report[s].due.join(", ") || "None");
     }
 
-    // 2. THE WIPE: Delete DAILY_GOAL_DATE so the next login triggers the prompt
+    // 3. THE WIPE (Firebase)
     const updates = {};
     updates[`users/${currentUser.uid}/TASKS`] = "[]";
     updates[`users/${currentUser.uid}/EXTRA`] = "[]";
     updates[`users/${currentUser.uid}/dailyMaps/${todayKey}`] = null;
-    updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; // Forces prompt next time
+    updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; 
     updates[`users/${currentUser.uid}/SHIFT_END_TS`] = null;
-    updates[`users/${currentUser.uid}/CURRENT_SHIFT_LABEL`] = "No Shift Active";
 
-    await update(ref(db), updates);
-    
-    // 3. Clear LocalStorage and create the Locked Report
-    const finalScore = calculate().percent;
-    const reportHTML = `
-        <div class="card" style="background:#1e1b4b; text-align:center; padding:30px;">
-            <h2 style="color:#38bdf8;">SESSION COMPLETE</h2>
-            <div style="font-size:50px; font-weight:800; color:white;">${finalScore}%</div>
-            <p style="color:#94a3b8;">All progress has been synced to your Subject History.</p>
-        </div>`;
-    
-    localStorage.clear();
-    localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
-    
-    signOut(auth).then(() => {
-        location.reload();
-    });
+    try {
+        await update(ref(db), updates);
+
+        // 4. GENERATE LOCKED HTML & CLEAR LOCAL STORAGE
+        const reportHTML = `
+            <div class="card" style="background:#0f172a; border: 2px solid #38bdf8; text-align:center; padding:40px; border-radius:20px;">
+                <h2 style="color:#38bdf8; margin-bottom:10px;">DAY ENDED</h2>
+                <div style="font-size:60px; font-weight:900; color:white; margin:20px 0;">${p.percent}%</div>
+                <div style="font-size:20px; color:#facc15; font-weight:bold; margin-bottom:20px;">Rating: ${getLabel(p.percent)}</div>
+                <div style="padding:15px; background:#1e293b; border-radius:10px; color:#94a3b8; margin-bottom:30px;">
+                    ⏱ Session Time: ${timeStr}
+                </div>
+                <p style="font-size:12px; color:#64748b; margin-bottom:20px;">All uncompleted subtopics have been moved to 'Due' in your Subject Progress.</p>
+            </div>`;
+
+        // We clear LocalStorage but then IMMEDIATELY set the Lock flag
+        localStorage.clear();
+        localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
+
+        // 5. Force Logout and Refresh
+        signOut(auth).then(() => {
+            location.reload();
+        });
+    } catch (e) {
+        alert("Error ending day: " + e.message);
+    }
 };
  window.loadTasks = function() {
     const taskList = document.getElementById("taskList");
