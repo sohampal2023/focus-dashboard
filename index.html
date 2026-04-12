@@ -3772,57 +3772,80 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
 window.finalDayEnd = async function() {
-    if(!confirm("End Day? Selected tasks will be set for tomorrow.")) return;
-
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    if(!confirm("CONFIRM DAY END:\n\nSubmit report and prepare tasks for tomorrow?")) return;
 
     try {
-        // 1. Collect the New Tasks you selected in the dropdowns
+        // 1. Collect the New Tasks from the dropdowns
         const nextDayTasks = [];
         for (let i = 0; i < 7; i++) {
             const sub = document.getElementById("nd_sub_" + i)?.value;
             const top = document.getElementById("nd_top_" + i)?.value.trim();
-            if(sub) { 
+            
+            if(sub && sub !== "") { 
                 nextDayTasks.push({ 
                     id: "task_" + Date.now() + i, 
                     name: sub, 
-                    target: top, 
-                    done: false 
+                    target: top || "General Study", 
+                    done: false,
+                    comment: "",
+                    due: ""
                 }); 
             }
         }
 
-        // 2. If you selected nothing, use defaults so it's not blank
+        // 2. Fallback: If no subjects were selected, provide default tasks
         if (nextDayTasks.length === 0) {
             nextDayTasks.push(
-                { id: "t1", name: "Study", done: false },
-                { id: "t2", name: "Revise", done: false }
+                { id: "t1", name: "Study", target: "Daily Goal", done: false },
+                { id: "t2", name: "Revision", target: "Daily Goal", done: false }
             );
         }
 
-        // 3. Clear today's maps and extras
-        await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-
-        // 4. 🔥 CRITICAL: Save to the main TASKS path on the server
+        // 3. Calculate Final Performance for History
+        const p = calculate();
+        const todayStr = new Date().toLocaleDateString();
+        const todayKey = todayStr.replace(/\//g, "-");
+        
+        // 4. 🔥 THE CORE FIX: Sync to Firebase
+        // We overwrite the TASKS path with our new selection and clear EXTRAS
         await update(ref(db, `users/${currentUser.uid}`), {
             TASKS: JSON.stringify(nextDayTasks),
             EXTRA: "[]",
             PENALTY: "0",
-            dailyGoalDate: "" // Forces shift prompt on next login
+            DAILY_TIMEOUTS: "0",
+            IDLE_STRIKES: "0",
+            dailyGoalDate: "" // This triggers the "New Day" shift prompt on next login
         });
 
-        // 5. Clear Local Storage
+        // 5. Update LocalStorage so the UI stays in sync
         localStorage.setItem(key("TASKS"), JSON.stringify(nextDayTasks));
         localStorage.setItem(key("EXTRA"), "[]");
+        localStorage.removeItem(key("LOGS"));
+        localStorage.removeItem(key("NEXT_TASKS"));
 
-        // 6. Show Report and Logout
-        const p = calculate();
-        localStorage.setItem("LOCKED_REPORT_VIEW", `<div class='card' style='text-align:center; padding:40px;'><h1 style='color:#38bdf8;'>${p.percent}%</h1><button onclick='dismissReportLock()' style='background:#22c55e; color:white; padding:15px; width:100%; border:none; border-radius:8px; cursor:pointer;'>START NEW DAY</button></div>`);
-        
-        signOut(auth).then(() => location.reload());
+        // 6. Generate the Report View
+        const reportHTML = `
+            <div style="padding:20px; text-align:center;">
+                <div class="card" style="background:#1e1b4b; padding:40px;">
+                    <h2 style="color:#38bdf8;">DAY COMPLETED</h2>
+                    <div style="font-size:60px; font-weight:800; color:#4ade80;">${p.percent}%</div>
+                    <p style="color:#cbd5e1;">Your tasks for tomorrow have been assigned.</p>
+                    <button onclick="dismissReportLock()" style="width:100%; background:#22c55e; color:white; padding:15px; border:none; border-radius:8px; cursor:pointer; font-weight:bold; margin-top:20px;">
+                        LOGIN TO NEW SESSION
+                    </button>
+                </div>
+            </div>`;
+
+        localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
+
+        // 7. Logout and Refresh
+        signOut(auth).then(() => {
+            location.reload(); 
+        });
 
     } catch (e) {
-        alert("Save Error: " + e.message);
+        console.error("Day End Sync Error:", e);
+        alert("Failed to save end-of-day data: " + e.message);
     }
 };
 // --- ATTACH TO WINDOW ---
