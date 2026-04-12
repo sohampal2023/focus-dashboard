@@ -2056,7 +2056,11 @@ async function initStudentDashboard() {
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("logoutBtn").classList.remove("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
-
+    const studentView = document.getElementById("studentView");
+    if (studentView) studentView.classList.remove("hidden");
+    
+    const taskBox = document.getElementById("taskBox");
+    if (taskBox) taskBox.classList.remove("hidden");
     const serverData = await downloadData(currentUser.uid);
     const today = new Date().toLocaleDateString();
     const todayKey = today.replace(/\//g, "-");
@@ -2406,21 +2410,30 @@ window.loadSubjectList = function() {
 
 /* --- HELPER: AUTOMATED SUBJECT LOGGING --- */
 window.saveAutomatedSubjectProgress = (subject, covered, uncovered) => {
-    const subjectData = getSubjectData(); 
+    // 1. Get current table from local
+    let subjectData = JSON.parse(localStorage.getItem(SUBJECT_TABLE_KEY()) || "{}");
+    
     if(!subjectData[subject]) subjectData[subject] = [];
     
-    // Check if entry for today already exists to prevent duplicate rows for the same action
+    // 2. Add new entry
     subjectData[subject].push({
-        id: Date.now(), 
+        id: Date.now(),
         date: new Date().toLocaleDateString(),
         covered: covered || "-",
         uncovered: uncovered || "-"
     });
     
-    saveSubjectData(subjectData); 
-    uploadData(); // Sync to Firebase
+    // 3. Save to Local and Firebase
+    localStorage.setItem(SUBJECT_TABLE_KEY(), JSON.stringify(subjectData));
+    
+    if (currentUser) {
+        update(ref(db, `users/${currentUser.uid}`), {
+            SUBJECT_WISE_TABLE: JSON.stringify(subjectData)
+        }).then(() => {
+            console.log("Subject Progress Updated on Server");
+        });
+    }
 };
-
 /* --- UI: RENDER SUBJECT TABLE --- */
 window.renderSubjectTable = function(subject) {
     const tbody = document.getElementById("subjectTableBody");
@@ -2891,11 +2904,11 @@ async function loadTasks() {
     const taskBox = document.getElementById("taskBox");
     const logBox = document.getElementById("logBox");
 
+    // FORCE VISIBILITY: If these stay hidden, the screen stays blank
+    if (taskBox) taskBox.classList.remove("hidden");
+    if (logBox) logBox.classList.remove("hidden");
+
     if (!tList || !eList) return;
-    
-    // Ensure the main boxes are visible
-    if(taskBox) taskBox.classList.remove("hidden");
-    if(logBox) logBox.classList.remove("hidden");
     
     tList.innerHTML = "<div style='font-size:10px; color:#38bdf8;'>Syncing...</div>";
     
@@ -2904,7 +2917,7 @@ async function loadTasks() {
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
 
     try {
-        // Fetch Maps from Server
+        // Fetch Journeys from Firebase
         const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
         const serverMaps = mapSnap.exists() ? mapSnap.val() : {};
 
@@ -2914,7 +2927,6 @@ async function loadTasks() {
             const container = document.createElement("div");
             container.style.cssText = "display:flex; align-items:center; margin-bottom:8px; padding:10px; background:#0f172a; border-radius:10px; border:1px solid #1e293b;";
             
-            // Clean ID matching
             const taskId = String(item.id || item.name).replace(/'/g, "\\'"); 
 
             let mapBtnHtml = "";
@@ -2935,6 +2947,14 @@ async function loadTasks() {
 
             cb.onchange = () => {
                 item.done = cb.checked;
+                if (cb.checked) {
+                    const rem = prompt("Work Details?", "Completed basics");
+                    const due = prompt("Pending work?", "None");
+                    item.comment = rem || "-";
+                    item.due = due || "-";
+                    // Update Subject Progress Table
+                    saveAutomatedSubjectProgress(item.name, item.comment, item.due);
+                }
                 save(tasks, extras);
                 loadTasks();
             };
@@ -2944,13 +2964,13 @@ async function loadTasks() {
             listRef.append(container);
         };
 
-        if(tasks.length === 0) tList.innerHTML = "<div style='color:#64748b; padding:10px;'>No tasks assigned.</div>";
+        if(tasks.length === 0) tList.innerHTML = "<div style='color:#64748b; padding:10px;'>No tasks for today.</div>";
         tasks.forEach(t => renderItem(t, tList));
         extras.forEach(e => renderItem(e, eList));
 
     } catch (e) {
         console.error("Task render error:", e);
-        tList.innerHTML = "<div style='color:#ef4444;'>Sync Error. Try Refreshing.</div>";
+        tList.innerHTML = "<div style='color:#ef4444;'>Sync Error.</div>";
     }
 }
   window.addExtra = function() {
