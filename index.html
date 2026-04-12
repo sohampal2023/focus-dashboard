@@ -2047,37 +2047,86 @@ async function loadNotices() {
     }
 }
 window.initStudentDashboard = function() {
+    // 1. FORCE UI VISIBILITY (Wakes up the dashboard immediately)
     const studentView = document.getElementById("studentView");
     const studentControls = document.getElementById("studentControls");
-    const taskBox = document.getElementById("taskBox"); // <--- ADD THIS
+    const taskBox = document.getElementById("taskBox");
+    const logBox = document.getElementById("logBox");
 
     if(studentView) studentView.classList.remove("hidden");
     if(studentControls) studentControls.classList.remove("hidden");
-    if(taskBox) taskBox.classList.remove("hidden"); // <--- FORCE THIS VISIBLE
+    if(taskBox) taskBox.classList.remove("hidden");
+    if(logBox) logBox.classList.remove("hidden");
     
+    // Toggle login/logout buttons
     document.getElementById("loginBtn")?.classList.add("hidden");
     document.getElementById("logoutBtn")?.classList.remove("hidden");
 
-    // UNLOCK SIDEBAR
-    document.querySelectorAll(".sidebar button").forEach(btn => {
+    // 2. HARD UNLOCK: Keep all sidebar buttons active 24/7
+    const sidebarButtons = document.querySelectorAll(".sidebar button");
+    sidebarButtons.forEach(btn => {
         btn.disabled = false;
         btn.style.opacity = "1";
+        btn.style.cursor = "pointer";
+        btn.style.filter = "none";
     });
 
+    // 3. CLEANUP: Prevent duplicate listeners
     if (window.studentUnsubscribe) window.studentUnsubscribe();
 
+    // 4. START REAL-TIME LIVE SYNC
     const userRef = ref(db, `users/${currentUser.uid}`);
     window.studentUnsubscribe = onValue(userRef, (snapshot) => {
-        const data = snapshot.val() || {};
-        localStorage.setItem(key("TASKS"), data.TASKS || "[]");
-        localStorage.setItem(key("EXTRA"), data.EXTRA || "[]");
-        
-        if (typeof window.loadTasks === "function") {
-            window.loadTasks();
+        try {
+            const data = snapshot.val() || {};
+            const todayDate = new Date().toLocaleDateString();
+            const todayKey = todayDate.replace(/\//g, "-");
+
+            // --- A. Sync Tasks to LocalStorage ---
+            localStorage.setItem(key("TASKS"), data.TASKS || "[]");
+            localStorage.setItem(key("EXTRA"), data.EXTRA || "[]");
+            
+            // --- B. Sync Daily Maps (For the MAP Button) ---
+            // This allows the student to see the '🗺 MAP' button immediately after Admin assignment
+            if (data.dailyMaps && data.dailyMaps[todayKey]) {
+                const mapStorage = {};
+                mapStorage[todayDate] = data.dailyMaps[todayKey];
+                localStorage.setItem(MAP_STORAGE_KEY(), JSON.stringify(mapStorage));
+            }
+
+            // --- C. Trigger UI Render (Instant update across devices) ---
+            if (typeof window.loadTasks === "function") {
+                window.loadTasks();
+            }
+
+            // --- D. Sync Status Indicators ---
+            const shiftLabel = document.getElementById("currentShiftLabel");
+            if (shiftLabel) shiftLabel.innerText = data.CURRENT_SHIFT_LABEL || "No Shift Active";
+            
+            const timeoutDisp = document.getElementById("timeoutCounter");
+            if (timeoutDisp) timeoutDisp.innerText = "Timeouts: " + (data.DAILY_TIMEOUTS || 0);
+
+            // --- E. Handle Admin Warnings ---
+            if (data.activeAlert) {
+                const msgEl = document.getElementById("rejectedMsg");
+                if(msgEl) msgEl.innerText = "Admin: " + data.activeAlert;
+                document.getElementById("rejectedPopup")?.classList.remove("hidden");
+            } else {
+                document.getElementById("rejectedPopup")?.classList.add("hidden");
+            }
+
+            document.getElementById("syncStatus").innerText = "Real-time Active";
+
+        } catch (err) {
+            console.error("Critical Sync Error:", err);
+            document.getElementById("syncStatus").innerText = "Sync Error - Check Console";
         }
-        document.getElementById("syncStatus").innerText = "Ready & Synced";
+    }, (error) => {
+        console.error("Firebase Read Error:", error);
+        document.getElementById("syncStatus").innerText = "Offline";
     });
 
+    // 5. Start Watchdog Session
     startIdle(1800);
 };
 window.dismissFeedback = async function() {
@@ -3248,46 +3297,85 @@ window.openSubjectJourney = function(subjectName, taskId) {
 };
 let currentAdminTargetUid = null; 
 window.openAdminBulkMap = function(uid) {
-    window.currentAdminTargetUid = uid; 
+    window.currentAdminTargetUid = uid;
     
-    // 1. SELECT SUBJECT (Dropdown via Prompt)
-    let menu = "--- STEP 1: SELECT SUBJECT ---\n\n";
-    FIXED_SUBJECTS.forEach((sub, i) => menu += `${i+1}. ${sub}\n`);
-    const choice = prompt(menu);
-    if (!choice) return;
-    const selectedSubject = FIXED_SUBJECTS[parseInt(choice) - 1];
+    // Create the Dropdown Options from FIXED_SUBJECTS
+    let subjectOptions = FIXED_SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join("");
 
-    // 2. ENTER MODULE & CHAPTER
-    const moduleNum = prompt(`Subject: ${selectedSubject}\nEnter Module Number (e.g., Module 1):`, "Module 1");
-    if (!moduleNum) return;
+    // Create the Floating Window Overlay
+    const adminJourneyModal = document.createElement("div");
+    adminJourneyModal.id = "adminJourneyOverlay";
+    adminJourneyModal.className = "modal-overlay"; // Reuse your existing CSS
+    adminJourneyModal.innerHTML = `
+        <div class="modal-content" style="width:500px; border:2px solid #8b5cf6;">
+            <h3 style="color:#8b5cf6; margin-bottom:15px;">ASSIGN STUDY JOURNEY</h3>
+            
+            <label style="font-size:12px; color:#94a3b8;">Select Subject:</label>
+            <select id="admSub" style="width:100%; padding:10px; margin-bottom:15px; background:#020617; color:white; border:1px solid #334155; border-radius:8px;">
+                ${subjectOptions}
+            </select>
 
-    const chapterName = prompt(`Enter Chapter/Topic Name:`, "Introduction");
-    if (!chapterName) return;
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:15px;">
+                <div>
+                    <label style="font-size:12px; color:#94a3b8;">Module Number:</label>
+                    <input id="admMod" type="text" placeholder="e.g. Module 1" style="width:100%; padding:10px; background:#020617; color:white; border:1px solid #334155; border-radius:8px;">
+                </div>
+                <div>
+                    <label style="font-size:12px; color:#94a3b8;">Chapter Name:</label>
+                    <input id="admChap" type="text" placeholder="e.g. Intro" style="width:100%; padding:10px; background:#020617; color:white; border:1px solid #334155; border-radius:8px;">
+                </div>
+            </div>
 
-    // Store these in global window variables for the generator to use
-    window.currentSubjectStr = selectedSubject;
-    window.currentModuleStr = moduleNum;
-    window.currentChapterStr = chapterName;
-    window.currentMapTaskId = "TASK_" + Date.now();
+            <label style="font-size:12px; color:#94a3b8;">Subtopics (One per line):</label>
+            <textarea id="admTopics" rows="8" style="width:100%; padding:10px; background:#020617; color:white; border:1px solid #334155; border-radius:8px; font-family:monospace;"></textarea>
 
-    // 3. OPEN THE SUBTOPIC WINDOW
-    const modal = document.getElementById('bulkInputModal');
-    const title = document.getElementById('bulkTitle');
-    const textarea = document.getElementById('bulkTextarea');
-
-    modal.classList.remove("hidden");
-    modal.style.display = "flex";
-    
-    title.innerHTML = `
-        <div style="font-size:14px; color:#94a3b8;">Assigning to Student ID: ${uid.substring(0,6)}</div>
-        <div style="color:#38bdf8;">${selectedSubject}</div>
-        <div style="font-size:16px; color:#facc15;">${moduleNum}: ${chapterName}</div>
+            <div style="display:flex; gap:10px; margin-top:20px;">
+                <button onclick="saveAdminJourney()" style="background:#22c55e; flex:1;">LOCK & PUSH TO STUDENT</button>
+                <button onclick="document.getElementById('adminJourneyOverlay').remove()" style="background:#334155; width:80px;">CANCEL</button>
+            </div>
+        </div>
     `;
-    
-    textarea.value = "";
-    textarea.placeholder = "Enter sub-topics line by line (the student will see these in the map)...";
+    document.body.appendChild(adminJourneyModal);
 };
+  window.saveAdminJourney = async function() {
+    const sub = document.getElementById("admSub").value;
+    const mod = document.getElementById("admMod").value || "Module 1";
+    const chap = document.getElementById("admChap").value || "General";
+    const text = document.getElementById("admTopics").value;
+    const lines = text.split('\n').filter(l => l.trim() !== "");
 
+    if (!lines.length) return alert("Enter subtopics!");
+
+    const taskId = "TASK_" + Date.now();
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    const targetUid = window.currentAdminTargetUid;
+
+    // Create detailed text for student dashboard
+    const detail = `${sub} | ${mod}: ${chap} (${lines.slice(0,2).join(", ")}...)`;
+
+    const newMapData = lines.map(line => ({
+        label: line.trim(),
+        module: `${mod}: ${chap}`,
+        status: 'todo',
+        dynamicMins: 30
+    }));
+
+    // Fetch current tasks to append the new one
+    const taskSnap = await get(ref(db, `users/${targetUid}/TASKS`));
+    let tasks = JSON.parse(taskSnap.val() || "[]");
+    
+    tasks.push({ id: taskId, name: detail, subjectOnly: sub, done: false });
+
+    // Update everything at once
+    const finalUpdates = {};
+    finalUpdates[`users/${targetUid}/dailyMaps/${todayKey}/${taskId}`] = newMapData;
+    finalUpdates[`users/${targetUid}/TASKS`] = JSON.stringify(tasks);
+
+    await update(ref(db), finalUpdates);
+    
+    alert("Journey pushed! Reflecting on student side now.");
+    document.getElementById('adminJourneyOverlay').remove();
+};
 window.generateMapFromBulk = function() {
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
@@ -3801,6 +3889,7 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
 window.loadTasks = loadTasks;
 window.save = save; // Needed for checkbox updates
 window.startIdle = startIdle;
+  window.saveAdminJourney = saveAdminJourney;
   </script>
 
 </body>
