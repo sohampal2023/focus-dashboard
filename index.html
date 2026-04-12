@@ -1577,14 +1577,21 @@ window.renderAdminSelectedSubject = function() {
         return;
     }
 
-    const rows = window.currentAdminSubjectData[subject].slice().reverse(); // Newest first
+    const rows = window.currentAdminSubjectData[subject].slice().reverse();
     
     let html = "";
     rows.forEach(row => {
+        // Highlight if it's a journey-based entry
+        const isJourney = row.covered.includes("[Module");
+        const rowStyle = isJourney ? `style="background: rgba(56, 189, 248, 0.05);"` : "";
+
         html += `
-        <tr>
+        <tr ${rowStyle}>
             <td style="color:#94a3b8">${row.date}</td>
-            <td style="white-space:pre-wrap;">${row.covered}</td>
+            <td style="white-space:pre-wrap;">
+                ${isJourney ? `<span style="color:#38bdf8; font-weight:bold;">📍 JOURNEY:</span><br>` : ""}
+                ${row.covered}
+            </td>
             <td style="white-space:pre-wrap; color:#fca5a5">${row.uncovered}</td>
         </tr>`;
     });
@@ -3311,7 +3318,6 @@ window.openSubjectJourney = function(subjectName, taskId) {
     modal.classList.remove("hidden");
 };
 window.generateMapFromBulk = function() {
-    // 1. Get Values
     const moduleName = prompt("Which Module are these sub-topics for?", "Module 1");
     const text = document.getElementById('bulkTextarea').value;
     const lines = text.split('\n').filter(l => l.trim() !== "");
@@ -3324,22 +3330,26 @@ window.generateMapFromBulk = function() {
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const uniqueKey = window.currentMapTaskId;
 
-    // 2. Map Data with Module Provision
-    const newMapData = lines.map((line, index) => ({
+    // Create the array of nodes
+    const nodesArray = lines.map((line, index) => ({
         label: line.trim(),
-        module: moduleName.trim(), // Storing the specific module name
+        module: moduleName.trim(),
         status: 'todo',
         completedAt: null,
-        dynamicMins: null
+        dynamicMins: 0 // Initialize at 0
     }));
 
-    // 3. Save to Firebase
-    update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}/${uniqueKey}`), newMapData)
+    // Wrap in an object to satisfy Firebase update requirements
+    const updatePayload = {};
+    updatePayload[uniqueKey] = nodesArray;
+
+    update(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`), updatePayload)
     .then(() => {
         document.getElementById('bulkInputModal').classList.add('hidden');
         loadTasks();
         showByjusMap(currentMapSubject, uniqueKey);
-    });
+    })
+    .catch(err => alert("Sync Error: " + err.message));
 };
 /* --- 2. ADD SUBTOPIC (TRIGGERS EVEN REBALANCE) --- */
 window.addNewSubTopic = function(subjectName) {
@@ -3677,43 +3687,59 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     saveSubjectData(subjectData); 
     uploadData(); 
 };
- window.finalDayEnd = async function() {
+window.finalDayEnd = async function() {
     if(!confirm("End Day? This will log all completed topics with their Module names.")) return;
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-    const maps = snapshot.val() || {};
+    
+    try {
+        const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+        const maps = snapshot.val() || {};
 
-    Object.keys(maps).forEach(taskId => {
-        const nodes = maps[taskId];
-        // Grouping logic: "Module 1: Topic A, Topic B"
-        const completedByModule = {};
-        const pendingByModule = {};
+        // Iterate through each subject map (taskId)
+        for (const taskId in maps) {
+            const nodes = maps[taskId];
+            const completedByModule = {};
+            const pendingByModule = {};
+            
+            // Group topics by Module name
+            nodes.forEach(n => {
+                const modName = n.module || "General";
+                if (n.status === 'done') {
+                    if (!completedByModule[modName]) completedByModule[modName] = [];
+                    completedByModule[modName].push(n.label);
+                } else {
+                    if (!pendingByModule[modName]) pendingByModule[modName] = [];
+                    pendingByModule[modName].push(n.label);
+                }
+            });
 
-        nodes.forEach(n => {
-            if (n.status === 'done') {
-                if (!completedByModule[n.module]) completedByModule[n.module] = [];
-                completedByModule[n.module].push(n.label);
-            } else {
-                if (!pendingByModule[n.module]) pendingByModule[n.module] = [];
-                pendingByModule[n.module].push(n.label);
-            }
-        });
+            // Log each Module as a unique entry in the Subject Progress Table
+            Object.keys(completedByModule).forEach(mod => {
+                const subjectWithModule = `${currentMapSubject} [${mod}]`;
+                const coveredText = completedByModule[mod].join(", ");
+                const pendingText = pendingByModule[mod] ? pendingByModule[mod].join(", ") : "All Clear";
+                
+                // Use the existing helper to save into SUBJECT_WISE_TABLE
+                saveAutomatedSubjectProgress(subjectWithModule, coveredText, pendingText);
+            });
+        }
 
-        // Log each module's work separately into the progress table
-        Object.keys(completedByModule).forEach(mod => {
-            saveAutomatedSubjectProgress(
-                `${currentMapSubject} [${mod}]`, 
-                completedByModule[mod].join(", "), 
-                pendingByModule[mod] ? pendingByModule[mod].join(", ") : "All Clear"
-            );
-        });
-    });
+        // --- Standard Cleanup ---
+        localStorage.removeItem(key("DAILY_GOAL_DATE"));
+        localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
+        localStorage.removeItem(key("SHIFT_END_TS"));
+        
+        // Remove maps from live DB as they are now in the history table
+        await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+        
+        // Final logout/reload
+        location.reload();
 
-    // Final Cleanup
-    localStorage.removeItem(key("DAILY_GOAL_DATE"));
-    await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-    location.reload();
+    } catch (e) {
+        console.error("Day End Error:", e);
+        alert("Error finalizing day. Please check connection.");
+    }
 };
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
