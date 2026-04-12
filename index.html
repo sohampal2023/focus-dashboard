@@ -792,29 +792,35 @@ const FIXED_SUBJECTS = [
   "GOVT_SCIENCE",
   "GOVT_ENGLISH"
 ];
-
 window.askDailyBudget = async function() {
-    // Double check LocalStorage first to handle F5 race conditions
-    if (localStorage.getItem("DAILY_SHIFT_COUNT")) return;
-
-    const shifts = prompt("New Session! How many 2-hour shifts for today?");
-    const shiftNum = parseFloat(shifts);
-
-    if (isNaN(shiftNum) || shiftNum <= 0) {
-        alert("Valid shift count required.");
-        return window.askDailyBudget(); 
-    }
 
     const todayStr = new Date().toLocaleDateString();
-    
-    // This write to Firebase adds the DAILY_GOAL_DATE, which kills the prompt for all refreshes
+
+    const snap = await get(ref(db, `users/${currentUser.uid}`));
+    const user = snap.val() || {};
+
+    // ✅ If already set today → DO NOT ASK AGAIN
+    if (user.DAILY_GOAL_DATE === todayStr) {
+        localStorage.setItem("DAILY_SHIFT_COUNT", user.DAILY_SHIFT_COUNT);
+        return;
+    }
+
+    // 🔴 NEW DAY → FORCE ASK
+    const shifts = prompt("New Day: Enter number of shifts:");
+    const shiftNum = parseInt(shifts);
+
+    if (isNaN(shiftNum) || shiftNum <= 0) {
+        alert("Valid shift required.");
+        return window.askDailyBudget();
+    }
+
+    // ✅ Save in Firebase
     await update(ref(db, `users/${currentUser.uid}`), {
-        "DAILY_SHIFT_COUNT": shiftNum,
-        "DAILY_GOAL_DATE": todayStr,
-        "TASKS": "[]",
-        "EXTRA": "[]"
+        DAILY_SHIFT_COUNT: shiftNum,
+        DAILY_GOAL_DATE: todayStr
     });
-    
+
+    // ✅ Save locally (avoid repeat prompt)
     localStorage.setItem("DAILY_SHIFT_COUNT", shiftNum);
 };
 
@@ -831,7 +837,32 @@ let dailyTimeouts = 0;
 let lastApprovedState = false; 
 const ADMIN_EMAIL = "admin@study.com";
 let currentAdminSubjectData = {}; // Stores the loaded student's subject data
+async function saveSubjectWiseProgress(tasks) {
 
+  const snap = await get(ref(db, `users/${currentUser.uid}/SUBJECT_WISE_TABLE`));
+  let table = snap.exists() ? JSON.parse(snap.val()) : {};
+
+  const today = new Date().toLocaleDateString();
+
+  tasks.forEach(task => {
+
+    const subject = task.subject || "General";
+
+    if (!table[subject]) table[subject] = [];
+
+    table[subject].push({
+      id: Date.now() + Math.random(),
+      date: today,
+      covered: task.done ? task.name : "",
+      uncovered: !task.done ? task.name : ""
+    });
+
+  });
+
+  await update(ref(db, `users/${currentUser.uid}`), {
+    SUBJECT_WISE_TABLE: JSON.stringify(table)
+  });
+}
 // --- NEW KEY FOR SUBJECT PROGRESS ---
 const SUBJECT_TABLE_KEY = () => key("SUBJECT_WISE_TABLE");
 let activeMapData = {}; 
@@ -3936,34 +3967,25 @@ onAuthStateChanged(auth, async (user) => {
 });
 // --- UPDATED FINAL DAY END (FOR HARD LOGOUT) ---
 window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will wipe the board and HARD LOGOUT.")) return;
 
-    try {
-        const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+  // 🔹 Collect tasks from UI
+  let tasks = [];
 
-        // 1. Wipe Active Data in Firebase
-        const updates = {};
-        updates[`users/${currentUser.uid}/TASKS`] = "[]";
-        updates[`users/${currentUser.uid}/EXTRA`] = "[]";
-        updates[`users/${currentUser.uid}/DAILY_GOAL_DATE`] = null; 
-        updates[`users/${currentUser.uid}/SHIFT_END_TS`] = null;
-        updates[`users/${currentUser.uid}/stats`] = { percent: 0, rating: "Poor" };
+  document.querySelectorAll("#taskList .task-row").forEach(row => {
+    tasks.push({
+      name: row.innerText,
+      subject: row.getAttribute("data-subject") || "General",
+      done: row.classList.contains("done")
+    });
+  });
 
-        await update(ref(db), updates);
+  // 🔹 Save subject-wise
+  await saveSubjectWiseProgress(tasks);
 
-        // 2. Local Cleanup
-        localStorage.clear(); 
-        
-        // 3. Final Logout and Refresh
-        await signOut(auth);
-        
-        // This forces the browser to re-evaluate the auth state and show the blank screen
-        location.reload(); 
+  alert("Day End Saved");
 
-    } catch (err) {
-        console.error(err);
-        alert("Logout failed. Check connection.");
-    }
+  // Logout
+  signOut(auth).then(() => location.reload());
 };
  window.loadTasks = function() {
     const taskList = document.getElementById("taskList");
