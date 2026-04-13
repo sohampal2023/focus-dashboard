@@ -617,8 +617,8 @@ const FIXED_SUBJECTS = [
   "GOVT_ENGLISH"
 ];
 onAuthStateChanged(auth, async (user) => {
+    // 1. Check for Locked Report
     const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
-    
     if (lockedReport) {
         document.body.innerHTML = `
           <div style="min-height:100vh; display:flex; justify-content:center; align-items:center; background:#020617; padding:20px;">
@@ -635,10 +635,11 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     if (user) {
-        currentUser = user; // Set global immediately
+        currentUser = user; // Set global variable
         document.getElementById("syncStatus").innerText = "Session Restored";
 
-        // --- MULTI-DEVICE SYNC LISTENERS (Using local 'user' variable) ---
+        // --- 📡 MULTI-DEVICE SYNC LISTENERS ---
+        // This was the cause of your line 3074 error
         onValue(ref(db, `users/${user.uid}/forceLogoutTrigger`), (snap) => {
             if(snap.exists()) {
                 localStorage.clear();
@@ -3070,36 +3071,6 @@ window.dismissReportLock = function () {
         location.reload();
     });
 };
-// --- MULTI-DEVICE SYNC LISTENER ---
-onValue(ref(db, `users/${user.uid}/forceLogoutTrigger`), (snap) => {
-    if(snap.exists()) {
-        localStorage.clear();
-        sessionStorage.clear();
-        location.reload(); // All devices reset to login screen
-    }
-});
-
-onValue(ref(db, `users/${user.uid}/LOCKED_REPORT_VIEW`), (snap) => {
-        if (snap.exists()) {
-            const reportContent = snap.val();
-            
-            // Update LocalStorage so the lock persists after a page refresh
-            localStorage.setItem("LOCKED_REPORT_VIEW", reportContent);
-            
-            // Force the UI to show the report immediately
-            document.body.innerHTML = `
-              <div style="min-height:100vh; display:flex; justify-content:center; align-items:center; background:#020617; padding:20px;">
-                <div style="width:100%;max-width:520px">
-                  ${reportContent}
-                  <div style="margin-top:15px;text-align:center">
-                    <button onclick="dismissReportLock()" style="padding:12px 20px; background:#0ea5e9; border:none; border-radius:8px; color:white; font-size:14px; cursor:pointer;">
-                      Login & Start New Day
-                    </button>
-                  </div>
-                </div>
-              </div>`;
-        }
-    });
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   const tbody = document.getElementById("logTable");
@@ -3329,7 +3300,7 @@ window.resetWatchdog = function() {
         return;
     }
 
-    // Reset the timer to 30 minutes (1800 seconds)
+    // Reset the timer to 30 minutes
     startIdle(1800); 
     
     // UI Feedback
@@ -3343,11 +3314,14 @@ window.resetWatchdog = function() {
 };
 // --- ATTACH TO WINDOW ---
    // --- ATTACH TO WINDOW ---
+// --- 🌎 GLOBAL SCOPE ATTACHMENTS ---
+// This allows HTML onclick attributes to access module-scoped functions.
+
 window.handleLoginFlow = handleLoginFlow;
-window.resetWatchdog = resetWatchdog;
+window.resetWatchdog = resetWatchdog; // Fixed for Watchdog Reset
 window.bioBreak = bioBreak;
 window.openDayEnd = openDayEnd;
-window.finalDayEnd = finalDayEnd;
+window.finalDayEnd = finalDayEnd; // Fixed for Multi-Device Hard Logout
 window.startMockTestSetup = startMockTestSetup;
 window.triggerEndTest = triggerEndTest;
 window.addExtra = addExtra;
@@ -3378,6 +3352,13 @@ window.renderSubjectTable = renderSubjectTable;
 window.clearSubjectProgress = clearSubjectProgress;
 window.requestSubjectDelete = requestSubjectDelete;
 
+// --- 🛠️ ROADMAP & DYNAMIC SHIFT SYSTEM ---
+// Ensure these are included if you are using the new Map Window
+if (typeof adminAssignTasks !== 'undefined') window.adminAssignTasks = adminAssignTasks;
+if (typeof openRoadmapWindow !== 'undefined') window.openRoadmapWindow = openRoadmapWindow;
+if (typeof startRoadmapTask !== 'undefined') window.startRoadmapTask = startRoadmapTask;
+if (typeof completeRoadmapTask !== 'undefined') window.completeRoadmapTask = completeRoadmapTask;
+if (typeof abortRoadmapTask !== 'undefined') window.abortRoadmapTask = abortRoadmapTask;
 // --- ROADMAP & SHIFT SYSTEM ---
 window.adminAssignTasks = adminAssignTasks; // Fixed Assignment
 window.initializeShift = initializeShift;
