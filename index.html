@@ -1882,7 +1882,11 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // 1. Force UI Visibility
+    // --- 1. FORCE SHIFT CHECK (Must be first to trigger prompt) ---
+    // This ensures the 2-hour logic starts before anything else loads
+    await initializeShift();
+
+    // --- 2. RESTORE UI VISIBILITY ---
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox").classList.remove("hidden");
     document.getElementById("adminBox").classList.add("hidden");
@@ -1891,22 +1895,23 @@ async function initStudentDashboard() {
     document.getElementById("studentControls").classList.remove("hidden");
     document.getElementById("idleBox").classList.remove("hidden");
 
-    // 2. ENABLE ALL SIDEBAR BUTTONS
+    // --- 3. ENABLE SIDEBAR BUTTONS ---
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
-    document.querySelector("button[onclick='toggleSubjectProgress()']").disabled = false;
+    const subProgBtn = document.querySelector("button[onclick='toggleSubjectProgress()']");
+    if(subProgBtn) subProgBtn.disabled = false;
 
-    // 3. Initialize the 2-Hour Shift Logic
-    await initializeShift();
-
-    // 4. Multi-Device Roadmap & Progress Listener
+    // --- 4. REAL-TIME DATA LISTENERS ---
+    
+    // Listener for Roadmap (Now groups by subject to prevent mixing)
     onValue(ref(db, `users/${currentUser.uid}/ROADMAP`), (snap) => {
+        // loadTasks now handles filtering and group-key creation
         loadTasks(); 
         updateProgress(); 
     });
 
-    // 5. Setup Live Alert Listener (Warnings)
+    // Listener for Admin Warnings
     onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
         const msg = snapshot.val();
         if (msg) {
@@ -1917,8 +1922,16 @@ async function initStudentDashboard() {
         }
     });
 
-    // 6. Final UI Loads
+    // --- 5. DATA DOWNLOAD & SYNC ---
     const serverData = await downloadData(currentUser.uid);
+    
+    // Check if lockout is active from another device
+    if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
+        location.reload(); // Redirects to termination screen via the guard in authStateChanged
+        return;
+    }
+
+    // --- 6. ORIGINAL CORE FUNCTIONS ---
     loadNotices();
     checkLeaveStatus(serverData);
     startIdle(1800);
@@ -2673,24 +2686,37 @@ window.assignRoadmapTasks = async function(uid) {
 };
   // --- NEW: DYNAMIC TIME ALLOCATION ---
 window.initializeShift = async function() {
-    // Check if a shift is already active to prevent double prompts
-    const shiftActive = localStorage.getItem(key("SHIFT_ACTIVE"));
-    if(shiftActive) return;
-
-    let totalHours = prompt("Enter total study shift for today (Hours):", "2");
-    if(!totalHours || isNaN(totalHours)) return;
-
-    let totalMillis = parseFloat(totalHours) * 60 * 60 * 1000;
+    // 1. Check if shift data already exists on the server for today
+    const snap = await get(ref(db, `users/${currentUser.uid}/SHIFT_ACTIVE`));
     
-    // Save to Firebase so all devices see the same time remaining
-    await update(ref(db, `users/${currentUser.uid}`), {
-        SHIFT_TOTAL_TIME: totalMillis,
-        SHIFT_REMAINING_TIME: totalMillis,
-        SHIFT_ACTIVE: true
-    });
-    
-    localStorage.setItem(key("SHIFT_ACTIVE"), "true");
-    await recalculateAllocatedTime();
+    if(!snap.exists()) {
+        const totalHours = prompt("NEW SESSION DETECTED\nEnter total study shift duration (Hours):", "2");
+        
+        if(!totalHours || isNaN(totalHours)) {
+            alert("Error: Study shift duration is required to start.");
+            // Re-prompt or stay logged out
+            signOut(auth).then(() => location.reload());
+            return;
+        }
+
+        const totalMillis = parseFloat(totalHours) * 60 * 60 * 1000;
+        
+        // 2. Sync Shift Initialization to Firebase
+        await update(ref(db, `users/${currentUser.uid}`), {
+            SHIFT_TOTAL_TIME: totalMillis,
+            SHIFT_REMAINING_TIME: totalMillis,
+            SHIFT_ACTIVE: true,
+            SHIFT_START_TS: Date.now()
+        });
+        
+        localStorage.setItem(key("SHIFT_ACTIVE"), "true");
+        
+        // 3. Refresh so all listeners connect to the newly created shift
+        location.reload();
+    } else {
+        // Shift is already active, ensure local flag is set
+        localStorage.setItem(key("SHIFT_ACTIVE"), "true");
+    }
 };
 async function updateProgressiveTiming() {
     const snap = await get(ref(db, `users/${currentUser.uid}/ROADMAP`));
@@ -2715,96 +2741,48 @@ async function updateProgressiveTiming() {
     }
 }
   // --- NEW: ROADMAP MAP VIEW RENDERER ---
-window.openRoadmapWindow = function() {
-    const roadmapWin = window.open("", "StudyRoadmap", "width=1100,height=850");
+window.openRoadmapWindow = function(subjectFilter) {
+    const roadmapWin = window.open("", "StudyMap", "width=1100,height=850");
+    
+    // Initial HTML setup (CSS and Container)
     roadmapWin.document.write(`
         <style>
-            body { background: #020617; color: white; font-family: Segoe UI, sans-serif; padding: 40px; margin:0; }
-            .map-container { display: flex; flex-direction: column; align-items: center; gap: 0; padding-bottom: 100px; }
-            .node-wrapper { display: flex; flex-direction: column; align-items: center; width: 100%; }
-            .node { 
-                width: 450px; padding: 25px; background: #0f172a; 
-                border: 2px solid #1e293b; border-radius: 24px; 
-                position: relative; transition: all 0.4s ease; z-index: 2;
-            }
-            .node.done { border-color: #22c55e; background: linear-gradient(145deg, #064e3b, #020617); }
-            .node.active { border-color: #facc15; box-shadow: 0 0 30px rgba(250, 204, 21, 0.2); }
-            .circle-part { 
-                width: 70px; height: 70px; border-radius: 50%; 
-                background: #1e293b; border: 5px solid #38bdf8; 
-                display: flex; align-items: center; justify-content: center; 
-                position: absolute; left: -90px; top: 50%; transform: translateY(-50%);
-                font-weight: 900; font-size: 22px; color: #38bdf8;
-            }
-            .node.done .circle-part { border-color: #22c55e; color: #22c55e; background: #064e3b; }
-            .node.active .circle-part { border-color: #facc15; color: #facc15; }
-            .v-line { width: 4px; height: 60px; background: #1e293b; margin: -5px 0; z-index: 1; }
-            .timer-display { font-family: monospace; font-size: 24px; color: #facc15; margin-top: 10px; font-weight: bold; }
-            .btn { padding: 12px 24px; border-radius: 10px; border: none; cursor: pointer; font-weight: 800; text-transform: uppercase; }
-            .btn-start { background: #38bdf8; color: #020617; width: 100%; margin-top: 15px; }
-            .btn-done { background: #22c55e; color: white; margin-right: 10px; flex: 1; }
-            .btn-abort { background: #ef4444; color: white; flex: 1; }
+            body { background: #020617; color: white; font-family: Segoe UI, sans-serif; padding: 40px; }
+            .map-container { display:flex; flex-direction:column; align-items:center; }
+            .node { width: 400px; padding: 20px; background: #0f172a; border: 2px solid #38bdf8; border-radius: 20px; position: relative; margin-bottom: 40px; }
+            .node.done { border-color: #22c55e; background: #064e3b; }
+            .circle { width: 60px; height: 60px; border-radius: 50%; border: 4px solid #38bdf8; position: absolute; left: -80px; top: 50%; transform: translateY(-50%); display:flex; align-items:center; justify-content:center; background:#1e293b; font-weight:bold; }
+            .timer { font-family: monospace; font-size: 20px; color: #facc15; }
+            .btn { padding: 10px; border-radius: 8px; border:none; cursor:pointer; font-weight:bold; margin-top:10px; }
         </style>
         <div id="mapBody" class="map-container"></div>
     `);
 
-    let roadmapInterval = null;
-
-    onValue(ref(db, `users/${currentUser.uid}`), (snapshot) => {
-        const data = snapshot.val();
-        if(!data || !data.ROADMAP) return;
-        const roadmap = JSON.parse(data.ROADMAP);
-        const shiftRemaining = data.SHIFT_REMAINING_TIME;
-        const mapBody = roadmapWin.document.getElementById("mapBody");
+    onValue(ref(db, `users/${currentUser.uid}/ROADMAP`), (snap) => {
+        const roadmap = JSON.parse(snap.val() || "[]");
+        // 🔥 CRITICAL: Filter to show ONLY the subject you clicked
+        const filteredTasks = roadmap.filter(t => `${t.subject} - ${t.module}` === subjectFilter);
         
-        mapBody.innerHTML = `<h1 style="color:#7dd3fc; margin-bottom:60px;">${roadmap[0].subject} Roadmap</h1>`;
+        const mapBody = roadmapWin.document.getElementById("mapBody");
+        mapBody.innerHTML = `<h1 style="color:#7dd3fc">${subjectFilter}</h1>`;
 
-        roadmap.forEach((task, i) => {
+        filteredTasks.forEach((task, i) => {
             const isDone = task.status === 'DONE';
             const isActive = task.status === 'RUNNING';
             
-            const wrapper = roadmapWin.document.createElement("div");
-            wrapper.className = "node-wrapper";
-
-            wrapper.innerHTML = `
-                <div class="node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
-                    <div class="circle-part">${isDone ? '✔' : i + 1}</div>
-                    <div style="font-weight:800; font-size:18px;">${task.topic}</div>
-                    <div style="font-size:12px; color:#94a3b8; margin-top:5px;">${task.module}</div>
-                    
-                    ${isActive ? `<div id="taskTimer" class="timer-display">Calculating...</div>` : ''}
-
-                    ${!isDone ? `
-                        ${!isActive ? 
-                            `<button class="btn btn-start" onclick="window.opener.startRoadmapTask(${task.id})">START SESSION (${Math.floor(task.allocatedTime/60000)}m)</button>` : 
-                            `<div style="margin-top:15px; display:flex;">
-                                <button class="btn btn-done" onclick="window.opener.completeRoadmapTask(${task.id})">DONE</button>
-                                <button class="btn btn-abort" onclick="window.opener.abortRoadmapTask(${task.id})">ABORT</button>
-                             </div>`
-                        }
-                    ` : `<div style="color:#4ade80; font-size:12px; margin-top:10px; font-weight:bold;">Completed at ${task.doneTime}</div>`}
+            const node = roadmapWin.document.createElement("div");
+            node.className = `node ${isDone ? 'done' : ''}`;
+            node.innerHTML = `
+                <div class="circle" style="border-color:${isDone ? '#22c55e' : isActive ? '#facc15' : '#38bdf8'}">
+                    ${isDone ? '✔' : i+1}
                 </div>
+                <div style="font-weight:bold">${task.topic}</div>
+                ${isActive ? `<div class="timer">Time Remaining: ${Math.floor(task.allocatedTime/60000)}m</div>` : ''}
+                ${!isDone ? `<button class="btn" style="background:#38bdf8" onclick="window.opener.startRoadmapTask(${task.id})">START</button>` : ''}
+                ${isActive ? `<button class="btn" style="background:#22c55e; color:white;" onclick="window.opener.completeRoadmapTask(${task.id})">DONE</button>` : ''}
             `;
-            mapBody.appendChild(wrapper);
-            if(i < roadmap.length - 1) mapBody.innerHTML += `<div class="v-line"></div>`;
+            mapBody.appendChild(node);
         });
-
-        // Handle Active Countdown
-        if (roadmapInterval) clearInterval(roadmapInterval);
-        const activeTask = roadmap.find(t => t.status === "RUNNING");
-        if (activeTask) {
-            let timeLeft = activeTask.allocatedTime;
-            roadmapInterval = setInterval(() => {
-                timeLeft -= 1000;
-                const min = Math.floor(timeLeft / 60000);
-                const sec = Math.floor((timeLeft % 60000) / 1000);
-                const timerEl = roadmapWin.document.getElementById("taskTimer");
-                if (timerEl) {
-                    timerEl.innerText = timeLeft > 0 ? `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}` : "TIME UP!";
-                    if (timeLeft <= 0) timerEl.style.color = "#ef4444";
-                }
-            }, 1000);
-        }
     });
 };
 window.startRoadmapTask = async function(taskId) {
@@ -2899,52 +2877,48 @@ function loadTasks() {
 
     get(ref(db, `users/${currentUser.uid}/ROADMAP`)).then((snap) => {
         if(!snap.exists()) {
-            tList.innerHTML = "<div style='color:#64748b; padding:15px; text-align:center; border:1px dashed #334155; border-radius:10px;'>Waiting for Admin to Assign Roadmap...</div>";
+            tList.innerHTML = "<div style='color:#64748b; padding:20px; text-align:center;'>Waiting for Admin to Assign Tasks...</div>";
             return;
         }
 
         const roadmap = JSON.parse(snap.val());
         
-        // Group by Subject and Module to create "Subject Cards"
+        // Group by Subject and Module to prevent data mixing
         let groups = {};
         roadmap.forEach(t => {
-            const key = t.subject + "|" + t.module;
-            if(!groups[key]) groups[key] = [];
-            groups[key].push(t);
+            const groupKey = `${t.subject} - ${t.module}`;
+            if(!groups[groupKey]) groups[groupKey] = [];
+            groups[groupKey].push(t);
         });
 
-        Object.keys(groups).forEach(key => {
-            const parts = key.split("|");
-            const subject = parts[0];
-            const module = parts[1];
-            const tasksInGroup = groups[key];
+        Object.keys(groups).forEach(groupKey => {
+            const tasksInGroup = groups[groupKey];
+            const subjectName = tasksInGroup[0].subject;
+            const moduleName = tasksInGroup[0].module;
             const doneCount = tasksInGroup.filter(t => t.status === 'DONE').length;
 
             const container = document.createElement("div");
             container.style.cssText = `
-                padding: 15px; border: 1px solid #334155; border-radius: 12px; 
-                margin-bottom: 12px; background: #0f172a; cursor: pointer;
-                transition: 0.3s; border-left: 5px solid #38bdf8;
+                padding: 18px; border: 1px solid #334155; border-radius: 12px; 
+                margin-bottom: 15px; background: #0f172a; cursor: pointer;
+                border-left: 6px solid #38bdf8; transition: 0.2s;
             `;
             
-            container.onclick = () => openRoadmapWindow(); // Opens the visual map window
+            // Pass the groupKey to open only THIS subject's roadmap
+            container.onclick = () => openRoadmapWindow(groupKey); 
 
             container.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <div style="font-weight:bold; color:#7dd3fc; font-size:16px;">${subject}</div>
-                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">${module}</div>
+                        <div style="font-weight:bold; color:#7dd3fc; font-size:16px;">${subjectName}</div>
+                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">${moduleName}</div>
                     </div>
                     <div style="text-align:right">
-                        <div style="font-size:11px; color:#38bdf8; font-weight:bold;">${doneCount}/${tasksInGroup.length} COMPLETED</div>
-                        <div style="font-size:10px; color:#64748b; margin-top:4px;">Click to View Roadmap →</div>
+                        <div style="font-size:12px; color:#4ade80; font-weight:800;">${doneCount} / ${tasksInGroup.length} DONE</div>
+                        <div style="font-size:10px; color:#38bdf8; margin-top:5px;">OPEN MAP →</div>
                     </div>
                 </div>
             `;
-            
-            container.onmouseover = () => container.style.borderColor = "#38bdf8";
-            container.onmouseout = () => container.style.borderColor = "#334155";
-            
             tList.append(container);
         });
     });
@@ -3071,49 +3045,60 @@ window.openDayEnd = function() {
 window.finalDayEnd = async function() {
     if(!confirm("CONFIRM DAY END:\n\nThis will perform a hard logout on ALL 4 linked devices and save your progress.")) return;
 
-    const snap = await get(ref(db, `users/${currentUser.uid}`));
-    const userData = snap.val() || {};
-    const roadmap = JSON.parse(userData.ROADMAP || "[]");
-    
-    const completed = roadmap.filter(t => t.status === "DONE");
-    const pending = roadmap.filter(t => t.status !== "DONE");
+    try {
+        const snap = await get(ref(db, `users/${currentUser.uid}`));
+        const userData = snap.val() || {};
+        const roadmap = JSON.parse(userData.ROADMAP || "[]");
+        
+        const completed = roadmap.filter(t => t.status === "DONE");
+        const pending = roadmap.filter(t => t.status !== "DONE");
 
-    // Logic: Group by Subject to ensure data never mixes
-    let summary = {};
-    completed.forEach(t => {
-        if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
-        summary[t.subject].covered.push(t.topic);
-    });
-    pending.forEach(t => {
-        if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
-        summary[t.subject].due.push(t.topic);
-    });
+        // Logic: Group by Subject to ensure data never mixes
+        let summary = {};
+        
+        // Process Completed
+        completed.forEach(t => {
+            if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
+            summary[t.subject].covered.push(t.topic);
+        });
+        
+        // Process Pending as Due
+        pending.forEach(t => {
+            if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
+            summary[t.subject].due.push(t.topic);
+        });
 
-    // Save to Tracker: One Subject, One Row
-    for (let sub in summary) {
-        await saveAutomatedSubjectProgress(
-            sub, 
-            summary[sub].covered.join(", ") || "None", 
-            summary[sub].due.join(", ") || "None"
-        );
+        // Save to Tracker: One Subject, One Row
+        for (let sub in summary) {
+            await window.saveAutomatedSubjectProgress(
+                sub, 
+                summary[sub].covered.join(", ") || "None", 
+                summary[sub].due.join(", ") || "None"
+            );
+        }
+
+        // Generate Report HTML for persistence
+        const p = calculate();
+        const timeStr = document.getElementById("liveDetails") ? document.getElementById("liveDetails").innerText : "Session End";
+        const reportHTML = `<div class="card" style="background:#1e1b4b; text-align:center; padding:30px;"><h2 style="color:#a5b4fc;">SESSION COMPLETED</h2><div style="font-size:60px;color:#38bdf8;">${p.percent}%</div><div style="color:#facc15;">⏱ ${timeStr}</div><button onclick="dismissReportLock()" style="width:100%; background:#22c55e; padding:15px; margin-top:20px; color:white; border:none; border-radius:8px; font-weight:bold;">START NEW DAY (LOGIN)</button></div>`;
+
+        // 📡 TRIGGER HARD LOGOUT ON ALL 4 DEVICES
+        await update(ref(db, `users/${currentUser.uid}`), { 
+            ROADMAP: null, 
+            SHIFT_ACTIVE: null,
+            SHIFT_REMAINING_TIME: null,
+            forceLogoutTrigger: Date.now(), 
+            LOCKED_REPORT_VIEW: reportHTML
+        });
+
+        localStorage.clear();
+        sessionStorage.clear();
+        signOut(auth).then(() => {
+            location.reload(); 
+        });
+    } catch (err) {
+        alert("Day End Error: " + err.message);
     }
-
-    // 🔥 TRIGGER HARD LOGOUT ON ALL DEVICES
-    const reportHTML = localStorage.getItem("LOCKED_REPORT_VIEW") || "Session Completed Successfully";
-    
-    await update(ref(db, `users/${currentUser.uid}`), { 
-        ROADMAP: null, 
-        SHIFT_ACTIVE: null,
-        SHIFT_REMAINING_TIME: null,
-        forceLogoutTrigger: Date.now(), // 📡 Signals other devices
-        LOCKED_REPORT_VIEW: reportHTML
-    });
-
-    localStorage.clear();
-    sessionStorage.clear();
-    signOut(auth).then(() => {
-        location.reload(); 
-    });
 };
 // --- NEW UNLOCK FUNCTION ---
 window.dismissReportLock = function () {
@@ -3369,6 +3354,38 @@ window.resetWatchdog = function() {
         btn.style.background = "";
     }, 1000);
 };
+  window.saveAutomatedSubjectProgress = async (subject, covered, uncovered) => {
+    console.log("Saving Roadmap Progress for Subject:", subject);
+
+    try {
+        const snap = await get(ref(db, `users/${currentUser.uid}/SUBJECT_WISE_TABLE`));
+        let subjectData = snap.exists() ? JSON.parse(snap.val()) : {};
+
+        // If the subject folder doesn't exist, create it
+        if (!subjectData[subject]) {
+            subjectData[subject] = [];
+        }
+
+        // Add the new row
+        subjectData[subject].push({
+            id: Date.now(),
+            date: new Date().toLocaleDateString(),
+            covered: covered || "-",
+            uncovered: uncovered || "-"
+        });
+
+        // Save back to Firebase and LocalStorage
+        const jsonStr = JSON.stringify(subjectData);
+        await update(ref(db, `users/${currentUser.uid}`), {
+            SUBJECT_WISE_TABLE: jsonStr
+        });
+        localStorage.setItem(SUBJECT_TABLE_KEY(), jsonStr);
+
+        console.log("Progress saved successfully.");
+    } catch (e) {
+        console.error("Error saving subject progress:", e);
+    }
+};
 // --- ATTACH TO WINDOW ---
    // --- ATTACH TO WINDOW ---
 // --- 🌎 GLOBAL SCOPE ATTACHMENTS ---
@@ -3408,7 +3425,7 @@ window.toggleSubjectProgress = toggleSubjectProgress;
 window.renderSubjectTable = renderSubjectTable;
 window.clearSubjectProgress = clearSubjectProgress;
 window.requestSubjectDelete = requestSubjectDelete;
-
+window.saveAutomatedSubjectProgress = saveAutomatedSubjectProgress;
 // --- 🛠️ ROADMAP & DYNAMIC SHIFT SYSTEM ---
 // Ensure these are included if you are using the new Map Window
 if (typeof adminAssignTasks !== 'undefined') window.adminAssignTasks = adminAssignTasks;
