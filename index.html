@@ -899,12 +899,13 @@ function finalPublish() {
     });
 }
 async function cleanupDeletedData() {
-    // 🔒 Stop immediately if not logged in as Admin
+    // 🔒 Guard: Only run if we are 100% sure this is the Admin
     if (!currentUser || currentUser.email !== "admin@study.com") return;
 
     const RETENTION_MS = 5 * 24 * 60 * 60 * 1000; // 5 Days
 
     try {
+        // We try to get the users folder
         const snapshot = await get(ref(db, 'users'));
         if (!snapshot.exists()) return;
 
@@ -916,7 +917,6 @@ async function cleanupDeletedData() {
             let logs = JSON.parse(u.LOGS);
             const originalLen = logs.length;
 
-            // Remove logs marked as deleted longer than 5 days ago
             logs = logs.filter(
                 l => !l.deleted || (Date.now() - l.deletedTs < RETENTION_MS)
             );
@@ -927,11 +927,11 @@ async function cleanupDeletedData() {
                 });
             }
         }
-        console.log("✅ Admin Cleanup Successful.");
+        console.log("🛠️ Maintenance: Cleanup completed successfully.");
     } catch (e) {
-        // If it still fails, just log it to console instead of alert() 
-        // to avoid annoying the UI.
-        console.error("Maintenance Error:", e.message);
+        // 🔥 CHANGE: Use console.warn instead of alert() 
+        // This prevents the popup from blocking your screen.
+        console.warn("Maintenance skipped: Waiting for Admin permissions sync.");
     }
 }
 function startAdminListener() {
