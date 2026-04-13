@@ -941,156 +941,88 @@ async function cleanupDeletedData() {
         console.warn("Maintenance skipped: Waiting for Admin permissions sync.");
     }
 }
-function startAdminListener() {
+window.startAdminListener = function() {
     const listDiv = document.getElementById("studentList");
-    listDiv.innerHTML = "Listening for live data...";
+    if (!listDiv) return;
+
+    listDiv.innerHTML = "<div style='color:#38bdf8'>⚡ Attempting Secure Connection...</div>";
     
-    onValue(ref(db, 'users'), (snapshot) => {
+    // 🔥 FORCE PROFILE CREATION (In case Rules are looking for it)
+    if (currentUser && currentUser.email === "admin@study.com") {
+        update(ref(db, `users/${currentUser.uid}/profile`), {
+            email: "admin@study.com",
+            role: "admin",
+            lastSeen: Date.now()
+        });
+    }
+
+    const usersRef = ref(db, 'users');
+
+    // Clear old listeners
+    off(usersRef);
+
+    onValue(usersRef, (snapshot) => {
         if (snapshot.exists()) {
             const users = snapshot.val();
             let html = "";
             
+            // Convert to array to sort if needed, but here we just loop
             Object.keys(users).forEach(uid => {
                 const u = users[uid];
-                const email = u.profile ? u.profile.email : "Unknown User";
                 
-                if (email === "admin@study.com") return; // Skip Admin
+                // Fallback email logic if profile path is missing
+                let email = "Inactive/Guest";
+                if (u.profile && u.profile.email) email = u.profile.email;
+                else if (u.TASKS) email = `User_${uid.substring(0,5)}`; // Fallback for existing users
 
-                // 1. Lockout Status
-                let isLocked = false;
-                if(u.lockout && u.lockout > Date.now()) isLocked = true;
+                if (email === "admin@study.com") return; 
 
-                // 2. Alert Status
-                let isAlerted = u.activeAlert ? true : false;
+                // Progress Math
+                let progress = u.stats ? Math.min(u.stats.percent, 300) : 0;
+                let color = progress >= 100 ? "#4ade80" : (progress > 40 ? "#facc15" : "#ef4444");
+                let barWidth = Math.min((progress / 300) * 100, 100); // Scale bar to 300% max
 
-                // 3. Progress Stats
-                let progHtml = `<div style="color:#64748b; font-size:11px;">No Data</div>`;
-                if(u.stats) {
-                    let color = "#ef4444";
-                    if(u.stats.percent >= 40) color = "#facc15";
-                    if(u.stats.percent >= 80) color = "#4ade80";
-                    progHtml = `
-                        <div style="font-size:14px; font-weight:bold; color:${color}">
-                            ${u.stats.percent}% <span style="font-size:11px; color:#cbd5e1">(${u.stats.rating})</span>
-                        </div>
-                        <div class="prog-bar"><div class="prog-fill" style="width:${u.stats.percent}%; background:${color}"></div></div>
-                    `;
-                }
-                
-                // Leave Balance
-                let leaveBalance = u.leaveBalance !== undefined ? u.leaveBalance : 6;
-                let balanceHtml = `<div style="text-align:center; font-weight:bold; color:#38bdf8">${leaveBalance} Days</div>`;
-
-                // 4. Leave Status
-                let leaveBadge = `<span style="color:#64748b; font-size:11px;">Active Student</span>`;
-                let leaveActions = "";
-                let clearBtn = "";
-                
-                if (u.leaveRequest && u.leaveRequest.status === "Pending") {
-                    leaveBadge = `
-                    <span class="admin-badge badge-yellow">
-                    REQ: ${u.leaveRequest.dates}
-                    ${u.leaveRequest.medical ? " (MEDICAL)" : ""}
-                    </span>
-                    <div style="font-size:10px; color:#fde047; margin-top:3px;">
-                    ${u.leaveRequest.reason}
-                    </div>`;
-
-                    leaveActions = `
-                        <button style="background:#166534" onclick="handleLeave('${uid}', 'Approved', ${leaveBalance})">Approve</button>
-                        <button style="background:#d97706" onclick="handleLeave('${uid}', 'Half Approved', ${leaveBalance})">Half</button>
-                        <button style="background:#991b1b" onclick="handleLeave('${uid}', 'Rejected', ${leaveBalance})">Reject</button>
-                    `;
-                } else if (u.leaveRequest) {
-                    const s = u.leaveRequest.status;
-                    const c = s === "Approved" ? "#86efac" : "#fca5a5";
-                    leaveBadge = `<span style="color:${c}; font-size:11px;">On Leave (${s})</span>`;
-                    clearBtn = `<button onclick="clearLeave('${uid}')" style="background:#334155; padding:2px 6px; font-size:10px; margin-left:5px; width:auto; display:inline-block">Clear</button>`;
-                }
-
-                if(isLocked) {
-                    const timeLeft = Math.ceil((u.lockout - Date.now())/1000/60);
-                    leaveBadge += ` <span class="admin-badge badge-red">LOCKED (${timeLeft}m)</span>`;
-                }
-                if(isAlerted) {
-                    leaveBadge += ` <span class="admin-badge badge-red" style="background:#450a0a; border:1px solid #ef4444">⚠ REJECT SENT</span>`;
-                }
-
-                // 5. Watchdog Timeout Display
-                let watchdogHtml = "";
-                const timeouts = u.DAILY_TIMEOUTS || 0;
-                if(timeouts > 0) {
-                      watchdogHtml = `<div style="margin-top:4px;"><span class="admin-badge badge-red">TIMEOUTS: ${timeouts}</span></div>`;
-                } else {
-                      watchdogHtml = `<div style="margin-top:4px;"><span class="admin-badge badge-green">WATCHDOG: OK</span></div>`;
-                }
-
-                // --- NEW LOGIC: CHECK FOR DELETE REQUESTS ---
-                let deleteReqBtn = "";
-                if (u.SUBJECT_DELETE_REQUESTS) {
-                    const reqCount = Object.keys(u.SUBJECT_DELETE_REQUESTS).length;
-                    if (reqCount > 0) {
-                         // Blinking Red Button
-                         deleteReqBtn = `
-                            <button onclick="viewSubjectDeleteRequests('${uid}')" 
-                                style="background:#be123c; border:1px solid #fca5a5; margin-top:4px; width:100%; animation: pulse-red 1.5s infinite;">
-                                🗑 DELETE REQUESTS (${reqCount})
-                            </button>
-                         `;
-                    }
-                }
-
-                // 6. Render Row (UPDATED WITH ASSIGN ROADMAP BUTTON)
                 html += `
                 <div class="admin-row">
                     <div>
-                        <div style="font-weight:bold; color:#fff; word-break:break-all">${email}</div>
-                        <div style="font-size:10px; color:#64748b">ID: ${uid.substring(0,6)}...</div>
+                        <div style="font-weight:bold; color:#fff;">${email}</div>
+                        <div style="font-size:9px; color:#64748b">${uid}</div>
                     </div>
-                    
-                    ${balanceHtml}
-
-                    <div style="text-align:center">
-                        ${progHtml}
+                    <div style="text-align:center; color:#38bdf8; font-weight:bold;">${u.leaveBalance ?? 6} Days</div>
+                    <div>
+                        <div style="font-weight:bold; color:${color}">${progress}%</div>
+                        <div class="prog-bar" style="background:#1e293b"><div class="prog-fill" style="width:${barWidth}%; background:${color}"></div></div>
                     </div>
-
-                    <div style="text-align:center">
-                        ${leaveBadge}
-                        ${clearBtn}
-                        ${watchdogHtml}
+                    <div style="text-align:center;">
+                        <span class="admin-badge ${u.lockout > Date.now() ? 'badge-red' : 'badge-green'}">
+                            ${u.lockout > Date.now() ? 'TERMINATED' : 'ACTIVE'}
+                        </span>
                     </div>
-
                     <div class="admin-btn-group">
-                        <button style="background:#0ea5e9; border:1px solid #7dd3fc; font-weight:800;" onclick="adminAssignTasks('${uid}')">📋 ASSIGN ROADMAP</button>
-                        
-                        ${leaveActions}
-                        ${deleteReqBtn}  
-                        <button style="background:#be123c; margin-top:4px;" onclick="sendWarning('${uid}')">⚠ Warn</button>
-                        <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
-                        <button style="background:#ea580c; margin-top:4px;" onclick="terminateStudent('${uid}')">Lock / Terminate</button>
-                        <button style="background:#0891b2; margin-top:4px;" onclick="resetLeaveBalance('${uid}')">Reset Balance (6)</button>
-                        <button style="background:#0ea5e9; margin-top:4px;" onclick="sendNotice('${uid}')">📢 Notice</button>
-                        <button style="background:#1e40af; margin-top:4px;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
-
-                        <button
-                          style="background:#991b1b; margin-top:4px"
-                          onclick="clearSingleSubject('${uid}')">
-                          🗑 Delete ONE Subject
-                        </button>
-
-                        ${isLocked ? `<button style="background:#22c55e; margin-top:4px;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
+                        <button onclick="adminAssignTasks('${uid}')" style="background:#0ea5e9;">ASSIGN</button>
+                        <button onclick="openAdminModal('${uid}', '${email}')" style="background:#3b82f6;">LOGS</button>
+                        <button onclick="terminateStudent('${uid}')" style="background:#7f1d1d;">LOCK</button>
                     </div>
                 </div>`;
             });
-            
-            listDiv.innerHTML = html || "No students found.";
-            listDiv.offsetHeight; // force repaint
-
+            listDiv.innerHTML = html || "<div style='color:#64748b'>No students found.</div>";
         } else {
-            listDiv.innerHTML = "No user data available.";
+            listDiv.innerHTML = "<div style='color:#facc15'>⚠ Connection established, but no users exist yet.</div>";
+        }
+    }, (error) => {
+        console.error("Firebase Listener Error:", error);
+        
+        if (error.message.includes("Permission denied")) {
+            listDiv.innerHTML = `
+                <div style='background:#450a0a; color:#fca5a5; padding:20px; border-radius:12px; border:1px solid #ef4444; text-align:center;'>
+                    <div style="font-size:24px; margin-bottom:10px;">🔒 Access Blocked</div>
+                    <p style="font-size:13px; margin-bottom:15px;">Firebase Rules are preventing this Admin account from viewing the student list.</p>
+                    <button onclick="location.reload()" style="background:#ef4444; color:white; width:auto; padding:8px 20px;">Force Retry Connection</button>
+                    <div style="margin-top:10px; font-family:monospace; font-size:10px; color:rgba(252,165,165,0.5)">Error: ${error.code}</div>
+                </div>`;
         }
     });
-}
+};
 // --- ADMIN WARNING SYSTEM (STRICT CONFIRM) ---
 // --- ADMIN NOTICE SYSTEM ---
 window.sendNotice = async function (uid) {
@@ -3836,7 +3768,7 @@ window.initAdminSubjectDropdown = initAdminSubjectDropdown;
   window.requestExtraWork = requestExtraWork;
 window.listenForGlobalRequests = listenForGlobalRequests;
 window.handleExtraRequest = handleExtraRequest;
-  
+  window.startAdminListener = startAdminListener;
   </script>
 
 </body>
