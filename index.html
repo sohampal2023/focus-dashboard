@@ -3054,33 +3054,33 @@ function save(tasks, extras) {
 
 // --- PROGRESS ---
 function calculate(roadmapArray = []) {
-    // 1. Mandatory = Original tasks assigned at the start of the day
-    // 2. Extra = Bonus tasks requested via the Inbox flow
-    const mandatoryTasks = roadmapArray.filter(t => t.module !== "Extra Work");
-    const extraTasks = roadmapArray.filter(t => t.module === "Extra Work");
-
-    // Count what is actually DONE
-    const mandatoryDone = mandatoryTasks.filter(t => t.status === "DONE").length;
-    const extraDone = extraTasks.filter(t => t.status === "DONE").length;
-
-    // --- 🔥 THE MATH ENGINE ---
-    // Denominator ONLY includes Mandatory tasks. 
-    // This ensures the goal never increases (needle never moves back).
-    const denominator = mandatoryTasks.length > 0 ? mandatoryTasks.length : 1;
+    // 1. Get the original task count from when the shift started
+    // We store this in a separate variable to ensure the goal NEVER changes
+    let initialGoal = parseInt(localStorage.getItem(key("INITIAL_SHIFT_GOAL"))) || 0;
     
-    // Percent = (All Done Tasks / Mandatory Goal) * 100
-    let rawPercent = ((mandatoryDone + extraDone) / denominator) * 100;
+    // 2. If this is the first time running, set the goal
+    if (initialGoal === 0 && roadmapArray.length > 0) {
+        initialGoal = roadmapArray.length;
+        localStorage.setItem(key("INITIAL_SHIFT_GOAL"), initialGoal);
+    }
+
+    // 3. Count ALL completed tasks (Mandatory + Bonus)
+    const totalDone = roadmapArray.filter(t => t.status === "DONE").length;
+
+    // 4. Formula: (Total Done / Fixed Initial Goal) * 100
+    // If initialGoal is 5, and you do 8 tasks, you get 160%
+    const denominator = Math.max(1, initialGoal);
+    let rawPercent = (totalDone / denominator) * 100;
 
     const penaltyValue = parseInt(localStorage.getItem(key("PENALTY")) || "0");
     
-    // Final result capped at 300%, allow to exceed 100%
+    // Final result capped at 300%
     const finalPercent = Math.min(300, Math.max(0, Math.round(rawPercent - penaltyValue)));
 
     return { 
         percent: finalPercent, 
-        assigned: mandatoryTasks.length, 
-        extraCount: extraTasks.length,
-        extraDone: extraDone, 
+        goal: initialGoal, 
+        done: totalDone,
         penalty: penaltyValue 
     };
 }
@@ -3325,6 +3325,7 @@ window.finalDayEnd = async function() {
         console.error("Day End Logic Error:", err);
         alert("Day End Failed: " + err.message);
     }
+  localStorage.removeItem(key("INITIAL_SHIFT_GOAL"));
 };
 // --- NEW UNLOCK FUNCTION ---
 window.dismissReportLock = async function () {
