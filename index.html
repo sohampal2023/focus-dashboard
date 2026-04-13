@@ -1918,16 +1918,26 @@ async function initStudentDashboard() {
     if (forceLogoutSnap.exists()) {
         await remove(ref(db, `users/${currentUser.uid}/forceLogoutTrigger`));
     }
-  const reqBtn = document.getElementById("requestExtraBtn");
-    if(reqBtn) reqBtn.classList.remove("hidden");
+  // ... existing code ...
 
-    // Check if a request is already pending to change button style
-    const snap = await get(ref(db, `admin/REQUESTS/${currentUser.uid}`));
-    if(snap.exists()) {
-        reqBtn.innerText = "⏳ REQUEST PENDING...";
-        reqBtn.disabled = true;
-        reqBtn.style.opacity = "0.6";
+const reqBtn = document.getElementById("requestExtraBtn");
+if(reqBtn) {
+    reqBtn.classList.remove("hidden");
+    
+    // Wrap in try-catch to prevent "Permission Denied" crash
+    try {
+        const reqSnap = await get(ref(db, `admin/REQUESTS/${currentUser.uid}`));
+        if(reqSnap.exists()) {
+            reqBtn.innerText = "⏳ REQUEST PENDING...";
+            reqBtn.disabled = true;
+            reqBtn.style.opacity = "0.6";
+        }
+    } catch (e) {
+        console.warn("Could not check request status due to permissions, skipping UI update.");
     }
+}
+
+// ... rest of code ...
     // --- 2. FORCE UI VISIBILITY ---
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox").classList.remove("hidden");
