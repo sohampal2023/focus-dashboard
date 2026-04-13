@@ -1310,12 +1310,14 @@ window.setExamSchedule = async function (uid) {
 // --- ADMIN MODAL & HISTORY INSPECTOR ---
  // Global variable to hold the live connection
 let adminUnsubscribe = null; 
-
 window.openAdminModal = function(uid, email) {
     window.currentAdminUid = uid;
     const modal = document.getElementById("adminModal");
     modal.classList.remove("hidden");
-    document.getElementById("modalBodyLogs").innerHTML = "<div style='padding:20px; text-align:center;'>🔌 Syncing Roadmap Data...</div>";
+    
+    // Clear previous view
+    const logsContainer = document.getElementById("modalBodyLogs");
+    logsContainer.innerHTML = "<div style='padding:20px; text-align:center;'>🔌 Syncing Roadmap Data...</div>";
 
     if (adminUnsubscribe) { adminUnsubscribe(); adminUnsubscribe = null; }
 
@@ -1325,6 +1327,7 @@ window.openAdminModal = function(uid, email) {
             const user = snapshot.val();
             const roadmap = JSON.parse(user.ROADMAP || "[]");
             
+            // --- 1. GENERATE ROADMAP HTML ---
             let roadmapHtml = `
                 <div style="background:#020617; padding:15px; border-radius:12px; margin-bottom:20px; border:2px solid #1e293b;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px; border-bottom:1px solid #334155; padding-bottom:8px;">
@@ -1351,25 +1354,41 @@ window.openAdminModal = function(uid, email) {
             if(roadmap.length === 0) roadmapHtml += `<div style="color:#64748b; font-size:11px; text-align:center;">Roadmap empty.</div>`;
             roadmapHtml += `</div></div>`;
 
-            // Merge with standard logs
+            // --- 2. ADD THE EXTRA WORK REQUEST CONTAINER ---
+            // This is the new section you requested
+            let requestHtml = `
+                <div id="extraWorkSection" style="margin-bottom:20px; background:#020617; padding:15px; border-radius:12px; border:1px solid #facc15;">
+                    <h4 style="color:#facc15; margin:0 0 10px 0; font-size:13px; display:flex; align-items:center;">
+                        <span style="margin-right:8px;">🔔</span> EXTRA WORK REQUESTS
+                    </h4>
+                    <div id="adminRequestList">
+                        <div style="color:#64748b; font-size:11px; text-align:center;">Checking for requests...</div>
+                    </div>
+                </div>
+            `;
+
+            // --- 3. MERGE EVERYTHING ---
             let logs = JSON.parse(user.LOGS || "[]");
             renderAdminLogs(uid, logs);
-            const logsContainer = document.getElementById("modalBodyLogs");
-            logsContainer.innerHTML = roadmapHtml + logsContainer.innerHTML;
+            
+            // Combine Request Box + Roadmap + Activity Logs
+            logsContainer.innerHTML = requestHtml + roadmapHtml + logsContainer.innerHTML;
 
-            // Rest of modal logic...
+            // --- 4. START THE REQUEST LISTENER ---
+            listenForStudentRequests(uid);
+
+            // Existing logic
             renderAdminHistory(uid, JSON.parse(user.HISTORY || "[]"));
             renderMockLogs(uid, JSON.parse(user.MOCK_LOGS || "[]"));
             window.currentAdminSubjectData = JSON.parse(user.SUBJECT_WISE_TABLE || "{}");
             initAdminSubjectDropdown();
 
         } else {
-            document.getElementById("modalBodyLogs").innerHTML = "Data not found.";
+            logsContainer.innerHTML = "Data not found.";
         }
     });
     window.switchAdminTab('logs');
 };
-
 // HELPER FOR ADMIN TO RESET ROADMAP
 window.clearFullRoadmap = async function(uid) {
     if(confirm("Wipe the entire roadmap for this student?")) {
@@ -3062,49 +3081,121 @@ function save(tasks, extras) {
 
 // --- PROGRESS ---
 function calculate(roadmapArray = []) {
-    // 1. Get Extras from local (or you can move these to Firebase too)
     const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
     
-    // 2. Count Done tasks from the Roadmap
     const roadmapDone = roadmapArray.filter(t => t.status === "DONE").length;
     const extraDone = extras.filter(e => e.done).length;
     
-    const totalDone = roadmapDone + extraDone;
-    const totalAssigned = roadmapArray.length;
-
-    // 3. Percentage Math
+    // Logic: Base tasks give up to 100%. 
+    // Extra tasks or "Early Finish" bonuses can push it to 300%.
+    const baseProgress = roadmapArray.length > 0 ? (roadmapDone / roadmapArray.length) * 100 : 0;
+    const extraBonus = extraDone * 10; // Each extra task gives 10% bonus
+    
     const penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
-    const percent = totalAssigned > 0 ? 
-        Math.max(0, Math.round((totalDone / totalAssigned) * 100 - penalty)) : 0;
+    
+    // Total calculation capped at 300%
+    const finalPercent = Math.min(300, Math.max(0, Math.round(baseProgress + extraBonus - penalty)));
 
-    return { percent, assigned: totalAssigned, extra: extras.length, penalty };
+    return { 
+        percent: finalPercent, 
+        assigned: roadmapArray.length, 
+        extra: extras.length, 
+        penalty 
+    };
 }
+window.requestExtraWork = async function() {
+    const reason = prompt("Why do you need extra work? (e.g., Finished early, want more practice):");
+    if (!reason) return;
 
+    const requestRef = ref(db, `admin/REQUESTS/${currentUser.uid}`);
+    await set(requestRef, {
+        uid: currentUser.uid,
+        email: currentUser.email,
+        reason: reason,
+        timestamp: Date.now(),
+        status: "PENDING"
+    });
+
+    alert("Request sent to Admin. Please wait for approval.");
+};
+ function listenForStudentRequests(studentUid) {
+    const requestBox = document.getElementById("adminRequestList");
+    if(!requestBox) return;
+
+    // Listen to the specific request for THIS student
+    onValue(ref(db, `admin/REQUESTS/${studentUid}`), (snapshot) => {
+        if (!snapshot.exists()) {
+            requestBox.innerHTML = "<div style='color:#64748b; font-size:12px; text-align:center;'>No pending requests.</div>";
+            return;
+        }
+
+        const req = snapshot.val();
+        requestBox.innerHTML = `
+            <div style="background:#1e293b; padding:12px; border-radius:8px; border-left:4px solid #facc15;">
+                <div style="font-weight:bold; color:white; margin-bottom:5px;">${req.reason}</div>
+                <div style="font-size:10px; color:#94a3b8; margin-bottom:10px;">Requested: ${new Date(req.timestamp).toLocaleTimeString()}</div>
+                <div style="display:flex; gap:10px;">
+                    <button onclick="handleExtraRequest('${req.uid}', 'ACCEPT')" style="background:#22c55e; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:11px; flex:1; font-weight:bold;">ACCEPT</button>
+                    <button onclick="handleExtraRequest('${req.uid}', 'REJECT')" style="background:#ef4444; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:11px; flex:1; font-weight:bold;">REJECT</button>
+                </div>
+            </div>
+        `;
+    });
+}
+  window.handleExtraRequest = async function(studentUid, action) {
+    const requestRef = ref(db, `admin/REQUESTS/${studentUid}`);
+
+    if (action === "REJECT") {
+        await remove(requestRef);
+        // Optional: Send a warning/alert to the student
+        await set(ref(db, `users/${studentUid}/activeAlert`), "Your extra work request was declined by Admin.");
+        alert("Request Rejected.");
+    } else {
+        // 1. Clear the request first
+        await remove(requestRef);
+        
+        // 2. Open the Assignment Window for this specific student
+        // This reuses your existing adminAssignTasks function
+        alert("Request Accepted. Opening Assignment Tool...");
+        window.adminAssignTasks(studentUid);
+        
+        // 3. Notify Student
+        await set(ref(db, `users/${studentUid}/activeAlert`), "Admin accepted your request! New tasks incoming.");
+    }
+};
 window.updateProgress = async function() {
     const needle = document.getElementById("needle");
     if(!needle) return;
 
     try {
-        // Fetch fresh roadmap from Firebase
         const snap = await get(ref(db, `users/${currentUser.uid}/ROADMAP`));
         const roadmap = snap.exists() ? JSON.parse(snap.val()) : [];
 
+        // Get your stats (percent can now go up to 300)
         const p = calculate(roadmap);
 
-        // Move the needle (0% = -90deg, 100% = 90deg)
-        const rotation = (Math.min(p.percent, 100) / 100) * 180 - 90;
+        // --- 🏎️ 300% SPEEDOMETER MATH ---
+        // (Current Percent / Max Percent) * Total Degrees - Offset
+        // (p.percent / 300) * 180 - 90
+        const rotation = (Math.min(p.percent, 300) / 300) * 180 - 90;
+        
         needle.style.transform = `rotate(${rotation}deg)`;
 
         // Update Text Labels
         document.getElementById("livePercent").innerText = p.percent + "%";
         document.getElementById("liveRating").innerText = getLabel(p.percent);
-        document.getElementById("liveDetails").innerText = 
-            `Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${p.penalty}%`;
+        
+        // Update Details with the new scale in mind
+        const detailEl = document.getElementById("liveDetails");
+        if(detailEl) {
+            detailEl.innerText = `Tasks: ${p.assigned} | Penalty: -${p.penalty}% | Cap: 300%`;
+        }
 
-        // 🔥 SYNC STATS TO FIREBASE FOR ADMIN
+        // Sync to Firebase for Admin
         update(ref(db, `users/${currentUser.uid}/stats`), {
             percent: p.percent,
             rating: getLabel(p.percent),
+            maxScale: 300,
             updatedAt: Date.now()
         });
 
@@ -3113,12 +3204,15 @@ window.updateProgress = async function() {
     }
 };
 
-function getLabel(p) {
-  if (p < 40) return "Poor";
-  if (p < 60) return "Average";
-  if (p < 80) return "Good";
-  if (p <= 100) return "Excellent";
-  return "Fabulous";
+function getLabel(percent) {
+    if (percent >= 250) return "GODLIKE ⚡";
+    if (percent >= 200) return "LEGENDARY 🔥";
+    if (percent >= 150) return "ELITE ⭐";
+    if (percent >= 100) return "PRO ✅";
+    if (percent >= 75)  return "GOOD 👍";
+    if (percent >= 50)  return "AVERAGE 😐";
+    if (percent >= 25)  return "POOR 📉";
+    return "CRITICAL ⚠️";
 }
 function getAccuracyRemark(acc) {
   acc = Number(acc);
@@ -3594,6 +3688,8 @@ window.abortRoadmapTask = abortRoadmapTask;
 window.recalculateAllocatedTime = recalculateAllocatedTime;
 window.renderAdminSelectedSubject = renderAdminSelectedSubject;
 window.initAdminSubjectDropdown = initAdminSubjectDropdown;
+  window.requestExtraWork = requestExtraWork;
+window.handleExtraRequest = handleExtraRequest;
   </script>
 
 </body>
