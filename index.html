@@ -3112,49 +3112,67 @@ window.requestExtraWork = async function() {
 
     alert("Request sent to Admin. Please wait for approval.");
 };
- function listenForStudentRequests(studentUid) {
+ window.listenForStudentRequests = function(studentUid) {
     const requestBox = document.getElementById("adminRequestList");
     if(!requestBox) return;
 
-    // Listen to the specific request for THIS student
-    onValue(ref(db, `admin/REQUESTS/${studentUid}`), (snapshot) => {
+    // Reset view so you don't see the previous student's request
+    requestBox.innerHTML = "<div style='color:#64748b; font-size:11px; text-align:center;'>Checking for active requests...</div>";
+
+    const requestRef = ref(db, `admin/REQUESTS/${studentUid}`);
+    
+    onValue(requestRef, (snapshot) => {
         if (!snapshot.exists()) {
-            requestBox.innerHTML = "<div style='color:#64748b; font-size:11px; text-align:center;'>No pending requests.</div>";
+            requestBox.innerHTML = "<div style='color:#64748b; font-size:11px; text-align:center;'>No pending requests for this student.</div>";
             return;
         }
 
         const req = snapshot.val();
-        requestBox.innerHTML = `
-            <div style="background:#1e293b; padding:12px; border-radius:8px; border-left:4px solid #facc15;">
-                <div style="font-weight:bold; color:white; margin-bottom:5px;">Reason: "${req.reason}"</div>
-                <div style="font-size:10px; color:#94a3b8; margin-bottom:10px;">Requested at: ${new Date(req.timestamp).toLocaleTimeString()}</div>
-                <div style="display:flex; gap:10px;">
-                    <button onclick="handleExtraRequest('${req.uid}', 'ACCEPT')" style="background:#22c55e; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:11px; flex:1; font-weight:bold;">APPROVE & ASSIGN</button>
-                    <button onclick="handleExtraRequest('${req.uid}', 'REJECT')" style="background:#ef4444; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:11px; flex:1; font-weight:bold;">REJECT</button>
+        // Only show if the status is actually PENDING
+        if (req.status === "PENDING") {
+            requestBox.innerHTML = `
+                <div style="background:#1e293b; padding:12px; border-radius:8px; border-left:4px solid #facc15;">
+                    <div style="font-weight:bold; color:white; margin-bottom:5px;">Reason: "${req.reason}"</div>
+                    <div style="font-size:10px; color:#94a3b8; margin-bottom:10px;">Requested: ${new Date(req.timestamp).toLocaleTimeString()}</div>
+                    <div style="display:flex; gap:10px;">
+                        <button onclick="handleExtraRequest('${req.uid}', 'ACCEPT')" style="background:#22c55e; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:11px; flex:1; font-weight:bold;">APPROVE & ASSIGN</button>
+                        <button onclick="handleExtraRequest('${req.uid}', 'REJECT')" style="background:#ef4444; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:11px; flex:1; font-weight:bold;">REJECT</button>
+                    </div>
                 </div>
-            </div>
-        `;
-    });
-}
+            `;
+        } else {
+            requestBox.innerHTML = "<div style='color:#64748b; font-size:11px; text-align:center;'>No pending requests.</div>";
+        }
+    }, { onlyOnce: false }); // Keep listening while modal is open
+};
   window.handleExtraRequest = async function(studentUid, action) {
     const requestRef = ref(db, `admin/REQUESTS/${studentUid}`);
 
-    if (action === "REJECT") {
-        await remove(requestRef);
-        // Optional: Send a warning/alert to the student
-        await set(ref(db, `users/${studentUid}/activeAlert`), "Your extra work request was declined by Admin.");
-        alert("Request Rejected.");
-    } else {
-        // 1. Clear the request first
-        await remove(requestRef);
-        
-        // 2. Open the Assignment Window for this specific student
-        // This reuses your existing adminAssignTasks function
-        alert("Request Accepted. Opening Assignment Tool...");
-        window.adminAssignTasks(studentUid);
-        
-        // 3. Notify Student
-        await set(ref(db, `users/${studentUid}/activeAlert`), "Admin accepted your request! New tasks incoming.");
+    try {
+        if (action === "REJECT") {
+            // Remove the request so it disappears from the box
+            await remove(requestRef);
+            // Send a red alert to the student
+            await update(ref(db, `users/${studentUid}`), { 
+                activeAlert: "Admin: Your extra work request was declined." 
+            });
+            alert("Request Rejected.");
+        } else {
+            // 1. Mark as accepted so it disappears from the pending list
+            await remove(requestRef);
+            
+            // 2. Notify Student
+            await update(ref(db, `users/${studentUid}`), { 
+                activeAlert: "Admin accepted your request! Assigning new tasks now..." 
+            });
+
+            // 3. Trigger the normal Assignment Window
+            // This reuses your standard 'adminAssignTasks' logic
+            window.adminAssignTasks(studentUid);
+        }
+    } catch (e) {
+        console.error("Request handling error:", e);
+        alert("Error: " + e.message);
     }
 };
 window.updateProgress = async function() {
@@ -3732,6 +3750,7 @@ window.recalculateAllocatedTime = recalculateAllocatedTime;
 window.renderAdminSelectedSubject = renderAdminSelectedSubject;
 window.initAdminSubjectDropdown = initAdminSubjectDropdown;
   window.requestExtraWork = requestExtraWork;
+window.listenForStudentRequests = listenForStudentRequests;
 window.handleExtraRequest = handleExtraRequest;
   </script>
 
