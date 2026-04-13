@@ -3084,12 +3084,27 @@ onValue(ref(db, `users/${user.uid}/forceLogoutTrigger`), (snap) => {
     }
 });
 
-// --- LOCKED VIEW SYNC ---
 onValue(ref(db, `users/${user.uid}/LOCKED_REPORT_VIEW`), (snap) => {
-    if(snap.exists()) {
-        document.body.innerHTML = snap.val();
-    }
-});
+        if (snap.exists()) {
+            const reportContent = snap.val();
+            
+            // Update LocalStorage so the lock persists after a page refresh
+            localStorage.setItem("LOCKED_REPORT_VIEW", reportContent);
+            
+            // Force the UI to show the report immediately
+            document.body.innerHTML = `
+              <div style="min-height:100vh; display:flex; justify-content:center; align-items:center; background:#020617; padding:20px;">
+                <div style="width:100%;max-width:520px">
+                  ${reportContent}
+                  <div style="margin-top:15px;text-align:center">
+                    <button onclick="dismissReportLock()" style="padding:12px 20px; background:#0ea5e9; border:none; border-radius:8px; color:white; font-size:14px; cursor:pointer;">
+                      Login & Start New Day
+                    </button>
+                  </div>
+                </div>
+              </div>`;
+        }
+    });
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   const tbody = document.getElementById("logTable");
