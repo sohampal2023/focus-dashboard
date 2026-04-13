@@ -2905,54 +2905,124 @@ function finishTestSequence(testState, loadDashboard = false) {
   }
 }
 // --- STANDARD TASK SYSTEM (STRICT CONFIRM) ---
-function setupTasks() {
-  const carried = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-  const nextData = JSON.parse(localStorage.getItem(key("NEXT_TASKS")) || "[]");
+// --- NEW: ADMIN TASK PUSH (For the new Roadmap Window) ---
+window.assignRoadmapTasks = async function(uid) {
+    let tasks = [];
+    let continueAdding = true;
 
-  // Convert NEXT_TASKS (objects) into Task format
-  // If nextData contains strings (old format), handle that too
-  const newTasks = nextData.map(item => {
-    if (typeof item === 'object' && item !== null) {
-      return { 
-        name: item.subject,      // Main identifier
-        target: item.topic,      // The target topic to display
-        done: false, 
-        comment: "", 
-        due: "" 
-      };
-    } else {
-      // Old string format fallback
-      return { name: item, target: "", done: false, comment: "", due: "" };
+    while(continueAdding) {
+        let menu = "Select Subject (Admin Assignment):\n";
+        FIXED_SUBJECTS.forEach((s, i) => menu += `${i+1}. ${s}\n`);
+        let choice = prompt(menu);
+        if(!choice) break;
+        
+        let sub = FIXED_SUBJECTS[parseInt(choice)-1];
+        let modNum = prompt(`Enter Module Number for ${sub}:`, "1");
+        let modName = prompt(`Enter Module Name:`, "Introduction");
+        let rawTopics = prompt(`Enter Topics (comma separated):`, "Topic A, Topic B, Topic C");
+        
+        if(rawTopics) {
+            let topics = rawTopics.split(',').map(t => t.trim());
+            topics.forEach((t, idx) => {
+                tasks.push({
+                    id: Date.now() + idx,
+                    subject: sub,
+                    module: `Mod ${modNum}: ${modName}`,
+                    topic: t,
+                    status: "PENDING", // PENDING, DONE, ABORTED
+                    timeAllocated: 0,
+                    timeTaken: 0,
+                    completedAt: null
+                });
+            });
+        }
+        continueAdding = confirm("Add another subject/module?");
     }
-  });
 
-  // Merge carried tasks (ensure they have 'target' property if missing)
-  const cleanCarried = carried.map(t => ({...t, target: t.target || ""}));
+    if(tasks.length > 0) {
+        await update(ref(db, `users/${uid}`), { ROADMAP: JSON.stringify(tasks) });
+        alert("Roadmap Assigned Successfully!");
+    }
+};
+  // --- NEW: DYNAMIC TIME ALLOCATION ---
+window.initializeShift = async function() {
+    if(localStorage.getItem(key("SHIFT_ACTIVE"))) return;
 
-  let merged = [...cleanCarried, ...newTasks];
-  
-  // Default tasks if empty
-  if (!merged.length) {
-    merged = [
-      { name: "Study", target: "General", done: false, comment: "", due: "" },
-      { name: "Revise", target: "Notes", done: false, comment: "", due: "" }
-    ];
-  }
+    let totalHours = prompt("Enter total study shift for today (Hours):", "2");
+    if(!totalHours || isNaN(totalHours)) return;
 
-  localStorage.setItem(key("TASKS"), JSON.stringify(merged));
-  localStorage.removeItem(key("NEXT_TASKS"));
-  uploadData();
-  
-  const taskBox = document.getElementById("taskBox");
-  // Reload structure if mock test wiped it
-  if (!document.getElementById("taskList")) {
-      location.reload(); // Simple reload to restore grid structure
-      return;
-  }
+    let totalMillis = parseFloat(totalHours) * 60 * 60 * 1000;
+    localStorage.setItem(key("SHIFT_TOTAL_TIME"), totalMillis);
+    localStorage.setItem(key("SHIFT_REMAINING_TIME"), totalMillis);
+    localStorage.setItem(key("SHIFT_ACTIVE"), "true");
+    
+    await updateProgressiveTiming();
+};
 
-  taskBox.classList.remove("hidden");
-  document.getElementById("logBox").classList.remove("hidden");
-  document.getElementById("reportBox").classList.add("hidden");
+async function updateProgressiveTiming() {
+    const snap = await get(ref(db, `users/${currentUser.uid}/ROADMAP`));
+    if(!snap.exists()) return;
+
+    let roadmap = JSON.parse(snap.val());
+    let remainingTasks = roadmap.filter(t => t.status === "PENDING").length;
+    let timeLeft = parseFloat(localStorage.getItem(key("SHIFT_REMAINING_TIME")));
+
+    if(remainingTasks > 0) {
+        let perTask = Math.floor(timeLeft / remainingTasks);
+        roadmap = roadmap.map(t => {
+            if(t.status === "PENDING") t.timeAllocated = perTask;
+            return t;
+        });
+        
+        // Sync to Firebase (All 4 devices will reflect this)
+        await update(ref(db, `users/${currentUser.uid}`), { 
+            ROADMAP: JSON.stringify(roadmap),
+            SHIFT_REMAINING_TIME: timeLeft 
+        });
+    }
+}
+  // --- NEW: ROADMAP MAP VIEW RENDERER ---
+window.openRoadmapWindow = function() {
+    const roadmapWin = window.open("", "Roadmap", "width=800,height=600");
+    roadmapWin.document.write(`
+        <style>
+            body { background: #020617; color: white; font-family: sans-serif; text-align: center; }
+            .node { border: 2px solid #38bdf8; padding: 15px; border-radius: 50%; width: 80px; height: 80px; display: inline-flex; align-items: center; justify-content: center; margin: 20px; cursor: pointer; position: relative; }
+            .node.done { border-color: #22c55e; color: #22c55e; }
+            .node.active { border-color: #facc15; box-shadow: 0 0 15px #facc15; }
+            .line { height: 2px; background: #1e293b; width: 50px; display: inline-block; vertical-align: middle; }
+            .timer-sub { font-size: 10px; position: absolute; bottom: -20px; width: 100px; }
+        </style>
+        <div id="header"></div>
+        <div id="mapContainer" style="padding: 50px;"></div>
+    `);
+
+    onValue(ref(db, `users/${currentUser.uid}`), (snapshot) => {
+        const data = snapshot.val();
+        const roadmap = JSON.parse(data.ROADMAP || "[]");
+        renderMapNodes(roadmapWin, roadmap);
+    });
+};
+
+function renderMapNodes(win, roadmap) {
+    let container = win.document.getElementById("mapContainer");
+    container.innerHTML = "";
+    roadmap.forEach((task, i) => {
+        let node = win.document.createElement("div");
+        node.className = `node ${task.status === 'DONE' ? 'done' : ''}`;
+        node.innerHTML = `<span>${i+1}</span><div class="timer-sub">${(task.timeAllocated/60000).toFixed(1)}m</div>`;
+        
+        node.onclick = () => {
+            if(task.status === 'PENDING') startTaskSession(task);
+        };
+        
+        container.appendChild(node);
+        if(i < roadmap.length - 1) {
+            let line = win.document.createElement("div");
+            line.className = "line";
+            container.appendChild(line);
+        }
+    });
 }
 function loadTasks() {
   const tList = document.getElementById("taskList");
@@ -3223,112 +3293,77 @@ window.openDayEnd = function() {
 
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
+window.finalDayEnd = async function() {
+    if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT? All devices will be synced.")) return;
 
-function finalDayEnd() {
-  if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
-
-  // 1. Save Next Day Tasks (As Objects: {subject, topic})
-  const next = [];
-  for (let i = 0; i < 7; i++) {
-    const sub = document.getElementById("nd_sub_" + i).value.trim();
-    const top = document.getElementById("nd_top_" + i).value.trim();
+    const snap = await get(ref(db, `users/${currentUser.uid}`));
+    const userData = snap.exists() ? snap.val() : {};
+    const roadmap = JSON.parse(userData.ROADMAP || "[]");
     
-    if(sub) {
-      next.push({ subject: sub, topic: top });
+    // 1. Separate Tasks for Reporting
+    const completedTasks = roadmap.filter(t => t.status === "DONE");
+    const pendingTasks = roadmap.filter(t => t.status === "PENDING");
+
+    // 2. Multi-Device Logic: If pending, check for Admin Carry Forward
+    if(pendingTasks.length > 0) {
+        let cf = confirm(`You have ${pendingTasks.length} tasks left. Request Admin to Carry Forward?`);
+        if(cf) {
+            await update(ref(db, `users/${currentUser.uid}`), { 
+                CARRY_FORWARD_REQ: JSON.stringify(pendingTasks) 
+            });
+        }
     }
-  }
-  localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
 
-  // 2. Calculate Stats
-  const p = calculate();
-  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  
-  // 3. Time Calculation
-  let totalMillis = 0;
-  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-  const todayStr = new Date().toLocaleDateString();
-  logs.forEach(l => {
-    if (!l.loginTS || !l.logoutTS) return;
-    if (new Date(l.loginTS).toLocaleDateString() !== todayStr) return;
-    const d = l.logoutTS - l.loginTS;
-    if (d > 30000) totalMillis += d;
-  });
-  const hrs = Math.floor(Math.floor(totalMillis / 60000) / 60);
-  const mins = Math.floor(totalMillis / 60000) % 60;
-  const timeStr = `${hrs} hr ${mins} min`;
+    // 3. Subject Tracker Sync: Group by Subject to prevent messing up data
+    let dailySummary = {};
+    completedTasks.forEach(task => {
+        if(!dailySummary[task.subject]) dailySummary[task.subject] = { covered: [], uncovered: [] };
+        dailySummary[task.subject].covered.push(task.topic);
+        if(task.due) dailySummary[task.subject].uncovered.push(task.due);
+    });
 
-  // 4. Update History (Backend Sync)
-  const historyEntry = {
-    date: new Date().toLocaleDateString(),
-    score: p.percent,
-    rating: getLabel(p.percent),
-    time: timeStr,
-    subjects: [...tasks.filter(t=>t.done).map(t=>t.name), ...extras.filter(e=>e.done).map(e=>e.name)].join(", "),
-    adminReview: null
-  };
-  let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
-  history.push(historyEntry);
-  if (history.length > 4) history.shift();
-  localStorage.setItem(key("HISTORY"), JSON.stringify(history));
-  
-  // 5. Clean up current session data
-  const carried = tasks.filter(t => !t.done);
-  localStorage.setItem(key("TASKS"), JSON.stringify(carried)); 
-  localStorage.setItem(key("EXTRA"), "[]");
-  localStorage.removeItem(key("LOGS"));
-  localStorage.setItem(key("IDLE_STRIKES"), "0");
-  localStorage.setItem(key("DAILY_TIMEOUTS"), "0");
-  
-  // 6. Push to Firebase BEFORE logging out
-  uploadData(); 
+    // Save to Subject Tracker (One row per subject)
+    for (let sub in dailySummary) {
+        await saveAutomatedSubjectProgress(
+            sub, 
+            dailySummary[sub].covered.join(", "), 
+            dailySummary[sub].uncovered.join(", ") || "None"
+        );
+    }
 
-  // --- 7. GENERATE THE PERMANENT REPORT HTML ---
-  const doneTasks = tasks.filter(t => t.done).length;
-const doneExtras = extras.filter(e => e.done).length;
-const totalDone = doneTasks + doneExtras;
+    // 4. Calculate Stats for the Report
+    const p = calculate(); // Uses your existing calc logic
+    const timeStr = document.getElementById("liveDetails") ? document.getElementById("liveDetails").innerText : "Session End";
 
-  const reportHTML =
-  '<div style="padding:20px; max-width:500px; margin:0 auto;">' +
-    '<div class="card" style="background:#1e1b4b;border-color:#6366f1; text-align:center; padding:30px;">' +
-      '<h2 style="color:#a5b4fc; margin-bottom:10px;">SESSION COMPLETED</h2>' +
-      '<div style="font-size:14px; color:#c7d2fe; margin-bottom:20px;">Safe to close browser</div>' +
+    // 5. Generate Permanent Report HTML
+    const reportHTML = `
+        <div style="padding:20px; max-width:500px; margin:0 auto; background:#020617; min-height:100vh; display:flex; align-items:center;">
+            <div class="card" style="background:#0f172a; border:2px solid #38bdf8; text-align:center; padding:30px; border-radius:15px; width:100%;">
+                <h2 style="color:#38bdf8; margin-bottom:10px;">DAY END COMPLETED</h2>
+                <div style="font-size:70px; font-weight:900; color:#4ade80;">${p.percent}%</div>
+                <div style="font-size:20px; color:#94a3b8; margin-bottom:20px;">Rating: ${getLabel(p.percent)}</div>
+                <div style="background:#1e293b; padding:15px; border-radius:10px; margin-bottom:20px; text-align:left;">
+                    <div style="color:#facc15">📊 Tasks Completed: ${completedTasks.length}</div>
+                    <div style="color:#f87171">⏳ Tasks Pending: ${pendingTasks.length}</div>
+                </div>
+                <button onclick="dismissReportLock()" style="width:100%; background:#3b82f6; color:white; padding:15px; border-radius:10px; font-weight:bold; cursor:pointer; border:none;">
+                    LOGIN FOR NEW DAY
+                </button>
+            </div>
+        </div>`;
 
-      '<div style="font-size:60px;font-weight:800;color:#38bdf8; line-height:1">' +
-        p.percent + '%</div>' +
-      '<div style="font-size:24px; font-weight:bold; color:#e0e7ff">' +
-        getLabel(p.percent) + '</div>' +
+    // 6. GLOBAL CLEAR: Sync all 4 devices by updating Firebase
+    await update(ref(db, `users/${currentUser.uid}`), {
+        LOCKED_REPORT_VIEW: reportHTML,
+        ROADMAP: null, // Clear all tasks for the new day
+        activeTask: null,
+        forceLogoutTrigger: Date.now() // This kills sessions on all other devices
+    });
 
-      '<div style="margin:20px 0; padding:15px; background:#312e81; border-radius:10px;">' +
-        '<div style="color:#facc15;font-size:18px;">⏱ ' + timeStr + '</div>' +
-        '<div style="font-size:13px; margin-top:5px; line-height:1.6">' +
-          'Assigned Completed: ' + doneTasks + '<br>' +
-          'Extra Completed: ' + doneExtras + '<br>' +
-          '<b>Total Completed: ' + totalDone + '</b>' +
-        '</div>' +
-      '</div>' +
-
-      '<div style="font-size:12px;color:#94a3b8; margin-bottom:20px;">' +
-        '(Waiting for Admin Review...)' +
-      '</div>' +
-
-      '<button onclick="dismissReportLock()" ' +
-        'style="width:100%; background:#22c55e; padding:15px; font-size:16px; font-weight:bold; color:white;">' +
-        'START NEW DAY (LOGIN)' +
-      '</button>' +
-    '</div>' +
-  '</div>';
-
-
-  // 8. LOCK THE SCREEN
-  localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
-
-  // 9. LOGOUT (User goes offline)
-  signOut(auth).then(() => {
-     location.reload(); 
-  });
-}
-
+    // 7. Local Clear & Logout
+    localStorage.clear();
+    signOut(auth).then(() => { location.reload(); });
+};
 // --- NEW UNLOCK FUNCTION ---
 window.dismissReportLock = function () {
     localStorage.removeItem("LOCKED_REPORT_VIEW");
@@ -3336,9 +3371,21 @@ window.dismissReportLock = function () {
         location.reload();
     });
 };
+// --- MULTI-DEVICE SYNC LISTENER ---
+onValue(ref(db, `users/${user.uid}/forceLogoutTrigger`), (snap) => {
+    if(snap.exists()) {
+        localStorage.clear();
+        sessionStorage.clear();
+        location.reload(); // All devices reset to login screen
+    }
+});
 
-
-
+// --- LOCKED VIEW SYNC ---
+onValue(ref(db, `users/${user.uid}/LOCKED_REPORT_VIEW`), (snap) => {
+    if(snap.exists()) {
+        document.body.innerHTML = snap.val();
+    }
+});
 function renderLogs() {
   const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
   const tbody = document.getElementById("logTable");
