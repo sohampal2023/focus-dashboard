@@ -3666,6 +3666,7 @@ window.adminAssignTasks = async function(uid) {
 
 
 // --- ATTACH TO WINDOW ---
+   // --- ATTACH TO WINDOW (UPDATED WITH ROADMAP & SHIFT LOGIC) ---
     window.handleLoginFlow = handleLoginFlow;
     window.resetWatchdog = resetWatchdog;
     window.bioBreak = bioBreak;
@@ -3685,24 +3686,32 @@ window.adminAssignTasks = async function(uid) {
     window.unlockStudent = window.unlockStudent;
     window.switchAdminTab = window.switchAdminTab;
     window.addAdminReview = window.addAdminReview;
-    window.terminateStudent = window.terminateStudent;
-    window.dismissFeedback = window.dismissFeedback;
-    window.sendWarning = window.sendWarning;
-    window.dismissRejected = window.dismissRejected;
-    window.clearLeave = window.clearLeave;
-    window.dismissLeaveStatus = window.dismissLeaveStatus;
-    window.resetLeaveBalance = window.resetLeaveBalance;
-    window.toggleNoticeBoard = window.toggleNoticeBoard;
-    window.dismissRejected = window.dismissRejected;
-    window.sendNotice = window.sendNotice;
-    window.dismissNoticePopup = window.dismissNoticePopup;
-    window.softRefresh = window.softRefresh;
-    window.dismissReportLock = window.dismissReportLock;
-    window.toggleSubjectProgress = window.toggleSubjectProgress;
-    window.renderSubjectTable = window.renderSubjectTable;
-    window.clearSubjectProgress = window.clearSubjectProgress;
-    window.requestSubjectDelete = window.requestSubjectDelete;
+    window.terminateStudent = terminateStudent;
+    window.dismissFeedback = dismissFeedback;
+    window.sendWarning = sendWarning;
+    window.dismissRejected = dismissRejected;
+    window.clearLeave = clearLeave;
+    window.dismissLeaveStatus = dismissLeaveStatus;
+    window.resetLeaveBalance = resetLeaveBalance;
+    window.toggleNoticeBoard = toggleNoticeBoard;
+    window.sendNotice = sendNotice;
+    window.dismissNoticePopup = dismissNoticePopup;
+    window.softRefresh = softRefresh;
+    window.dismissReportLock = dismissReportLock;
+    window.toggleSubjectProgress = toggleSubjectProgress;
+    window.renderSubjectTable = renderSubjectTable;
+    window.clearSubjectProgress = clearSubjectProgress;
+    window.requestSubjectDelete = requestSubjectDelete;
 
+    // --- NEW ROADMAP & SHIFT SYSTEM ATTACHMENTS ---
+    window.adminAssignTasks = adminAssignTasks;         // Admin task pusher
+    window.initializeShift = initializeShift;           // Start of day 2-hour logic
+    window.openRoadmapWindow = openRoadmapWindow;       // The Map UI window
+    window.startRoadmapTask = startRoadmapTask;         // Timer start logic
+    window.completeRoadmapTask = completeRoadmapTask;   // Done + Math recalculation
+    window.abortRoadmapTask = abortRoadmapTask;         // Revert logic
+    window.recalculateAllocatedTime = recalculateAllocatedTime; // Dynamic formula logic
+    
   </script>
 
 </body>
