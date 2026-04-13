@@ -617,9 +617,11 @@ const FIXED_SUBJECTS = [
   "GOVT_ENGLISH"
 ];
 onAuthStateChanged(auth, async (user) => {
-    // 1. Check for Locked Report
+    // Check for local lock first
     const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
+    
     if (lockedReport) {
+        // If we have a local lock, show it, but allow the user to clear it
         document.body.innerHTML = `
           <div style="min-height:100vh; display:flex; justify-content:center; align-items:center; background:#020617; padding:20px;">
             <div style="width:100%;max-width:520px">
@@ -635,23 +637,15 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     if (user) {
-        currentUser = user; // Set global variable
+        currentUser = user;
         document.getElementById("syncStatus").innerText = "Session Restored";
 
-        // --- 📡 MULTI-DEVICE SYNC LISTENERS ---
-        // This was the cause of your line 3074 error
+        // Bind multi-device sync
         onValue(ref(db, `users/${user.uid}/forceLogoutTrigger`), (snap) => {
-            if(snap.exists()) {
+            if(snap.exists() && snap.val() !== null) {
                 localStorage.clear();
                 sessionStorage.clear();
                 location.reload(); 
-            }
-        });
-
-        onValue(ref(db, `users/${user.uid}/LOCKED_REPORT_VIEW`), (snap) => {
-            if(snap.exists()) {
-                localStorage.setItem("LOCKED_REPORT_VIEW", snap.val());
-                location.reload();
             }
         });
 
@@ -660,17 +654,13 @@ onAuthStateChanged(auth, async (user) => {
         } else {
             initStudentDashboard();
         }
-
     } else {
+        // Logged out UI reset
         currentUser = null;
         document.getElementById("statusBox").innerText = "Logged out";
         document.getElementById("loginBtn").classList.remove("hidden");
         document.getElementById("logoutBtn").classList.add("hidden");
         document.getElementById("studentView").classList.add("hidden");
-        document.getElementById("studentControls").classList.add("hidden");
-        
-        const adminBox = document.getElementById("adminBox");
-        if(adminBox) adminBox.classList.add("hidden");
     }
 });
 // --- GLOBAL VARIABLES ---
@@ -722,11 +712,23 @@ async function handleLoginFlow() {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         currentUser = userCredential.user;
         
+        // --- 🧹 CLEAN LOGIN LOGIC (Fixes Sign-in Block) ---
+        // Immediately clear any triggers that might force an auto-logout or lock the screen
+        await update(ref(db, `users/${currentUser.uid}`), {
+            forceLogoutTrigger: null,
+            LOCKED_REPORT_VIEW: null
+        });
+        
+        // Clear local storage locks just in case
+        localStorage.removeItem("LOCKED_REPORT_VIEW");
+        localStorage.removeItem(key("SHIFT_ACTIVE"));
+
         if (currentUser.email === ADMIN_EMAIL) {
             initAdminDashboard();
         } else {
             initStudentDashboard();
         }
+        
     } catch (error) {
         if(error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
             if(confirm("User not found. Register new account for this email?")) {
