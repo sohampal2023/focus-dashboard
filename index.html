@@ -1900,10 +1900,11 @@ async function initStudentDashboard() {
     await initializeShift();
 
     // --- 5. MULTI-DEVICE ROADMAP & PROGRESS LISTENER ---
-    onValue(ref(db, `users/${currentUser.uid}/ROADMAP`), (snap) => {
-        loadTasks(); // Renders the Subject Cards
-        updateProgress(); // Syncs the speedometer
-    });
+    // Inside initStudentDashboard()
+onValue(ref(db, `users/${currentUser.uid}/ROADMAP`), (snap) => {
+    loadTasks();      // Updates the list
+    updateProgress(); // Moves the needle automatically
+});
 
     // --- 6. SETUP LIVE ALERT LISTENER (WARNINGS) ---
     onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
@@ -3060,25 +3061,57 @@ function save(tasks, extras) {
 }
 
 // --- PROGRESS ---
-function calculate() {
-  const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
-  const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-  const done = tasks.filter(t => t.done).length +
-    extras.filter(e => e.done).length;
-  const percent = tasks.length ?
-    Math.max(0, Math.round((done / tasks.length) * 100 - penalty)) : 0;
-  return { percent, assigned: tasks.length, extra: extras.length };
+function calculate(roadmapArray = []) {
+    // 1. Get Extras from local (or you can move these to Firebase too)
+    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+    
+    // 2. Count Done tasks from the Roadmap
+    const roadmapDone = roadmapArray.filter(t => t.status === "DONE").length;
+    const extraDone = extras.filter(e => e.done).length;
+    
+    const totalDone = roadmapDone + extraDone;
+    const totalAssigned = roadmapArray.length;
+
+    // 3. Percentage Math
+    const penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
+    const percent = totalAssigned > 0 ? 
+        Math.max(0, Math.round((totalDone / totalAssigned) * 100 - penalty)) : 0;
+
+    return { percent, assigned: totalAssigned, extra: extras.length, penalty };
 }
 
-function updateProgress() {
-  const needle = document.getElementById("needle");
-  if(!needle) return;
-  const p = calculate();
-  needle.style.transform = `rotate(${(Math.min(p.percent, 300) / 300) * 180 - 90}deg)`;
-  document.getElementById("livePercent").innerText = p.percent + "%";
-  document.getElementById("liveRating").innerText = getLabel(p.percent);
-  document.getElementById("liveDetails").innerText = `Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${penalty}%`;
-}
+window.updateProgress = async function() {
+    const needle = document.getElementById("needle");
+    if(!needle) return;
+
+    try {
+        // Fetch fresh roadmap from Firebase
+        const snap = await get(ref(db, `users/${currentUser.uid}/ROADMAP`));
+        const roadmap = snap.exists() ? JSON.parse(snap.val()) : [];
+
+        const p = calculate(roadmap);
+
+        // Move the needle (0% = -90deg, 100% = 90deg)
+        const rotation = (Math.min(p.percent, 100) / 100) * 180 - 90;
+        needle.style.transform = `rotate(${rotation}deg)`;
+
+        // Update Text Labels
+        document.getElementById("livePercent").innerText = p.percent + "%";
+        document.getElementById("liveRating").innerText = getLabel(p.percent);
+        document.getElementById("liveDetails").innerText = 
+            `Assigned: ${p.assigned} | Extra: ${p.extra} | Penalty: -${p.penalty}%`;
+
+        // 🔥 SYNC STATS TO FIREBASE FOR ADMIN
+        update(ref(db, `users/${currentUser.uid}/stats`), {
+            percent: p.percent,
+            rating: getLabel(p.percent),
+            updatedAt: Date.now()
+        });
+
+    } catch (e) {
+        console.error("Speedometer Update Error:", e);
+    }
+};
 
 function getLabel(p) {
   if (p < 40) return "Poor";
@@ -3550,6 +3583,7 @@ if (typeof startRoadmapTask !== 'undefined') window.startRoadmapTask = startRoad
 if (typeof completeRoadmapTask !== 'undefined') window.completeRoadmapTask = completeRoadmapTask;
 if (typeof abortRoadmapTask !== 'undefined') window.abortRoadmapTask = abortRoadmapTask;
 // --- ROADMAP & SHIFT SYSTEM ---
+  window.updateProgress = updateProgress;
 window.clearFullRoadmap = clearFullRoadmap;
 window.adminAssignTasks = adminAssignTasks; // Fixed Assignment
 window.initializeShift = initializeShift;
