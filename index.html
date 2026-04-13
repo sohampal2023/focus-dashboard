@@ -3054,30 +3054,32 @@ function save(tasks, extras) {
 
 // --- PROGRESS ---
 function calculate(roadmapArray = []) {
-    // 1. Separate Mandatory vs. Extra
-    // Mandatory = Tasks assigned via standard Admin Assign
-    // Extra = Tasks added via the "Accept & Assign" Extra Work flow
+    // 1. Mandatory = Original tasks assigned at the start of the day
+    // 2. Extra = Bonus tasks requested via the Inbox flow
     const mandatoryTasks = roadmapArray.filter(t => t.module !== "Extra Work");
     const extraTasks = roadmapArray.filter(t => t.module === "Extra Work");
 
-    // 2. Count Completed
+    // Count what is actually DONE
     const mandatoryDone = mandatoryTasks.filter(t => t.status === "DONE").length;
     const extraDone = extraTasks.filter(t => t.status === "DONE").length;
 
-    // 3. Formula: ((Mandatory Done + Extra Done) / Total Mandatory) * 100
-    // We use Math.max(1, ...) to prevent division by zero if no tasks are assigned yet.
-    const totalMandatoryCount = Math.max(1, mandatoryTasks.length);
-    const rawPercent = ((mandatoryDone + extraDone) / totalMandatoryCount) * 100;
+    // --- 🔥 THE MATH ENGINE ---
+    // Denominator ONLY includes Mandatory tasks. 
+    // This ensures the goal never increases (needle never moves back).
+    const denominator = mandatoryTasks.length > 0 ? mandatoryTasks.length : 1;
+    
+    // Percent = (All Done Tasks / Mandatory Goal) * 100
+    let rawPercent = ((mandatoryDone + extraDone) / denominator) * 100;
 
-    // 4. Penalty Check
     const penaltyValue = parseInt(localStorage.getItem(key("PENALTY")) || "0");
     
-    // 5. Final Result (Capped at 300%, Floor at 0%)
+    // Final result capped at 300%, allow to exceed 100%
     const finalPercent = Math.min(300, Math.max(0, Math.round(rawPercent - penaltyValue)));
 
     return { 
         percent: finalPercent, 
         assigned: mandatoryTasks.length, 
+        extraCount: extraTasks.length,
         extraDone: extraDone, 
         penalty: penaltyValue 
     };
@@ -3135,19 +3137,19 @@ window.requestExtraWork = async function() {
 
     if (action === "REJECT") {
         await remove(requestRef);
-        // This stays RED
-        await update(ref(db, `users/${studentUid}`), { 
-            activeAlert: "Extra work request declined." 
-        });
+        alert("Request Cleared.");
     } else {
         await remove(requestRef);
-        // 🔥 NEW LOGIC: Use a different key for Success so it doesn't show the Red "Rejected" UI
-        await update(ref(db, `users/${studentUid}`), { 
-            successAlert: "Extra work request accepted! New tasks added to your roadmap." 
-        });
         
-        // Open assignment window
+        // 🔥 CRITICAL: Inform the Admin to use "Extra Work" as the Module Name
+        alert("IMPORTANT: To ensure the Speedometer treats these as BONUS percentage, enter 'Extra Work' exactly in the Module Name field.");
+        
+        // Open the existing assignment window
         window.adminAssignTasks(studentUid);
+        
+        await update(ref(db, `users/${studentUid}`), { 
+            successAlert: "Admin accepted! Remember: Extra tasks give you BONUS points!" 
+        });
     }
 };
 window.updateProgress = async function() {
