@@ -3128,13 +3128,19 @@ window.openDayEnd = function() {
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
 window.finalDayEnd = async function() {
-    if(!confirm("CONFIRM DAY END: Syncing all 4 devices and clearing today's shift.")) return;
+    if(!confirm("CONFIRM DAY END: This will sync all 4 devices and end the session.")) return;
 
     try {
         const snap = await get(ref(db, `users/${currentUser.uid}`));
-        const userData = snap.val() || {};
+        if (!snap.exists()) {
+            alert("No data found to save.");
+            return;
+        }
+
+        const userData = snap.val(); // Use 'userData' consistently
         const roadmap = JSON.parse(userData.ROADMAP || "[]");
         
+        // 1. Group by Subject for Tracker
         let summary = {};
         roadmap.forEach(t => {
             if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
@@ -3142,34 +3148,51 @@ window.finalDayEnd = async function() {
             else summary[t.subject].due.push(t.topic);
         });
 
-        // Add this inside your finalDayEnd loop
-for (let sub in summary) {
-    const timeSpent = Math.floor((data.TIME_CONSUMED || 0) / 60000); // Minutes
-    await window.saveAutomatedSubjectProgress(
-        sub, 
-        `${summary[sub].covered.join(", ")} (Spent: ${timeSpent}m)`, 
-        summary[sub].due.join(", ") || "None"
-    );
-}
+        // 2. Save Automated Progress with Time Spent
+        for (let sub in summary) {
+            // Calculate time spent in minutes from userData
+            const timeSpentMinutes = Math.floor((userData.TIME_CONSUMED || 0) / 60000);
+            
+            await window.saveAutomatedSubjectProgress(
+                sub, 
+                `${summary[sub].covered.join(", ")} (Spent: ${timeSpentMinutes}m)`, 
+                summary[sub].due.join(", ") || "None"
+            );
+        }
 
+        // 3. Generate Report HTML (Using the p calculation)
         const p = calculate();
-        const reportHTML = `<div class="card" style="background:#1e1b4b; text-align:center; padding:30px;"><h2 style="color:#a5b4fc;">SESSION COMPLETED</h2><div style="font-size:60px;color:#38bdf8;">${p.percent}%</div><button onclick="dismissReportLock()" style="width:100%; background:#22c55e; padding:15px; margin-top:20px; color:white; border:none; border-radius:8px; font-weight:bold;">START NEW DAY (LOGIN)</button></div>`;
+        const reportHTML = `
+            <div class="card" style="background:#1e1b4b; text-align:center; padding:30px; border:2px solid #38bdf8; border-radius:20px;">
+                <h2 style="color:#a5b4fc; margin-bottom:10px;">SESSION COMPLETED</h2>
+                <div style="font-size:64px; font-weight:900; color:#38bdf8; margin:20px 0;">${p.percent}%</div>
+                <div style="color:#facc15; font-size:18px; margin-bottom:20px;">Day Summary Generated</div>
+                <button onclick="dismissReportLock()" style="width:100%; background:#22c55e; padding:18px; color:white; border:none; border-radius:12px; font-weight:bold; cursor:pointer; font-size:16px;">
+                    START NEW DAY (LOGIN)
+                </button>
+            </div>`;
 
-        // --- 🔥 CLEAR EVERYTHING FOR NEXT LOGIN ---
+        // 4. 📡 SIGNAL ALL 4 DEVICES TO RESET & LOCK
         await update(ref(db, `users/${currentUser.uid}`), { 
             ROADMAP: null, 
-            SHIFT_ACTIVE: null, // Reset shift flag
+            SHIFT_ACTIVE: null,
             SHIFT_REMAINING_TIME: null,
+            TIME_CONSUMED: 0,
             forceLogoutTrigger: Date.now(), 
             LOCKED_REPORT_VIEW: reportHTML
         });
 
+        // 5. Cleanup Local State
         localStorage.clear();
         sessionStorage.clear();
-        signOut(auth).then(() => location.reload());
-
+        
+        signOut(auth).then(() => {
+            location.reload(); 
+        });
+        
     } catch (err) {
-        console.error("Day End Error:", err);
+        console.error("Day End Logic Error:", err);
+        alert("Day End Failed: " + err.message);
     }
 };
 // --- NEW UNLOCK FUNCTION ---
