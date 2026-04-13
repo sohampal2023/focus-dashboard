@@ -1896,17 +1896,20 @@ onValue(ref(db, `users/${currentUser.uid}/ROADMAP`), (snap) => {
 });
 
     // --- 6. SETUP LIVE ALERT LISTENER (WARNINGS) ---
-    onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
-        const msg = snapshot.val();
-        const popup = document.getElementById("rejectedPopup");
-        const popupTxt = document.getElementById("rejectedMsg");
-        if (msg) {
-            popupTxt.innerText = `Admin: "${msg}"`;
-            popup.classList.remove("hidden");
-        } else {
-            popup.classList.add("hidden");
-        }
-    });
+    // Inside initStudentDashboard()
+onValue(ref(db, `users/${currentUser.uid}/successAlert`), (snap) => {
+    const msg = snap.val();
+    if(msg) {
+        const p = document.getElementById("approvedPopup");
+        document.getElementById("approvedMsg").innerText = msg;
+        p.classList.remove("hidden");
+        // Auto-hide and clear from DB after 5 seconds
+        setTimeout(async () => {
+            p.classList.add("hidden");
+            await remove(ref(db, `users/${currentUser.uid}/successAlert`));
+        }, 5000);
+    }
+});
 
     // --- 7. FINAL UI LOADS & DATA SYNC ---
     const serverData = await downloadData(currentUser.uid);
@@ -3126,19 +3129,19 @@ window.requestExtraWork = async function() {
 
     if (action === "REJECT") {
         await remove(requestRef);
-        alert("Request Cleared.");
-    } else {
-        // 1. Remove from inbox first so it doesn't duplicate
-        await remove(requestRef);
-        
-        // 2. Open the Assign Window specifically for this UID
-        // This is your existing function that handles the module/topic popup
-        window.adminAssignTasks(studentUid);
-        
-        // 3. Optional: Send alert to student
+        // This stays RED
         await update(ref(db, `users/${studentUid}`), { 
-            activeAlert: "Admin: Extra work request accepted. Check your roadmap!" 
+            activeAlert: "Extra work request declined." 
         });
+    } else {
+        await remove(requestRef);
+        // 🔥 NEW LOGIC: Use a different key for Success so it doesn't show the Red "Rejected" UI
+        await update(ref(db, `users/${studentUid}`), { 
+            successAlert: "Extra work request accepted! New tasks added to your roadmap." 
+        });
+        
+        // Open assignment window
+        window.adminAssignTasks(studentUid);
     }
 };
 window.updateProgress = async function() {
