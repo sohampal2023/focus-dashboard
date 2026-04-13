@@ -1,5 +1,3 @@
-
-Conversation with Gemini
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1548,6 +1546,105 @@ window.openAdminModal = function(uid, email) {
 
     // Default to Logs tab
     window.switchAdminTab('logs');
+};
+  function startStudentLiveSync() {
+    const userRef = ref(db, `users/${currentUser.uid}`);
+    
+    // onValue creates a persistent connection. 
+    // If you change a status on Device 1, Device 2, 3, and 4 update instantly.
+    onValue(userRef, (snapshot) => {
+        const data = snapshot.val();
+        if (!data) return;
+
+        // Sync remote data to local variables
+        if (data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
+        if (data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
+        if (data.PENALTY) penalty = parseInt(data.PENALTY);
+        
+        // Refresh dashboard components
+        loadTasks();
+        updateProgress();
+        checkLeaveStatus(data);
+        renderLogs();
+
+        // Remote Lockout Check
+        if(data.lockout && data.lockout > Date.now()) {
+            alert("This session has been terminated or locked by Admin: " + (data.lockoutReason || "No reason"));
+            location.reload();
+        }
+    });
+}
+  window.adminAssignJourney = async function(uid) {
+    const subject = prompt("Select Subject:\n" + FIXED_SUBJECTS.join("\n"));
+    if (!FIXED_SUBJECTS.includes(subject)) return alert("Please select a valid subject from the list.");
+
+    const moduleName = prompt("Enter Module Name/No (e.g., Module 1):");
+    const topicsRaw = prompt("Enter Sub-topics (Separate each with a comma):");
+    if (!topicsRaw) return;
+
+    const topics = topicsRaw.split(",").map(t => ({
+        label: t.trim(),
+        status: "todo",
+        module: moduleName,
+        completedAt: null,
+        dynamicMins: 30 // Default allocation; redistributed when student starts
+    }));
+
+    const taskId = Date.now();
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    
+    // Get current tasks to append the new assignment
+    const snap = await get(ref(db, `users/${uid}/TASKS`));
+    const currentTasks = JSON.parse(snap.val() || "[]");
+    currentTasks.push({ name: subject, id: taskId, done: false });
+    
+    // Update Firebase: This triggers the student's live sync on all devices
+    await update(ref(db, `users/${uid}`), {
+        TASKS: JSON.stringify(currentTasks),
+        [`dailyMaps/${todayKey}/${taskId}`]: topics
+    });
+    
+    alert("Journey and Task assigned successfully.");
+};
+  // STUDENT SIDE: Requesting
+window.requestExtraWork = async function() {
+    const subject = prompt("Enter Subject for Extra Work:");
+    const topic = prompt("What specific topic do you want to study?");
+    if(!subject || !topic) return;
+
+    const reqId = Date.now();
+    await set(ref(db, `users/${currentUser.uid}/EXTRA_REQUESTS/${reqId}`), {
+        subject: subject,
+        work: topic,
+        time: now(),
+        status: "Pending"
+    });
+    alert("Request sent to Admin for approval.");
+};
+
+// ADMIN SIDE: Approving/Rejecting
+window.manageExtraRequests = async function(uid) {
+    const snap = await get(ref(db, `users/${uid}/EXTRA_REQUESTS`));
+    if(!snap.exists()) return alert("No pending extra work requests.");
+
+    const requests = snap.val();
+    for(const id in requests) {
+        const req = requests[id];
+        const decision = confirm(`REQUEST FOR EXTRA WORK:\nSubject: ${req.subject}\nTopic: ${req.work}\n\n[OK] to ACCEPT | [CANCEL] to REJECT`);
+        
+        if(decision) {
+            // Add to the student's actual EXTRA work list
+            const extraSnap = await get(ref(db, `users/${uid}/EXTRA`));
+            const currentExtra = JSON.parse(extraSnap.val() || "[]");
+            currentExtra.push({ name: `${req.subject}: ${req.work}`, done: false, id: Date.now() });
+            await update(ref(db, `users/${uid}`), { EXTRA: JSON.stringify(currentExtra) });
+            alert("Request Accepted and Assigned.");
+        } else {
+            alert("Request Rejected and Deleted.");
+        }
+        // Remove the request after decision
+        await remove(ref(db, `users/${uid}/EXTRA_REQUESTS/${id}`));
+    }
 };
   // Populate the dropdown with subjects found in the student's data
 window.initAdminSubjectDropdown = function() {
@@ -3738,58 +3835,44 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
  window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will log all completed topics with their Module names.")) return;
+    if(!confirm("Are you sure? This will archive your modules and subtopics into the progress table and logout all devices.")) return;
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    const snap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    const maps = snap.val() || {};
     
-    try {
-        const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        const maps = snapshot.val() || {};
+    const subjectTableSnap = await get(ref(db, `users/${currentUser.uid}/SUBJECT_WISE_TABLE`));
+    const subjectTable = JSON.parse(subjectTableSnap.val() || "{}");
 
-        // Iterate through each subject map (taskId)
-        for (const taskId in maps) {
-            const nodes = maps[taskId];
-            const completedByModule = {};
-            const pendingByModule = {};
+    // Process each assigned journey
+    for (const taskId in maps) {
+        const nodes = maps[taskId];
+        nodes.forEach(n => {
+            const modLabel = n.module || "General";
+            if(!subjectTable[modLabel]) subjectTable[modLabel] = [];
             
-            // Group topics by Module name
-            nodes.forEach(n => {
-                const modName = n.module || "General";
-                if (n.status === 'done') {
-                    if (!completedByModule[modName]) completedByModule[modName] = [];
-                    completedByModule[modName].push(n.label);
-                } else {
-                    if (!pendingByModule[modName]) pendingByModule[modName] = [];
-                    pendingByModule[modName].push(n.label);
-                }
+            subjectTable[modLabel].push({
+                date: new Date().toLocaleDateString(),
+                covered: n.status === 'done' ? n.label : "-",
+                uncovered: n.status !== 'done' ? n.label : "-"
             });
-
-            // Log each Module as a unique entry in the Subject Progress Table
-            Object.keys(completedByModule).forEach(mod => {
-                const subjectWithModule = `${currentMapSubject} [${mod}]`;
-                const coveredText = completedByModule[mod].join(", ");
-                const pendingText = pendingByModule[mod] ? pendingByModule[mod].join(", ") : "All Clear";
-                
-                // Use the existing helper to save into SUBJECT_WISE_TABLE
-                saveAutomatedSubjectProgress(subjectWithModule, coveredText, pendingText);
-            });
-        }
-
-        // --- Standard Cleanup ---
-        localStorage.removeItem(key("DAILY_GOAL_DATE"));
-        localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
-        localStorage.removeItem(key("SHIFT_END_TS"));
-        
-        // Remove maps from live DB as they are now in the history table
-        await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        
-        // Final logout/reload
-        location.reload();
-
-    } catch (e) {
-        console.error("Day End Error:", e);
-        alert("Error finalizing day. Please check connection.");
+        });
     }
+
+    // Hard Clear for the next day
+    await update(ref(db, `users/${currentUser.uid}`), {
+        SUBJECT_WISE_TABLE: JSON.stringify(subjectTable),
+        TASKS: "[]", 
+        EXTRA: "[]",
+        NEXT_TASKS: "[]", // Students can no longer set their own next tasks
+        [`dailyMaps/${todayKey}`]: null // Archive today's map
+    });
+    
+    // Clear LocalStorage and Logout
+    localStorage.clear();
+    signOut(auth).then(() => {
+        location.reload();
+    });
 };
 // --- ATTACH TO WINDOW ---
     window.handleLoginFlow = handleLoginFlow;
