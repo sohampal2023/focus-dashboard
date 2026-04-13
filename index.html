@@ -3154,49 +3154,42 @@ window.requestExtraWork = async function() {
 };
 window.updateProgress = async function() {
     const needle = document.getElementById("needle");
-    if(!needle) return;
+    const detailEl = document.getElementById("liveDetails");
+    if(!needle || !detailEl) return;
 
     try {
         const snap = await get(ref(db, `users/${currentUser.uid}/ROADMAP`));
         const roadmap = snap.exists() ? JSON.parse(snap.val()) : [];
 
-        // Get your stats (percent can now go up to 300)
+        // Get the fresh data
         const p = calculate(roadmap);
 
-        // --- 🏎️ 300% SPEEDOMETER MATH ---
-        // (Current Percent / Max Percent) * Total Degrees - Offset
-        // (p.percent / 300) * 180 - 90
+        // Move Needle
         const rotation = (Math.min(p.percent, 300) / 300) * 180 - 90;
-        
         needle.style.transform = `rotate(${rotation}deg)`;
 
         // Update Text Labels
         document.getElementById("livePercent").innerText = p.percent + "%";
         document.getElementById("liveRating").innerText = getLabel(p.percent);
         
-        // Inside updateProgress() find the detailEl section and update:
-const detailEl = document.getElementById("liveDetails");
-if(detailEl) {
-    detailEl.innerHTML = `
-        <span style="color:#38bdf8">Target: ${p.assigned}</span> | 
-        <span style="color:#4ade80">Bonus: +${p.extraDone}</span> | 
-        <span style="color:#ef4444">Penalty: -${p.penalty}%</span>
-    `;
-}
+        // ✅ FIXED LABELS: No more 'undefined'
+        detailEl.innerHTML = `
+            <span style="color:#38bdf8">Target: ${p.target}</span> | 
+            <span style="color:#4ade80">Bonus: +${p.bonus}</span> | 
+            <span style="color:#ef4444">Penalty: -${p.penalty}%</span>
+        `;
 
-        // Sync to Firebase for Admin
+        // Sync to Admin
         update(ref(db, `users/${currentUser.uid}/stats`), {
             percent: p.percent,
             rating: getLabel(p.percent),
-            maxScale: 300,
             updatedAt: Date.now()
         });
 
     } catch (e) {
-        console.error("Speedometer Update Error:", e);
+        console.error("UI Sync Error:", e);
     }
 };
-
 function getLabel(percent) {
     if (percent >= 250) return "GODLIKE ⚡";
     if (percent >= 200) return "LEGENDARY 🔥";
