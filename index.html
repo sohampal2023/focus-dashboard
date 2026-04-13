@@ -1315,7 +1315,7 @@ window.openAdminModal = function(uid, email) {
     const modal = document.getElementById("adminModal");
     modal.classList.remove("hidden");
     
-    // Clear previous view
+    // Initial loading state
     const logsContainer = document.getElementById("modalBodyLogs");
     logsContainer.innerHTML = "<div style='padding:20px; text-align:center;'>🔌 Syncing Roadmap Data...</div>";
 
@@ -1327,14 +1327,26 @@ window.openAdminModal = function(uid, email) {
             const user = snapshot.val();
             const roadmap = JSON.parse(user.ROADMAP || "[]");
             
-            // --- 1. GENERATE ROADMAP HTML ---
+            // --- 🔔 NEW: EXTRA WORK REQUEST BOX (YELLOW) ---
+            let requestHtml = `
+                <div id="extraWorkSection" style="margin-bottom:20px; background:#422006; padding:15px; border-radius:12px; border:2px solid #facc15;">
+                    <h4 style="color:#facc15; margin:0 0 10px 0; font-size:13px; display:flex; align-items:center;">
+                        <span style="margin-right:8px;">🔔</span> EXTRA WORK REQUESTS
+                    </h4>
+                    <div id="adminRequestList">
+                        <div style="color:#92400e; font-size:11px; text-align:center;">Checking for active requests...</div>
+                    </div>
+                </div>
+            `;
+            
+            // --- 🗺️ LIVE ROADMAP MAP ---
             let roadmapHtml = `
                 <div style="background:#020617; padding:15px; border-radius:12px; margin-bottom:20px; border:2px solid #1e293b;">
                     <div style="display:flex; justify-content:space-between; margin-bottom:10px; border-bottom:1px solid #334155; padding-bottom:8px;">
                         <h4 style="color:#38bdf8; margin:0; font-size:13px;">LIVE PROGRESS MAP (${roadmap.length} TASKS)</h4>
                         <button onclick="clearFullRoadmap('${uid}')" style="width:auto; padding:2px 8px; background:#7f1d1d; font-size:9px;">CLEAR ALL</button>
                     </div>
-                    <div style="display:flex; flex-direction:column; gap:6px; max-height:300px; overflow-y:auto;">`;
+                    <div style="display:flex; flex-direction:column; gap:6px; max-height:250px; overflow-y:auto;">`;
             
             roadmap.forEach((t, idx) => {
                 let color = t.status === 'DONE' ? '#22c55e' : t.status === 'RUNNING' ? '#facc15' : '#64748b';
@@ -1344,40 +1356,22 @@ window.openAdminModal = function(uid, email) {
                             <span style="color:#fff; font-weight:bold;">${idx+1}. ${t.topic}</span>
                             <span style="color:${color}; font-weight:bold; font-size:10px;">${t.status}</span>
                         </div>
-                        <div style="font-size:9px; color:#94a3b8; display:flex; justify-content:space-between; margin-top:2px;">
-                            <span>${t.subject} (${t.module})</span>
-                            ${t.doneTime ? `<span style="color:#4ade80">Done: ${t.doneTime}</span>` : ''}
-                        </div>
                     </div>`;
             });
-
             if(roadmap.length === 0) roadmapHtml += `<div style="color:#64748b; font-size:11px; text-align:center;">Roadmap empty.</div>`;
             roadmapHtml += `</div></div>`;
 
-            // --- 2. ADD THE EXTRA WORK REQUEST CONTAINER ---
-            // This is the new section you requested
-            let requestHtml = `
-                <div id="extraWorkSection" style="margin-bottom:20px; background:#020617; padding:15px; border-radius:12px; border:1px solid #facc15;">
-                    <h4 style="color:#facc15; margin:0 0 10px 0; font-size:13px; display:flex; align-items:center;">
-                        <span style="margin-right:8px;">🔔</span> EXTRA WORK REQUESTS
-                    </h4>
-                    <div id="adminRequestList">
-                        <div style="color:#64748b; font-size:11px; text-align:center;">Checking for requests...</div>
-                    </div>
-                </div>
-            `;
-
-            // --- 3. MERGE EVERYTHING ---
+            // --- 📜 ACTIVITY LOGS ---
             let logs = JSON.parse(user.LOGS || "[]");
             renderAdminLogs(uid, logs);
             
-            // Combine Request Box + Roadmap + Activity Logs
+            // Combine all sections into the logs tab
             logsContainer.innerHTML = requestHtml + roadmapHtml + logsContainer.innerHTML;
 
-            // --- 4. START THE REQUEST LISTENER ---
+            // 🔥 CRITICAL: Start listening for the specific request for this student
             listenForStudentRequests(uid);
 
-            // Existing logic
+            // Rest of existing modal logic
             renderAdminHistory(uid, JSON.parse(user.HISTORY || "[]"));
             renderMockLogs(uid, JSON.parse(user.MOCK_LOGS || "[]"));
             window.currentAdminSubjectData = JSON.parse(user.SUBJECT_WISE_TABLE || "{}");
@@ -3125,17 +3119,17 @@ window.requestExtraWork = async function() {
     // Listen to the specific request for THIS student
     onValue(ref(db, `admin/REQUESTS/${studentUid}`), (snapshot) => {
         if (!snapshot.exists()) {
-            requestBox.innerHTML = "<div style='color:#64748b; font-size:12px; text-align:center;'>No pending requests.</div>";
+            requestBox.innerHTML = "<div style='color:#64748b; font-size:11px; text-align:center;'>No pending requests.</div>";
             return;
         }
 
         const req = snapshot.val();
         requestBox.innerHTML = `
             <div style="background:#1e293b; padding:12px; border-radius:8px; border-left:4px solid #facc15;">
-                <div style="font-weight:bold; color:white; margin-bottom:5px;">${req.reason}</div>
-                <div style="font-size:10px; color:#94a3b8; margin-bottom:10px;">Requested: ${new Date(req.timestamp).toLocaleTimeString()}</div>
+                <div style="font-weight:bold; color:white; margin-bottom:5px;">Reason: "${req.reason}"</div>
+                <div style="font-size:10px; color:#94a3b8; margin-bottom:10px;">Requested at: ${new Date(req.timestamp).toLocaleTimeString()}</div>
                 <div style="display:flex; gap:10px;">
-                    <button onclick="handleExtraRequest('${req.uid}', 'ACCEPT')" style="background:#22c55e; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:11px; flex:1; font-weight:bold;">ACCEPT</button>
+                    <button onclick="handleExtraRequest('${req.uid}', 'ACCEPT')" style="background:#22c55e; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:11px; flex:1; font-weight:bold;">APPROVE & ASSIGN</button>
                     <button onclick="handleExtraRequest('${req.uid}', 'REJECT')" style="background:#ef4444; color:white; border:none; padding:8px; border-radius:6px; cursor:pointer; font-size:11px; flex:1; font-weight:bold;">REJECT</button>
                 </div>
             </div>
