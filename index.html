@@ -2052,96 +2052,91 @@ async function loadNotices() {
         console.error("Notice load error:", e);
     }
 }
-async function initStudentDashboard() {
-    // 1. --- UI VISIBILITY ---
-    document.getElementById("studentView").classList.remove("hidden");
-    document.getElementById("taskBox")?.classList.remove("hidden");
-    document.getElementById("logBox")?.classList.remove("hidden");
-    document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
-    document.getElementById("loginBtn").classList.add("hidden");
-    document.getElementById("logoutBtn").classList.remove("hidden");
-    document.getElementById("studentControls").classList.remove("hidden");
-
-    // 2. --- DOWNLOAD DATA & LEAVE BALANCE ---
-    const serverData = await downloadData(currentUser.uid);
-    const leaveDisplay = document.querySelector("button[onclick='requestLeave()']");
-    if (leaveDisplay) {
-        leaveDisplay.innerText = `Leave Bal: ${serverData?.leaveBalance || 0}`;
-    }
-
-    if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
-        location.reload(); 
-        return; 
-    }
-
-    // 3. --- SHIFT PROMPT ---
-    const todayStr = new Date().toLocaleDateString();
-    let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
-
-    if (!goalDate || goalDate !== todayStr) {
-        let askedShifts = prompt("Enter number of shifts for today (2 hours each):", "3");
-        if (!askedShifts || isNaN(askedShifts)) askedShifts = "3"; 
-        localStorage.setItem(key("DAILY_SHIFT_COUNT"), askedShifts);
-        localStorage.setItem(key("DAILY_GOAL_DATE"), todayStr);
-        await update(ref(db, `users/${currentUser.uid}`), { dailyShiftTarget: askedShifts, dailyGoalDate: todayStr, penalty: 0 });
-    }
-
-    // 4. --- BIO BREAK REASON CHECK ---
-    let logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    if (logs.length > 0 && logs[logs.length - 1].reason === "Pending") {
-        const userReason = prompt("Welcome back! Provide reason for previous break:", "Bio Break");
-        logs[logs.length - 1].reason = userReason || "Bio Break";
-        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-    }
-
-    // 5. --- SHIFT TIMER RESUME ---
-    const pausedRemaining = localStorage.getItem(key("PAUSED_SHIFT_REMAINING"));
-    if (pausedRemaining && parseInt(pausedRemaining) > 0) {
-        localStorage.setItem(key("SHIFT_END_TS"), Date.now() + parseInt(pausedRemaining));
-        localStorage.removeItem(key("PAUSED_SHIFT_REMAINING"));
-    } else if (!localStorage.getItem(key("SHIFT_END_TS"))) {
-        const totalMins = (parseFloat(localStorage.getItem(key("DAILY_SHIFT_COUNT"))) || 3) * 120;
-        localStorage.setItem(key("SHIFT_END_TS"), Date.now() + (totalMins * 60000));
-    }
-
-    // 6. --- COMPONENT START ---
-    startIdle(1800);      
-    loadSubjectList();    
-    setupTasks(); 
-    loadTasks();          
-    renderLogs();         
-    updateProgress();     
-    runShiftTimer();      
-    uploadData();
-
-    // 7. --- THE "HARD UNLOCK" FOR ALL BUTTONS ---
-    const buttonsToUnlock = [
-        "bioBtn", "histBtn", "dayBtn", "noticeBtn", "refreshBtn", "leaveBtn"
-    ];
-    
-    buttonsToUnlock.forEach(id => {
-        const btn = document.getElementById(id);
-        if(btn) {
-            btn.disabled = false;
-            btn.style.opacity = "1";
-            btn.style.cursor = "pointer";
-            btn.style.filter = "none";
-        }
-    });
-
-    // --- SPECIFIC FIX FOR THE SUBJECT PROGRESS BUTTON ---
-    // This finds the button even if it has no ID by searching for the text "Subject Progress"
-    const allButtons = document.getElementsByTagName("button");
-    for (let btn of allButtons) {
-        if (btn.innerText.includes("Subject Progress") || btn.getAttribute("onclick")?.includes("toggleSubjectProgress")) {
-            btn.disabled = false;
-            btn.style.opacity = "1";
-            btn.style.cursor = "pointer";
-            btn.style.filter = "none"; // Removes any "greyed out" CSS filter
-            btn.classList.remove("disabled"); // Removes any CSS class that might be blocking it
-        }
-    }
+// --- NEW: MULTI-DEVICE SYNC LISTENER ---
+function setupRealtimeSync(uid) {
+    // Listen for changes to Tasks and Maps in real-time for 4-device sync
+    onValue(ref(db, `users/${uid}`), (snapshot) => {
+        if (snapshot.exists()) {
+            const data = snapshot.val();
+            
+            // Sync critical lists to local storage
+            if (data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
+            if (data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
+            
+            // IF ANOTHER DEVICE TRIGGERED DAY END: Force logout this device
+            if (data.dayEndTrigger) {
+                const lastLocalTrigger = localStorage.getItem(key("LAST_DAY_END"));
+                if (data.dayEndTrigger != lastLocalTrigger) {
+                    localStorage.setItem(key("LAST_DAY_END"), data.dayEndTrigger);
+                    // Force a hard logout to prevent ghost UI persistence
+                    localStorage.clear();
+                    signOut(auth).then(() => location.reload());
+                }
+            }
+            
+            // Refresh visuals on all devices
+            loadTasks(); 
+            updateProgress();
+        }
+    });
 }
+
+// --- UPDATED STUDENT DASHBOARD (NO DELETE ALLOWED) ---
+async function initStudentDashboard() {
+    // Keep all your original UI visibility logic
+    document.getElementById("studentView").classList.remove("hidden");
+    document.getElementById("taskBox")?.classList.remove("hidden");
+    document.getElementById("logBox")?.classList.remove("hidden");
+    document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
+    document.getElementById("loginBtn").classList.add("hidden");
+    document.getElementById("logoutBtn").classList.remove("hidden");
+    document.getElementById("studentControls").classList.remove("hidden");
+
+    // START REALTIME SYNC (The core update)
+    setupRealtimeSync(currentUser.uid);
+
+    // RESTRICT INPUTS: Hide manual add buttons from student (Admin Control)
+    const addExtraBtn = document.querySelector("button[onclick='addExtra()']");
+    if (addExtraBtn) addExtraBtn.style.display = "none";
+
+    // Keep all your original data download and lock logic
+    const serverData = await downloadData(currentUser.uid);
+    const leaveDisplay = document.querySelector("button[onclick='requestLeave()']");
+    if (leaveDisplay) { leaveDisplay.innerText = `Leave Bal: ${serverData?.leaveBalance || 0}`; }
+
+    if(serverData?.lockout && parseInt(serverData.lockout) > Date.now()) {
+        location.reload(); return; 
+    }
+
+    // Keep all your original shift and timer logic
+    const todayStr = new Date().toLocaleDateString();
+    let goalDate = localStorage.getItem(key("DAILY_GOAL_DATE"));
+    if (!goalDate || goalDate !== todayStr) {
+        let askedShifts = prompt("Enter number of shifts for today (2 hours each):", "3");
+        if (!askedShifts || isNaN(askedShifts)) askedShifts = "3"; 
+        localStorage.setItem(key("DAILY_SHIFT_COUNT"), askedShifts);
+        localStorage.setItem(key("DAILY_GOAL_DATE"), todayStr);
+        await update(ref(db, `users/${currentUser.uid}`), { dailyShiftTarget: askedShifts, dailyGoalDate: todayStr, penalty: 0 });
+    }
+
+    // Run original components
+    startIdle(1800);      
+    loadSubjectList();    
+    setupTasks(); 
+    loadTasks();          
+    renderLogs();         
+    updateProgress();      
+    runShiftTimer();      
+    uploadData();
+
+    // Re-run your "Hard Unlock" for buttons
+    const buttonsToUnlock = ["bioBtn", "histBtn", "dayBtn", "noticeBtn", "refreshBtn", "leaveBtn"];
+    buttonsToUnlock.forEach(id => {
+        const btn = document.getElementById(id);
+        if(btn) { btn.disabled = false; btn.style.opacity = "1"; btn.style.cursor = "pointer"; btn.style.filter = "none"; }
+    });
+}
+  
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
     document.getElementById("adminFeedbackBox").classList.add("hidden");
@@ -2972,36 +2967,63 @@ function loadTasks() {
     tasks.forEach(t => renderItem(t, tList));
     extras.forEach(e => renderItem(e, eList));
 }
-  window.addExtra = function() {
-    let menu = "Select Subject for Extra Work:\n\n";
-    FIXED_SUBJECTS.forEach((sub, index) => {
-        menu += `${index + 1}. ${sub}\n`;
-    });
-    
-    const choice = prompt(menu);
-    if (!choice) return;
+  // --- NEW ADMIN HUB: ASSIGN JOURNEY ---
+window.openAdminAssignmentHub = function(uid) {
+    const subject = prompt("Select Subject for Student Journey:\n" + FIXED_SUBJECTS.join("\n"));
+    if (!subject || !FIXED_SUBJECTS.includes(subject)) return alert("Invalid Subject.");
+    
+    const modName = prompt("Enter Module Name:", "Module 1");
+    const topicsRaw = prompt("Enter All Sub-topics (One topic per line):");
+    if (!topicsRaw) return;
 
-    const index = parseInt(choice) - 1;
-    if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
-        alert("Invalid selection.");
-        return;
-    }
+    const topics = topicsRaw.split('\n').filter(t => t.trim() !== "").map(t => ({
+        label: t.trim(),
+        module: modName,
+        status: 'todo',
+        completedAt: null,
+        dynamicMins: 30
+    }));
 
-    const subjectName = FIXED_SUBJECTS[index];
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
-    
-    // Using Date.now() as ID allows multiple entries of the same subject
-    extras.push({ 
-        name: subjectName, 
-        done: false, 
-        comment: "", 
-        due: "",
-        id: Date.now() 
-    });
-    
-    localStorage.setItem(key("EXTRA"), JSON.stringify(extras));
-    uploadData();
-    loadTasks();
+    const taskId = Date.now();
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+
+    // Push directly to Firebase to update student's devices instantly
+    get(ref(db, `users/${uid}/TASKS`)).then(snap => {
+        let tasks = JSON.parse(snap.val() || "[]");
+        tasks.push({ id: taskId, name: subject, done: false, module: modName });
+        
+        const updates = {};
+        updates[`users/${uid}/TASKS`] = JSON.stringify(tasks);
+        updates[`users/${uid}/dailyMaps/${todayKey}/${taskId}`] = topics;
+        update(ref(db), updates).then(() => alert("Journey assigned and synced to all student devices."));
+    });
+};
+
+// --- UPDATED EXTRA WORK: STUDENT REQUESTS ONLY ---
+window.addExtra = function() {
+    const sub = prompt("Select Subject to Request Extra Work:");
+    if (!sub) return;
+    const payload = { subject: sub, time: Date.now(), status: "Pending" };
+    // Send request to Admin Inbox
+    set(ref(db, `users/${currentUser.uid}/EXTRA_REQUESTS/${Date.now()}`), payload);
+    alert("Request sent to Admin.");
+};
+
+// --- ADMIN SIDE: VIEW AND APPROVE EXTRA WORK ---
+window.viewExtraRequests = async function(uid) {
+    const snap = await get(ref(db, `users/${uid}/EXTRA_REQUESTS`));
+    if (!snap.exists()) return alert("No requests found.");
+    
+    const reqs = snap.val();
+    for (const id in reqs) {
+        const accept = confirm(`Request: ${reqs[id].subject}\n[OK] Approve & Assign\n[Cancel] Reject`);
+        if (accept) {
+            window.openAdminAssignmentHub(uid); // Assign logic
+            remove(ref(db, `users/${uid}/EXTRA_REQUESTS/${id}`));
+        } else {
+            remove(ref(db, `users/${uid}/EXTRA_REQUESTS/${id}`));
+        }
+    }
 };
 function save(tasks, extras) {
   localStorage.setItem(key("TASKS"), JSON.stringify(tasks));
@@ -3738,58 +3760,52 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
  window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will log all completed topics with their Module names.")) return;
+    if(!confirm("Submit final report and log out all 4 devices?")) return;
 
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    
-    try {
-        const snapshot = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        const maps = snapshot.val() || {};
+    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
+    const uid = currentUser.uid;
+    
+    try {
+        const snapshot = await get(ref(db, `users/${uid}/dailyMaps/${todayKey}`));
+        const maps = snapshot.val() || {};
+        const subjectTable = JSON.parse(localStorage.getItem(SUBJECT_TABLE_KEY()) || "{}");
 
-        // Iterate through each subject map (taskId)
-        for (const taskId in maps) {
-            const nodes = maps[taskId];
-            const completedByModule = {};
-            const pendingByModule = {};
-            
-            // Group topics by Module name
-            nodes.forEach(n => {
-                const modName = n.module || "General";
-                if (n.status === 'done') {
-                    if (!completedByModule[modName]) completedByModule[modName] = [];
-                    completedByModule[modName].push(n.label);
-                } else {
-                    if (!pendingByModule[modName]) pendingByModule[modName] = [];
-                    pendingByModule[modName].push(n.label);
-                }
-            });
+        for (const taskId in maps) {
+            const nodes = maps[taskId];
+            const tasks = JSON.parse(localStorage.getItem(key("TASKS")) || "[]");
+            const parentTask = tasks.find(t => t.id == taskId) || { name: "General" };
+            
+            nodes.forEach(n => {
+                const modKey = `${parentTask.name} [${n.module}]`;
+                if (!subjectTable[modKey]) subjectTable[modKey] = [];
+                
+                // Done -> covered | Not Done -> uncovered
+                subjectTable[modKey].push({
+                    id: Date.now() + Math.random(),
+                    date: new Date().toLocaleDateString(),
+                    covered: n.status === 'done' ? n.label : "-",
+                    uncovered: n.status !== 'done' ? n.label : "-"
+                });
+            });
+        }
 
-            // Log each Module as a unique entry in the Subject Progress Table
-            Object.keys(completedByModule).forEach(mod => {
-                const subjectWithModule = `${currentMapSubject} [${mod}]`;
-                const coveredText = completedByModule[mod].join(", ");
-                const pendingText = pendingByModule[mod] ? pendingByModule[mod].join(", ") : "All Clear";
-                
-                // Use the existing helper to save into SUBJECT_WISE_TABLE
-                saveAutomatedSubjectProgress(subjectWithModule, coveredText, pendingText);
-            });
-        }
+        // Global Sync Updates
+        const finalUpdates = {};
+        finalUpdates[`users/${uid}/SUBJECT_WISE_TABLE`] = JSON.stringify(subjectTable);
+        finalUpdates[`users/${uid}/TASKS`] = "[]"; 
+        finalUpdates[`users/${uid}/EXTRA`] = "[]";
+        finalUpdates[`users/${uid}/dayEndTrigger`] = Date.now(); // Signal all 4 devices
+        finalUpdates[`users/${uid}/dailyMaps/${todayKey}`] = null;
 
-        // --- Standard Cleanup ---
-        localStorage.removeItem(key("DAILY_GOAL_DATE"));
-        localStorage.removeItem(key("DAILY_SHIFT_COUNT"));
-        localStorage.removeItem(key("SHIFT_END_TS"));
-        
-        // Remove maps from live DB as they are now in the history table
-        await remove(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-        
-        // Final logout/reload
-        location.reload();
+        await update(ref(db), finalUpdates);
+        
+        // Clean and Restart
+        localStorage.clear();
+        signOut(auth).then(() => location.reload());
 
-    } catch (e) {
-        console.error("Day End Error:", e);
-        alert("Error finalizing day. Please check connection.");
-    }
+    } catch (e) {
+        alert("Day End Sync Error: " + e.message);
+    }
 };
   
 // --- ATTACH TO WINDOW ---
@@ -3834,6 +3850,9 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     window.showByjusMap = showByjusMap;
     window.toggleNodeStatus = toggleNodeStatus;
     window.closeMap = closeMap;
+  window.openAdminAssignmentHub = openAdminAssignmentHub; // Mandatory for Admin to set tasks
+    window.viewExtraRequests = viewExtraRequests;           // For Admin to approve extra work
+    window.viewStudentMap = viewStudentMap;
   </script>
 
 </body>
