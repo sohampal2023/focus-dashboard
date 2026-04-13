@@ -619,76 +619,75 @@ const FIXED_SUBJECTS = [
 
 onAuthStateChanged(auth, async (user) => {
     // -------------------------------------------------------------------
-    // 🔒 CHECK FOR LOCKED REPORT FIRST (FIXED LAYOUT)
+    // 🔒 1. CHECK FOR LOCKED REPORT (PERSISTENT SCREEN)
     // -------------------------------------------------------------------
     const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
     
-   if (lockedReport) {
-
-    // Reset everything safely
-    document.body.innerHTML = `
-      <div style="
-        min-height:100vh;
-        display:flex;
-        justify-content:center;
-        align-items:center;
-        background:#020617;
-        padding:20px;
-      ">
-        <div style="width:100%;max-width:520px">
-          ${lockedReport}
-          <div style="margin-top:15px;text-align:center">
-            <button 
-              onclick="dismissReportLock()" 
-              style="
-                padding:12px 20px;
-                background:#0ea5e9;
-                border:none;
-                border-radius:8px;
-                color:white;
-                font-size:14px;
-                cursor:pointer;
-              ">
-              Login & Start New Day
-            </button>
-          </div>
-        </div>
-      </div>
-    `;
-    return;
-}
+    if (lockedReport) {
+        document.body.innerHTML = `
+          <div style="min-height:100vh; display:flex; justify-content:center; align-items:center; background:#020617; padding:20px;">
+            <div style="width:100%;max-width:520px">
+              ${lockedReport}
+              <div style="margin-top:15px;text-align:center">
+                <button onclick="dismissReportLock()" style="padding:12px 20px; background:#0ea5e9; border:none; border-radius:8px; color:white; font-size:14px; cursor:pointer;">
+                  Login & Start New Day
+                </button>
+              </div>
+            </div>
+          </div>`;
+        return;
+    }
 
     // -------------------------------------------------------------------
-    // NORMAL FLOW (Reset Layout if not locked)
+    // 🔓 2. NORMAL APP FLOW
     // -------------------------------------------------------------------
-    // Reset Grid Layout
-    document.querySelector(".app").style.display = "grid"; 
-    document.querySelector(".main").style.width = "auto";
-    document.querySelector(".main").style.display = "block"; // Reset from flex
-
-    const sidebar = document.querySelector(".sidebar");
-    if(sidebar) sidebar.classList.remove("hidden");
+    const appContainer = document.querySelector(".app");
+    if(appContainer) appContainer.style.display = "grid"; 
 
     if (user) {
-        currentUser = user;
+        currentUser = user; // Set global variable
         document.getElementById("syncStatus").innerText = "Session Restored";
 
+        // --- MULTI-DEVICE SYNC LISTENERS (ALL 4 DEVICES) ---
+        
+        // Listen for Force Logout (Day End on another device)
+        onValue(ref(db, `users/${user.uid}/forceLogoutTrigger`), (snap) => {
+            if(snap.exists()) {
+                localStorage.clear();
+                sessionStorage.clear();
+                location.reload(); 
+            }
+        });
+
+        // Listen for Report Lock (If Admin/User finishes day elsewhere)
+        onValue(ref(db, `users/${user.uid}/LOCKED_REPORT_VIEW`), (snap) => {
+            if(snap.exists()) {
+                localStorage.setItem("LOCKED_REPORT_VIEW", snap.val());
+                location.reload();
+            }
+        });
+
+        // --- DASHBOARD INITIALIZATION ---
         if (user.email === ADMIN_EMAIL) {
             initAdminDashboard();
         } else {
             initStudentDashboard();
         }
+
     } else {
+        // --- LOGGED OUT STATE ---
         currentUser = null;
         document.getElementById("statusBox").innerText = "Logged out";
         document.getElementById("loginBtn").classList.remove("hidden");
         document.getElementById("logoutBtn").classList.add("hidden");
-        
         document.getElementById("studentView").classList.add("hidden");
-        document.getElementById("reportBox").classList.add("hidden");
+        document.getElementById("studentControls").classList.add("hidden");
+        
+        // Ensure Admin Box is also hidden
+        const adminBox = document.getElementById("adminBox");
+        if(adminBox) adminBox.classList.add("hidden");
     }
 });
-
 // --- GLOBAL VARIABLES ---
 let currentUser = null; 
 let MOCK_POPUP_ACTIVE = false;
@@ -1885,40 +1884,46 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // 1. Restore UI Visibility
+    // 1. Force UI Visibility
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox").classList.remove("hidden");
     document.getElementById("adminBox").classList.add("hidden");
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
-    document.getElementById("idleBox").classList.remove("hidden"); // Ensure timer shows
+    document.getElementById("idleBox").classList.remove("hidden");
 
-    // 2. Trigger Shift Logic for the Day
+    // 2. ENABLE ALL SIDEBAR BUTTONS
+    document.getElementById("bioBtn").disabled = false;
+    document.getElementById("histBtn").disabled = false;
+    document.getElementById("dayBtn").disabled = false;
+    document.querySelector("button[onclick='toggleSubjectProgress()']").disabled = false;
+
+    // 3. Initialize the 2-Hour Shift Logic
     await initializeShift();
 
-    // 3. Download Server Data
-    const serverData = await downloadData(currentUser.uid);
-    
-    // 4. Check for Terminations/Lockouts
-    if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
-        const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
-        document.body.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;text-align:center;background:#020617;color:#e5e7eb;"><h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">TERMINATED</h1><h2 style="color:#f87171;margin-top:10px">${serverData.lockoutReason || "Admin Action"}</h2><p style="margin-top:10px">Time remaining: ${minLeft} minutes</p></div>`;
-        return; 
-    }
-
-    // 5. Restore Original Watchdog Timer
-    startIdle(1800);
-
-    // 6. Live Listener for Roadmap (This populates the "Assigned Tasks" section)
+    // 4. Multi-Device Roadmap & Progress Listener
     onValue(ref(db, `users/${currentUser.uid}/ROADMAP`), (snap) => {
         loadTasks(); 
         updateProgress(); 
     });
 
-    // 7. Load Other UI Elements
+    // 5. Setup Live Alert Listener (Warnings)
+    onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
+        const msg = snapshot.val();
+        if (msg) {
+            document.getElementById("rejectedMsg").innerText = `Admin: "${msg}"`;
+            document.getElementById("rejectedPopup").classList.remove("hidden");
+        } else {
+            document.getElementById("rejectedPopup").classList.add("hidden");
+        }
+    });
+
+    // 6. Final UI Loads
+    const serverData = await downloadData(currentUser.uid);
     loadNotices();
     checkLeaveStatus(serverData);
+    startIdle(1800);
     renderLogs();
     loadSubjectList();
 }
@@ -2670,15 +2675,16 @@ window.assignRoadmapTasks = async function(uid) {
 };
   // --- NEW: DYNAMIC TIME ALLOCATION ---
 window.initializeShift = async function() {
-    const active = localStorage.getItem(key("SHIFT_ACTIVE"));
-    if(active) return;
+    // Check if a shift is already active to prevent double prompts
+    const shiftActive = localStorage.getItem(key("SHIFT_ACTIVE"));
+    if(shiftActive) return;
 
     let totalHours = prompt("Enter total study shift for today (Hours):", "2");
     if(!totalHours || isNaN(totalHours)) return;
 
     let totalMillis = parseFloat(totalHours) * 60 * 60 * 1000;
     
-    // Sync to Firebase for 4-device visibility
+    // Save to Firebase so all devices see the same time remaining
     await update(ref(db, `users/${currentUser.uid}`), {
         SHIFT_TOTAL_TIME: totalMillis,
         SHIFT_REMAINING_TIME: totalMillis,
@@ -2883,27 +2889,26 @@ function loadTasks() {
 
     get(ref(db, `users/${currentUser.uid}/ROADMAP`)).then((snap) => {
         if(!snap.exists()) {
-            tList.innerHTML = "<div style='color:#64748b; padding:10px;'>Waiting for Admin roadmap...</div>";
+            tList.innerHTML = "<div style='color:#64748b; padding:10px;'>Waiting for Admin Assignment...</div>";
             return;
         }
 
         const roadmap = JSON.parse(snap.val());
         roadmap.forEach(t => {
             const container = document.createElement("div");
-            container.style.cssText = "padding:12px; border:1px solid #1e293b; border-radius:8px; margin-bottom:8px; background:#0f172a; display:flex; justify-content:space-between; align-items:center;";
+            container.style.cssText = "padding:12px; border:1px solid #334155; border-radius:10px; margin-bottom:10px; background:#0f172a; display:flex; justify-content:space-between; align-items:center;";
             
-            let statusStyle = t.status === "DONE" ? "color:#4ade80" : t.status === "RUNNING" ? "color:#facc15" : "color:#e5e7eb";
-            let icon = t.status === "DONE" ? "✔" : t.status === "RUNNING" ? "⏳" : "○";
-            let timeInfo = t.allocatedTime ? `<span style="font-size:10px; color:#38bdf8; margin-left:10px;">(${(t.allocatedTime/60000).toFixed(0)}m)</span>` : "";
+            let statusColor = t.status === "DONE" ? "#22c55e" : t.status === "RUNNING" ? "#facc15" : "#38bdf8";
+            let timeInfo = t.allocatedTime ? `<span style="font-size:11px; color:#38bdf8; margin-left:10px;">(${(t.allocatedTime/60000).toFixed(0)}m)</span>` : "";
 
             container.innerHTML = `
-                <div>
-                    <span style="${statusStyle}; font-weight:bold; margin-right:10px;">${icon}</span>
-                    <span style="font-size:14px; ${statusStyle}">${t.topic}</span>
-                    ${timeInfo}
-                    <div style="font-size:10px; color:#64748b; margin-top:2px;">${t.subject} | ${t.module}</div>
+                <div style="border-left: 4px solid ${statusColor}; padding-left:12px;">
+                    <div style="font-weight:bold; color:#f8fafc; font-size:14px;">${t.topic} ${timeInfo}</div>
+                    <div style="font-size:10px; color:#94a3b8;">${t.subject} • ${t.module}</div>
                 </div>
-                ${t.status === "DONE" ? `<span style="font-size:10px; color:#4ade80">${t.doneTime}</span>` : ""}
+                <div style="font-size:11px; font-weight:bold; color:${statusColor}">
+                    ${t.status === "DONE" ? "COMPLETED" : t.status === "RUNNING" ? "IN PROGRESS" : "PENDING"}
+                </div>
             `;
             tList.append(container);
         });
@@ -3202,95 +3207,94 @@ window.requestSubjectDelete = async function(subject, rowId) {
   }
 };
 window.adminAssignTasks = async function(uid) {
-    const roadmapWin = window.open("", "AssignTasks", "width=500,height=600");
+    const roadmapWin = window.open("", "AssignTasks", "width=500,height=650");
     roadmapWin.document.write(`
         <style>
             body { background: #0f172a; color: white; font-family: Segoe UI, sans-serif; padding: 20px; }
-            h3 { color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 10px; }
-            label { font-size: 12px; color: #94a3b8; text-transform: uppercase; }
+            h2 { color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 10px; }
             select, input, textarea { 
-                width: 100%; padding: 12px; margin: 8px 0 15px 0; 
+                width: 100%; padding: 12px; margin: 10px 0; 
                 background: #020617; border: 1px solid #334155; 
-                color: white; border-radius: 8px; 
+                color: white; border-radius: 8px; font-size: 14px;
             }
             button { 
                 width: 100%; padding: 15px; background: #22c55e; 
                 color: white; border: none; border-radius: 8px; 
-                font-weight: bold; cursor: pointer; 
+                font-weight: bold; cursor: pointer; margin-top: 10px;
             }
-            button:hover { background: #16a34a; }
         </style>
-        <h3>Assign Daily Roadmap</h3>
+        <h2>Assign Study Roadmap</h2>
         <label>Select Subject:</label>
-        <select id="sub">
+        <select id="subSelect">
             ${FIXED_SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join('')}
         </select>
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
-            <div>
-                <label>Module No.</label>
-                <input id="mod" placeholder="e.g. 1">
-            </div>
-            <div>
-                <label>Module Name</label>
-                <input id="modName" placeholder="e.g. Calculus">
-            </div>
-        </div>
-        <label>Subtopics (One per line or comma separated):</label>
-        <textarea id="topics" placeholder="Topic 1&#10;Topic 2&#10;Topic 3" style="height:120px;"></textarea>
-        <button id="saveBtn">PUSH TO STUDENT DEVICES</button>
+        <input id="modNum" placeholder="Module Number (e.g. 01)">
+        <input id="modName" placeholder="Module Name (e.g. Transformers)">
+        <textarea id="topics" placeholder="Enter subtopics (one per line or comma separated)" style="height:150px;"></textarea>
+        <button id="pushBtn">PUSH TO ALL 4 DEVICES</button>
     `);
 
-    roadmapWin.document.getElementById("saveBtn").onclick = async () => {
-        const sub = roadmapWin.document.getElementById("sub").value;
-        const mod = roadmapWin.document.getElementById("mod").value;
-        const modName = roadmapWin.document.getElementById("modName").value;
-        const rawText = roadmapWin.document.getElementById("topics").value;
-        
-        if(!mod || !rawText) { alert("Please fill all fields"); return; }
+    roadmapWin.document.getElementById("pushBtn").onclick = async () => {
+        const sub = roadmapWin.document.getElementById("subSelect").value;
+        const mod = roadmapWin.document.getElementById("modNum").value;
+        const name = roadmapWin.document.getElementById("modName").value;
+        const raw = roadmapWin.document.getElementById("topics").value;
 
-        const topics = rawText.includes(",") ? rawText.split(",") : rawText.split("\n");
+        if(!mod || !raw) { alert("Please fill module and topics."); return; }
 
+        const topicList = raw.includes(",") ? raw.split(",") : raw.split("\n");
         let newRoadmap = [];
-        topics.forEach((t, index) => {
-            if(t.trim()) {
+        
+        topicList.forEach((t, i) => {
+            if(t.trim()){
                 newRoadmap.push({
-                    id: Date.now() + index,
+                    id: Date.now() + i,
                     subject: sub,
-                    module: `Mod ${mod}: ${modName}`,
+                    module: `Mod ${mod}: ${name}`,
                     topic: t.trim(),
                     status: "PENDING",
                     allocatedTime: 0,
-                    doneTime: null,
-                    due: ""
+                    doneTime: null
                 });
             }
         });
 
         try {
             await update(ref(db, `users/${uid}`), { ROADMAP: JSON.stringify(newRoadmap) });
-            alert("Roadmap synced to all 4 devices.");
+            alert("Roadmap Pushed Successfully!");
             roadmapWin.close();
         } catch (e) {
-            alert("Sync Failed: " + e.message);
+            alert("Push failed: " + e.message);
         }
     };
 };
 window.recalculateAllocatedTime = async function() {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
+    if(!snap.exists()) return;
     const data = snap.val();
-    if(!data.ROADMAP) return;
+    
+    if(!data.ROADMAP || data.SHIFT_REMAINING_TIME === undefined) return;
 
     let roadmap = JSON.parse(data.ROADMAP);
-    let shiftRemaining = data.SHIFT_REMAINING_TIME || localStorage.getItem(key("SHIFT_REMAINING_TIME"));
-    let pendingTasks = roadmap.filter(t => t.status === "PENDING" || t.status === "RUNNING");
+    let shiftRemaining = data.SHIFT_REMAINING_TIME;
+    
+    // Count tasks that are not 'DONE'
+    let pendingTasks = roadmap.filter(t => t.status !== "DONE");
 
     if(pendingTasks.length > 0) {
         let newChunk = Math.floor(shiftRemaining / pendingTasks.length);
+        
         roadmap = roadmap.map(t => {
-            if(t.status === "PENDING" || t.status === "RUNNING") t.allocatedTime = newChunk;
+            if(t.status !== "DONE") {
+                t.allocatedTime = newChunk;
+            }
             return t;
         });
-        await update(ref(db, `users/${currentUser.uid}`), { ROADMAP: JSON.stringify(roadmap) });
+
+        // Push update to Firebase for multi-device sync
+        await update(ref(db, `users/${currentUser.uid}`), { 
+            ROADMAP: JSON.stringify(roadmap) 
+        });
     }
 };
 
