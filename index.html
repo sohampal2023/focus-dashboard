@@ -616,7 +616,6 @@ const FIXED_SUBJECTS = [
   "GOVT_SCIENCE",
   "GOVT_ENGLISH"
 ];
-
 onAuthStateChanged(auth, async (user) => {
     // -------------------------------------------------------------------
     // 🔒 1. CHECK FOR LOCKED REPORT (PERSISTENT SCREEN)
@@ -638,19 +637,13 @@ onAuthStateChanged(auth, async (user) => {
         return;
     }
 
-    // -------------------------------------------------------------------
-    // 🔓 2. NORMAL APP FLOW
-    // -------------------------------------------------------------------
-    const appContainer = document.querySelector(".app");
-    if(appContainer) appContainer.style.display = "grid"; 
-
     if (user) {
         currentUser = user; // Set global variable
         document.getElementById("syncStatus").innerText = "Session Restored";
 
-        // --- MULTI-DEVICE SYNC LISTENERS (ALL 4 DEVICES) ---
+        // --- MULTI-DEVICE SYNC LISTENERS ---
         
-        // Listen for Force Logout (Day End on another device)
+        // Use 'user.uid' here because 'user' is the argument defined above
         onValue(ref(db, `users/${user.uid}/forceLogoutTrigger`), (snap) => {
             if(snap.exists()) {
                 localStorage.clear();
@@ -659,7 +652,6 @@ onAuthStateChanged(auth, async (user) => {
             }
         });
 
-        // Listen for Report Lock (If Admin/User finishes day elsewhere)
         onValue(ref(db, `users/${user.uid}/LOCKED_REPORT_VIEW`), (snap) => {
             if(snap.exists()) {
                 localStorage.setItem("LOCKED_REPORT_VIEW", snap.val());
@@ -667,7 +659,6 @@ onAuthStateChanged(auth, async (user) => {
             }
         });
 
-        // --- DASHBOARD INITIALIZATION ---
         if (user.email === ADMIN_EMAIL) {
             initAdminDashboard();
         } else {
@@ -675,7 +666,6 @@ onAuthStateChanged(auth, async (user) => {
         }
 
     } else {
-        // --- LOGGED OUT STATE ---
         currentUser = null;
         document.getElementById("statusBox").innerText = "Logged out";
         document.getElementById("loginBtn").classList.remove("hidden");
@@ -683,7 +673,6 @@ onAuthStateChanged(auth, async (user) => {
         document.getElementById("studentView").classList.add("hidden");
         document.getElementById("studentControls").classList.add("hidden");
         
-        // Ensure Admin Box is also hidden
         const adminBox = document.getElementById("adminBox");
         if(adminBox) adminBox.classList.add("hidden");
     }
