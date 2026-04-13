@@ -1623,29 +1623,61 @@ window.requestExtraWork = async function() {
     });
     alert("Request sent to Admin for approval.");
 };
+// Internal logic to handle the approval/rejection of student requests
+async function processExtraRequest(uid, reqId, reqData, isApproved) {
+    if (isApproved) {
+        // 1. Fetch current EXTRA array from Firebase
+        const extraSnap = await get(ref(db, `users/${uid}/EXTRA`));
+        let currentExtra = JSON.parse(extraSnap.val() || "[]");
 
-// ADMIN SIDE: Approving/Rejecting
+        // 2. Add the new work to the array
+        currentExtra.push({
+            name: `${reqData.subject}: ${reqData.work}`,
+            done: false,
+            id: Date.now(),
+            timestamp: now()
+        });
+
+        // 3. Update the student's actual EXTRA work list
+        await update(ref(db, `users/${uid}`), { EXTRA: JSON.stringify(currentExtra) });
+        alert("Request Approved: Task added to student dashboard.");
+    } else {
+        alert("Request Rejected: Entry deleted.");
+    }
+
+    // 4. Always remove the request from the inbox after a decision
+    await remove(ref(db, `users/${uid}/EXTRA_REQUESTS/${reqId}`));
+}
+
+// The function triggered by the Admin button
 window.manageExtraRequests = async function(uid) {
-    const snap = await get(ref(db, `users/${uid}/EXTRA_REQUESTS`));
-    if(!snap.exists()) return alert("No pending extra work requests.");
-
-    const requests = snap.val();
-    for(const id in requests) {
-        const req = requests[id];
-        const decision = confirm(`REQUEST FOR EXTRA WORK:\nSubject: ${req.subject}\nTopic: ${req.work}\n\n[OK] to ACCEPT | [CANCEL] to REJECT`);
+    try {
+        const snap = await get(ref(db, `users/${uid}/EXTRA_REQUESTS`));
         
-        if(decision) {
-            // Add to the student's actual EXTRA work list
-            const extraSnap = await get(ref(db, `users/${uid}/EXTRA`));
-            const currentExtra = JSON.parse(extraSnap.val() || "[]");
-            currentExtra.push({ name: `${req.subject}: ${req.work}`, done: false, id: Date.now() });
-            await update(ref(db, `users/${uid}`), { EXTRA: JSON.stringify(currentExtra) });
-            alert("Request Accepted and Assigned.");
-        } else {
-            alert("Request Rejected and Deleted.");
+        if (!snap.exists()) {
+            alert("No pending extra work requests for this student.");
+            return;
         }
-        // Remove the request after decision
-        await remove(ref(db, `users/${uid}/EXTRA_REQUESTS/${id}`));
+
+        const requests = snap.val();
+        
+        // Loop through requests (if student sent multiple)
+        for (const id in requests) {
+            const req = requests[id];
+            const decision = confirm(
+                `STUDENT EXTRA WORK REQUEST\n\n` +
+                `Subject: ${req.subject}\n` +
+                `Topic: ${req.work}\n` +
+                `Time: ${req.time}\n\n` +
+                `[OK] = APPROVE & ADD TO DASHBOARD\n` +
+                `[CANCEL] = REJECT & DELETE REQUEST`
+            );
+
+            await processExtraRequest(uid, id, req, decision);
+        }
+    } catch (e) {
+        console.error("Manage Request Error:", e);
+        alert("System Error: " + e.message);
     }
 };
   // Populate the dropdown with subjects found in the student's data
