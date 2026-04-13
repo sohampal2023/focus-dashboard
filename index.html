@@ -925,8 +925,6 @@ async function cleanupDeletedData() {
         alert("Admin Cleanup Failed: " + e.message);
     }
 }
-
-
 function startAdminListener() {
     const listDiv = document.getElementById("studentList");
     listDiv.innerHTML = "Listening for live data...";
@@ -1026,7 +1024,7 @@ function startAdminListener() {
                     }
                 }
 
-                // 6. Render Row
+                // 6. Render Row (UPDATED WITH ASSIGN ROADMAP BUTTON)
                 html += `
                 <div class="admin-row">
                     <div>
@@ -1047,8 +1045,11 @@ function startAdminListener() {
                     </div>
 
                     <div class="admin-btn-group">
+                        <button style="background:#0ea5e9; border:1px solid #7dd3fc; font-weight:800;" onclick="adminAssignTasks('${uid}')">📋 ASSIGN ROADMAP</button>
+                        
                         ${leaveActions}
-                        ${deleteReqBtn}  <button style="background:#be123c; margin-top:4px;" onclick="sendWarning('${uid}')">⚠ Warn</button>
+                        ${deleteReqBtn}  
+                        <button style="background:#be123c; margin-top:4px;" onclick="sendWarning('${uid}')">⚠ Warn</button>
                         <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
                         <button style="background:#ea580c; margin-top:4px;" onclick="terminateStudent('${uid}')">Lock / Terminate</button>
                         <button style="background:#0891b2; margin-top:4px;" onclick="resetLeaveBalance('${uid}')">Reset Balance (6)</button>
@@ -1066,8 +1067,8 @@ function startAdminListener() {
                 </div>`;
             });
             
-          listDiv.innerHTML = html || "No students found.";
-listDiv.offsetHeight; // force repaint
+            listDiv.innerHTML = html || "No students found.";
+            listDiv.offsetHeight; // force repaint
 
         } else {
             listDiv.innerHTML = "No user data available.";
@@ -3330,7 +3331,7 @@ window.recalculateAllocatedTime = async function() {
     window.renderSubjectTable = renderSubjectTable;
     window.clearSubjectProgress = clearSubjectProgress;
     window.requestSubjectDelete = requestSubjectDelete;
-
+    window.recalculateAllocatedTime = recalculateAllocatedTime;
     // --- NEW ROADMAP & SHIFT SYSTEM ATTACHMENTS ---
     window.adminAssignTasks = adminAssignTasks;         // Admin task pusher
     window.initializeShift = initializeShift;           // Start of day 2-hour logic
