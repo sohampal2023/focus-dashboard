@@ -617,9 +617,6 @@ const FIXED_SUBJECTS = [
   "GOVT_ENGLISH"
 ];
 onAuthStateChanged(auth, async (user) => {
-    // -------------------------------------------------------------------
-    // 🔒 1. CHECK FOR LOCKED REPORT (PERSISTENT SCREEN)
-    // -------------------------------------------------------------------
     const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
     
     if (lockedReport) {
@@ -638,12 +635,10 @@ onAuthStateChanged(auth, async (user) => {
     }
 
     if (user) {
-        currentUser = user; // Set global variable
+        currentUser = user; // Set global immediately
         document.getElementById("syncStatus").innerText = "Session Restored";
 
-        // --- MULTI-DEVICE SYNC LISTENERS ---
-        
-        // Use 'user.uid' here because 'user' is the argument defined above
+        // --- MULTI-DEVICE SYNC LISTENERS (Using local 'user' variable) ---
         onValue(ref(db, `users/${user.uid}/forceLogoutTrigger`), (snap) => {
             if(snap.exists()) {
                 localStorage.clear();
@@ -3259,7 +3254,6 @@ window.adminAssignTasks = async function(uid) {
             return; 
         }
 
-        // Clean and split topics
         const topicList = raw.includes(",") ? raw.split(",") : raw.split("\n");
         let newRoadmap = [];
         
@@ -3279,7 +3273,6 @@ window.adminAssignTasks = async function(uid) {
         });
 
         try {
-            // Update Firebase to sync all devices instantly
             await update(ref(db, `users/${uid}`), { ROADMAP: JSON.stringify(newRoadmap) });
             alert("✅ Roadmap synced to all student devices!");
             roadmapWin.close();
@@ -3319,52 +3312,52 @@ window.recalculateAllocatedTime = async function() {
 };
 
 // --- ATTACH TO WINDOW ---
-   // --- ATTACH TO WINDOW (UPDATED WITH ROADMAP & SHIFT LOGIC) ---
-    window.handleLoginFlow = handleLoginFlow;
-    window.resetWatchdog = resetWatchdog;
-    window.bioBreak = bioBreak;
-    window.openDayEnd = openDayEnd;
-    window.finalDayEnd = finalDayEnd;
-    window.startMockTestSetup = startMockTestSetup;
-    window.triggerEndTest = triggerEndTest;
-    window.addExtra = addExtra;
-    window.clearSingleSubject = window.clearSingleSubject;
-    window.toggleHistory = toggleHistory;
-    window.requestLeave = requestLeave;
-    window.forceLogout = forceLogout;
-    window.handleLeave = window.handleLeave;
-    window.openAdminModal = window.openAdminModal;
-    window.deleteLogEntry = window.deleteLogEntry;
-    window.closeAdminModal = window.closeAdminModal;
-    window.unlockStudent = window.unlockStudent;
-    window.switchAdminTab = window.switchAdminTab;
-    window.addAdminReview = window.addAdminReview;
-    window.terminateStudent = terminateStudent;
-    window.dismissFeedback = dismissFeedback;
-    window.sendWarning = sendWarning;
-    window.dismissRejected = dismissRejected;
-    window.clearLeave = clearLeave;
-    window.dismissLeaveStatus = dismissLeaveStatus;
-    window.resetLeaveBalance = resetLeaveBalance;
-    window.toggleNoticeBoard = toggleNoticeBoard;
-    window.sendNotice = sendNotice;
-    window.dismissNoticePopup = dismissNoticePopup;
-    window.softRefresh = softRefresh;
-    window.dismissReportLock = dismissReportLock;
-    window.toggleSubjectProgress = toggleSubjectProgress;
-    window.renderSubjectTable = renderSubjectTable;
-    window.clearSubjectProgress = clearSubjectProgress;
-    window.requestSubjectDelete = requestSubjectDelete;
-    window.recalculateAllocatedTime = recalculateAllocatedTime;
-    // --- NEW ROADMAP & SHIFT SYSTEM ATTACHMENTS ---
-    window.adminAssignTasks = adminAssignTasks;         // Admin task pusher
-    window.initializeShift = initializeShift;           // Start of day 2-hour logic
-    window.openRoadmapWindow = openRoadmapWindow;       // The Map UI window
-    window.startRoadmapTask = startRoadmapTask;         // Timer start logic
-    window.completeRoadmapTask = completeRoadmapTask;   // Done + Math recalculation
-    window.abortRoadmapTask = abortRoadmapTask;         // Revert logic
-    window.recalculateAllocatedTime = recalculateAllocatedTime; // Dynamic formula logic
-    
+   // --- ATTACH TO WINDOW ---
+window.handleLoginFlow = handleLoginFlow;
+window.resetWatchdog = resetWatchdog;
+window.bioBreak = bioBreak;
+window.openDayEnd = openDayEnd;
+window.finalDayEnd = finalDayEnd;
+window.startMockTestSetup = startMockTestSetup;
+window.triggerEndTest = triggerEndTest;
+window.addExtra = addExtra;
+window.toggleHistory = toggleHistory;
+window.requestLeave = requestLeave;
+window.forceLogout = forceLogout;
+window.handleLeave = handleLeave;
+window.openAdminModal = openAdminModal;
+window.deleteLogEntry = deleteLogEntry;
+window.closeAdminModal = closeAdminModal;
+window.unlockStudent = unlockStudent;
+window.switchAdminTab = switchAdminTab;
+window.addAdminReview = addAdminReview;
+window.terminateStudent = terminateStudent;
+window.dismissFeedback = dismissFeedback;
+window.sendWarning = sendWarning;
+window.dismissRejected = dismissRejected;
+window.clearLeave = clearLeave;
+window.dismissLeaveStatus = dismissLeaveStatus;
+window.resetLeaveBalance = resetLeaveBalance;
+window.toggleNoticeBoard = toggleNoticeBoard;
+window.sendNotice = sendNotice;
+window.dismissNoticePopup = dismissNoticePopup;
+window.softRefresh = softRefresh;
+window.dismissReportLock = dismissReportLock;
+window.toggleSubjectProgress = toggleSubjectProgress;
+window.renderSubjectTable = renderSubjectTable;
+window.clearSubjectProgress = clearSubjectProgress;
+window.requestSubjectDelete = requestSubjectDelete;
+
+// --- ROADMAP & SHIFT SYSTEM ---
+window.adminAssignTasks = adminAssignTasks; // Fixed Assignment
+window.initializeShift = initializeShift;
+window.openRoadmapWindow = openRoadmapWindow;
+window.startRoadmapTask = startRoadmapTask;
+window.completeRoadmapTask = completeRoadmapTask;
+window.abortRoadmapTask = abortRoadmapTask;
+window.recalculateAllocatedTime = recalculateAllocatedTime;
+window.renderAdminSelectedSubject = renderAdminSelectedSubject;
+window.initAdminSubjectDropdown = initAdminSubjectDropdown;
   </script>
 
 </body>
