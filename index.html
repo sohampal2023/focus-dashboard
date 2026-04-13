@@ -712,14 +712,15 @@ async function handleLoginFlow() {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         currentUser = userCredential.user;
         
-        // --- 🧹 CLEAN LOGIN LOGIC (Fixes Sign-in Block) ---
-        // Immediately clear any triggers that might force an auto-logout or lock the screen
+        // --- 🧹 HARD RESET ON LOGIN ---
+        // Wipe all triggers and active shift flags to force the time prompt
         await update(ref(db, `users/${currentUser.uid}`), {
             forceLogoutTrigger: null,
-            LOCKED_REPORT_VIEW: null
+            LOCKED_REPORT_VIEW: null,
+            SHIFT_ACTIVE: null, // 🔥 This forces initializeShift to trigger
+            SHIFT_REMAINING_TIME: null
         });
         
-        // Clear local storage locks just in case
         localStorage.removeItem("LOCKED_REPORT_VIEW");
         localStorage.removeItem(key("SHIFT_ACTIVE"));
 
@@ -730,19 +731,7 @@ async function handleLoginFlow() {
         }
         
     } catch (error) {
-        if(error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found') {
-            if(confirm("User not found. Register new account for this email?")) {
-                try {
-                    const newUser = await createUserWithEmailAndPassword(auth, email, password);
-                    currentUser = newUser.user;
-                    initStudentDashboard();
-                } catch (createErr) {
-                    alert("Registration failed: " + createErr.message);
-                }
-            }
-        } else {
-            alert("Login Failed: " + error.message);
-        }
+        alert("Login Failed: " + error.message);
         document.getElementById("syncStatus").innerText = "Auth Failed";
     }
 }
@@ -2749,46 +2738,107 @@ async function updateProgressiveTiming() {
   // --- NEW: ROADMAP MAP VIEW RENDERER ---
 window.openRoadmapWindow = function(subjectFilter) {
     const roadmapWin = window.open("", "StudyMap", "width=1100,height=850");
-    
-    // Initial HTML setup (CSS and Container)
     roadmapWin.document.write(`
         <style>
-            body { background: #020617; color: white; font-family: Segoe UI, sans-serif; padding: 40px; }
-            .map-container { display:flex; flex-direction:column; align-items:center; }
-            .node { width: 400px; padding: 20px; background: #0f172a; border: 2px solid #38bdf8; border-radius: 20px; position: relative; margin-bottom: 40px; }
-            .node.done { border-color: #22c55e; background: #064e3b; }
-            .circle { width: 60px; height: 60px; border-radius: 50%; border: 4px solid #38bdf8; position: absolute; left: -80px; top: 50%; transform: translateY(-50%); display:flex; align-items:center; justify-content:center; background:#1e293b; font-weight:bold; }
-            .timer { font-family: monospace; font-size: 20px; color: #facc15; }
-            .btn { padding: 10px; border-radius: 8px; border:none; cursor:pointer; font-weight:bold; margin-top:10px; }
+            body { background: #020617; color: white; font-family: 'Segoe UI', sans-serif; padding: 50px; margin:0; }
+            .map-container { display: flex; flex-direction: column; align-items: center; }
+            .node-container { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
+            
+            .node-box { 
+                width: 450px; padding: 25px; background: #0f172a; 
+                border: 2px solid #1e293b; border-radius: 24px; 
+                position: relative; transition: all 0.3s ease;
+                margin-left: 50px;
+            }
+            .node-box.done { border-color: #22c55e; background: #064e3b; opacity: 0.8; }
+            .node-box.active { border-color: #facc15; box-shadow: 0 0 25px rgba(250, 204, 21, 0.2); transform: scale(1.02); }
+            
+            /* The Circular Number Part */
+            .node-circle { 
+                width: 70px; height: 70px; border-radius: 50%; 
+                background: #1e293b; border: 5px solid #38bdf8; 
+                display: flex; align-items: center; justify-content: center; 
+                position: absolute; left: -95px; top: 50%; transform: translateY(-50%);
+                font-weight: 900; font-size: 24px; color: #38bdf8; z-index: 10;
+            }
+            .node-box.done .node-circle { border-color: #22c55e; color: #22c55e; }
+            .node-box.active .node-circle { border-color: #facc15; color: #facc15; animation: pulse 2s infinite; }
+            
+            /* Connection Line */
+            .connector { width: 4px; height: 50px; background: #1e293b; margin: -5px 0; margin-left: -45px; }
+
+            .topic-title { font-size: 20px; font-weight: 800; margin-bottom: 5px; }
+            .timer-text { font-family: monospace; font-size: 26px; color: #facc15; margin: 10px 0; font-weight: bold; }
+            
+            .btn { padding: 12px 24px; border-radius: 10px; border: none; cursor: pointer; font-weight: 800; text-transform: uppercase; }
+            .btn-start { background: #38bdf8; color: #020617; width: 100%; }
+            .btn-done { background: #22c55e; color: white; flex: 1; }
+            .btn-abort { background: #ef4444; color: white; flex: 1; margin-left: 10px; }
+            
+            @keyframes pulse { 0% { box-shadow: 0 0 0 0px #facc1544; } 70% { box-shadow: 0 0 0 15px #facc1500; } 100% { box-shadow: 0 0 0 0px #facc1500; } }
         </style>
         <div id="mapBody" class="map-container"></div>
     `);
 
+    let mapTimer = null;
+
     onValue(ref(db, `users/${currentUser.uid}/ROADMAP`), (snap) => {
         const roadmap = JSON.parse(snap.val() || "[]");
-        // 🔥 CRITICAL: Filter to show ONLY the subject you clicked
         const filteredTasks = roadmap.filter(t => `${t.subject} - ${t.module}` === subjectFilter);
-        
         const mapBody = roadmapWin.document.getElementById("mapBody");
-        mapBody.innerHTML = `<h1 style="color:#7dd3fc">${subjectFilter}</h1>`;
+        
+        mapBody.innerHTML = `<h1 style="color:#7dd3fc; margin-bottom:60px;">${subjectFilter}</h1>`;
 
         filteredTasks.forEach((task, i) => {
             const isDone = task.status === 'DONE';
             const isActive = task.status === 'RUNNING';
             
-            const node = roadmapWin.document.createElement("div");
-            node.className = `node ${isDone ? 'done' : ''}`;
-            node.innerHTML = `
-                <div class="circle" style="border-color:${isDone ? '#22c55e' : isActive ? '#facc15' : '#38bdf8'}">
-                    ${isDone ? '✔' : i+1}
+            const nodeWrap = roadmapWin.document.createElement("div");
+            nodeWrap.className = "node-container";
+
+            nodeWrap.innerHTML = `
+                <div class="node-box ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
+                    <div class="node-circle">${isDone ? '✔' : i + 1}</div>
+                    <div class="topic-title">${task.topic}</div>
+                    
+                    ${isActive ? `<div id="liveTimer" class="timer-text">--:--</div>` : ''}
+
+                    <div style="margin-top:15px;">
+                        ${!isDone ? (
+                            !isActive ? 
+                            `<button class="btn btn-start" onclick="window.opener.startRoadmapTask(${task.id})">START (${Math.floor(task.allocatedTime/60000)}m)</button>` :
+                            `<div style="display:flex">
+                                <button class="btn btn-done" onclick="window.opener.completeRoadmapTask(${task.id})">DONE</button>
+                                <button class="btn btn-abort" onclick="window.opener.abortRoadmapTask(${task.id})">ABORT</button>
+                             </div>`
+                        ) : `<div style="color:#4ade80; font-weight:bold;">Completed at ${task.doneTime}</div>`}
+                    </div>
                 </div>
-                <div style="font-weight:bold">${task.topic}</div>
-                ${isActive ? `<div class="timer">Time Remaining: ${Math.floor(task.allocatedTime/60000)}m</div>` : ''}
-                ${!isDone ? `<button class="btn" style="background:#38bdf8" onclick="window.opener.startRoadmapTask(${task.id})">START</button>` : ''}
-                ${isActive ? `<button class="btn" style="background:#22c55e; color:white;" onclick="window.opener.completeRoadmapTask(${task.id})">DONE</button>` : ''}
             `;
-            mapBody.appendChild(node);
+            mapBody.appendChild(nodeWrap);
+            if(i < filteredTasks.length - 1) {
+                const line = roadmapWin.document.createElement("div");
+                line.className = "connector";
+                mapBody.appendChild(line);
+            }
         });
+
+        // Live Countdown Logic
+        if(mapTimer) clearInterval(mapTimer);
+        const activeTask = filteredTasks.find(t => t.status === "RUNNING");
+        if(activeTask) {
+            let remaining = activeTask.allocatedTime;
+            mapTimer = setInterval(() => {
+                remaining -= 1000;
+                const m = Math.floor(remaining / 60000);
+                const s = Math.floor((remaining % 60000) / 1000);
+                const timerEl = roadmapWin.document.getElementById("liveTimer");
+                if(timerEl) {
+                    timerEl.innerText = remaining > 0 ? `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : "TIME UP!";
+                    if(remaining <= 0) timerEl.style.color = "#ef4444";
+                }
+            }, 1000);
+        }
     });
 };
 window.startRoadmapTask = async function(taskId) {
@@ -2830,15 +2880,14 @@ window.completeRoadmapTask = async function(taskId) {
     const idx = roadmap.findIndex(t => t.id === taskId);
     if(idx === -1) return;
 
-    // 1. Mark Completion
+    // 1. Mark this specific subtopic as done
     roadmap[idx].status = "DONE";
     roadmap[idx].doneTime = new Date().toLocaleTimeString();
     
-    // 2. Subtract the time consumed for this task from total shift
-    // Logic: Remaining Shift = Previous Remaining - This Task's Allocated Time
-    shiftRemaining = Math.max(0, shiftRemaining - (roadmap[idx].allocatedTime || 0));
+    // 2. Reduce the global remaining shift time by the time spent
+    shiftRemaining = Math.max(0, shiftRemaining - roadmap[idx].allocatedTime);
 
-    // 3. Recalculate Logic: Divide what's left of the 2-hour shift by remaining topics
+    // 3. Recalculate: Remaining Time / Remaining Tasks
     const pending = roadmap.filter(t => t.status === "PENDING");
     if(pending.length > 0) {
         const newChunk = Math.floor(shiftRemaining / pending.length);
@@ -2848,13 +2897,14 @@ window.completeRoadmapTask = async function(taskId) {
         });
     }
 
-    // 4. Sync Everything to Firebase
+    // 4. Force Update to Server
     await update(ref(db, `users/${currentUser.uid}`), { 
         ROADMAP: JSON.stringify(roadmap),
         SHIFT_REMAINING_TIME: shiftRemaining
     });
 
-    updateProgress(); // Sync the speedometer needle
+    // 5. Update Speedometer
+    updateProgress();
 };
 function renderMapNodes(win, roadmap) {
     let container = win.document.getElementById("mapContainer");
@@ -2883,26 +2933,30 @@ function loadTasks() {
 
     get(ref(db, `users/${currentUser.uid}/ROADMAP`)).then((snap) => {
         if(!snap.exists()) {
-            tList.innerHTML = "<div style='color:#64748b; padding:20px; text-align:center;'>Waiting for Admin to Assign Tasks...</div>";
+            tList.innerHTML = "<div style='color:#64748b; padding:20px; text-align:center;'>Waiting for Admin Assignment...</div>";
             return;
         }
 
         const roadmap = JSON.parse(snap.val());
         
-        // Group by Subject and Module to prevent data mixing
-        let groups = {};
+        // --- 🏆 UNIQUE GROUPING LOGIC ---
+        let uniqueGroups = {};
         roadmap.forEach(t => {
             const groupKey = `${t.subject} - ${t.module}`;
-            if(!groups[groupKey]) groups[groupKey] = [];
-            groups[groupKey].push(t);
+            if(!uniqueGroups[groupKey]) {
+                uniqueGroups[groupKey] = {
+                    subject: t.subject,
+                    module: t.module,
+                    total: 0,
+                    done: 0
+                };
+            }
+            uniqueGroups[groupKey].total++;
+            if(t.status === 'DONE') uniqueGroups[groupKey].done++;
         });
 
-        Object.keys(groups).forEach(groupKey => {
-            const tasksInGroup = groups[groupKey];
-            const subjectName = tasksInGroup[0].subject;
-            const moduleName = tasksInGroup[0].module;
-            const doneCount = tasksInGroup.filter(t => t.status === 'DONE').length;
-
+        Object.keys(uniqueGroups).forEach(groupKey => {
+            const data = uniqueGroups[groupKey];
             const container = document.createElement("div");
             container.style.cssText = `
                 padding: 18px; border: 1px solid #334155; border-radius: 12px; 
@@ -2910,18 +2964,18 @@ function loadTasks() {
                 border-left: 6px solid #38bdf8; transition: 0.2s;
             `;
             
-            // Pass the groupKey to open only THIS subject's roadmap
+            // This subject key is passed to open the roadmap window
             container.onclick = () => openRoadmapWindow(groupKey); 
 
             container.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <div style="font-weight:bold; color:#7dd3fc; font-size:16px;">${subjectName}</div>
-                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">${moduleName}</div>
+                        <div style="font-weight:bold; color:#7dd3fc; font-size:16px;">${data.subject}</div>
+                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">${data.module}</div>
                     </div>
                     <div style="text-align:right">
-                        <div style="font-size:12px; color:#4ade80; font-weight:800;">${doneCount} / ${tasksInGroup.length} DONE</div>
-                        <div style="font-size:10px; color:#38bdf8; margin-top:5px;">OPEN MAP →</div>
+                        <div style="font-size:12px; color:#4ade80; font-weight:800;">${data.done} / ${data.total} DONE</div>
+                        <div style="font-size:10px; color:#38bdf8; margin-top:5px;">OPEN STUDY MAP →</div>
                     </div>
                 </div>
             `;
@@ -3049,14 +3103,13 @@ window.openDayEnd = function() {
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
 window.finalDayEnd = async function() {
-    if(!confirm("CONFIRM DAY END: This will sync all 4 devices and end the session.")) return;
+    if(!confirm("CONFIRM DAY END: Syncing all 4 devices and clearing today's shift.")) return;
 
     try {
         const snap = await get(ref(db, `users/${currentUser.uid}`));
         const userData = snap.val() || {};
         const roadmap = JSON.parse(userData.ROADMAP || "[]");
         
-        // Subject Tracker Sync Logic
         let summary = {};
         roadmap.forEach(t => {
             if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
@@ -3072,26 +3125,22 @@ window.finalDayEnd = async function() {
             );
         }
 
-        // Generate the Lock Screen for all devices
         const p = calculate();
         const reportHTML = `<div class="card" style="background:#1e1b4b; text-align:center; padding:30px;"><h2 style="color:#a5b4fc;">SESSION COMPLETED</h2><div style="font-size:60px;color:#38bdf8;">${p.percent}%</div><button onclick="dismissReportLock()" style="width:100%; background:#22c55e; padding:15px; margin-top:20px; color:white; border:none; border-radius:8px; font-weight:bold;">START NEW DAY (LOGIN)</button></div>`;
 
-        // 📡 SIGNAL ALL DEVICES TO LOGOUT
+        // --- 🔥 CLEAR EVERYTHING FOR NEXT LOGIN ---
         await update(ref(db, `users/${currentUser.uid}`), { 
             ROADMAP: null, 
-            SHIFT_ACTIVE: null, // This allows the prompt to appear next time
+            SHIFT_ACTIVE: null, // Reset shift flag
             SHIFT_REMAINING_TIME: null,
             forceLogoutTrigger: Date.now(), 
             LOCKED_REPORT_VIEW: reportHTML
         });
 
-        // Local Cleanup
         localStorage.clear();
         sessionStorage.clear();
-        
-        signOut(auth).then(() => {
-            location.reload(); 
-        });
+        signOut(auth).then(() => location.reload());
+
     } catch (err) {
         console.error("Day End Error:", err);
     }
@@ -3304,15 +3353,16 @@ window.recalculateAllocatedTime = async function() {
     if(!snap.exists()) return;
     const data = snap.val();
     
-    if(!data.ROADMAP || data.SHIFT_REMAINING_TIME === undefined) return;
+    if(!data.ROADMAP || !data.SHIFT_REMAINING_TIME) return;
 
     let roadmap = JSON.parse(data.ROADMAP);
     let shiftRemaining = data.SHIFT_REMAINING_TIME;
     
-    // Count tasks that are not 'DONE'
+    // Calculate based on all tasks that are not finished
     let pendingTasks = roadmap.filter(t => t.status !== "DONE");
 
     if(pendingTasks.length > 0) {
+        // Your Formula: Remaining Shift Time / Remaining Tasks
         let newChunk = Math.floor(shiftRemaining / pendingTasks.length);
         
         roadmap = roadmap.map(t => {
@@ -3322,7 +3372,7 @@ window.recalculateAllocatedTime = async function() {
             return t;
         });
 
-        // Push update to Firebase for multi-device sync
+        // 🔥 Save back to Firebase so time shows up on buttons
         await update(ref(db, `users/${currentUser.uid}`), { 
             ROADMAP: JSON.stringify(roadmap) 
         });
