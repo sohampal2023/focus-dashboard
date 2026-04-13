@@ -3310,7 +3310,37 @@ window.recalculateAllocatedTime = async function() {
         });
     }
 };
+window.resetWatchdog = function() {
+    if(!currentUser) return;
+    
+    const btn = document.querySelector('.watchdog-btn');
+    const activeTestStr = localStorage.getItem(key("TEST_STATE"));
+    const activeTest = activeTestStr ? JSON.parse(activeTestStr) : null;
+    
+    // Safety check: Block reset if a mock test is running
+    if(activeTest && activeTest.status === "RUNNING") {
+        const originalText = btn.innerText;
+        btn.innerText = "NO RESET IN EXAM";
+        btn.style.background = "#ef4444"; 
+        setTimeout(() => {
+            btn.innerText = originalText;
+            btn.style.background = "";
+        }, 1500);
+        return;
+    }
 
+    // Reset the timer to 30 minutes (1800 seconds)
+    startIdle(1800); 
+    
+    // UI Feedback
+    const originalText = "I AM STUDYING";
+    btn.innerText = "WATCHDOG RESET";
+    btn.style.background = "#22c55e"; 
+    setTimeout(() => {
+        btn.innerText = originalText;
+        btn.style.background = "";
+    }, 1000);
+};
 // --- ATTACH TO WINDOW ---
    // --- ATTACH TO WINDOW ---
 window.handleLoginFlow = handleLoginFlow;
