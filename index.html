@@ -513,7 +513,12 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
           <hr style="border-color:#334155; margin:15px 0">
           <h4>Extra Work</h4>
           <div id="extraList"></div>
-          <button onclick="addExtra()" style="margin-top:10px">+ Add Extra Work</button>
+          <button onclick="addExtra()">+ Add Personal Extra Work</button>
+
+    <button id="requestExtraBtn" onclick="requestExtraWork()" 
+            style="margin-top:10px; background:#6b21a8; border:1px solid #a855f7; color:white; font-weight:bold;">
+        🚀 REQUEST ADMIN FOR EXTRA WORK
+    </button>
         </div>
         <div>
           <h3 style="text-align:center">Live Progress</h3>
@@ -786,8 +791,29 @@ async function initAdminDashboard() {
     document.getElementById("adminBox").classList.remove("hidden");
     
     document.getElementById("syncStatus").innerText = "Admin Access Granted";
-    cleanupDeletedData(); // Run soft-delete cleanup
+
+    // --- 📥 ADD EXTRA WORK INBOX SECTION ---
+    // This adds the inbox header and container before the student list
+    const adminBox = document.getElementById("adminBox");
+    const existingInbox = document.getElementById("requestContainerHeader");
+    
+    if (!existingInbox) {
+        const requestBtnHtml = `
+            <div id="requestContainerHeader" style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; background:#1e1b4b; padding:15px; border-radius:12px; border:1px solid #38bdf8;">
+                <div style="color:#7dd3fc; font-weight:bold; font-size:16px;">📩 EXTRA WORK INBOX</div>
+                <div id="requestCounter" style="background:#ef4444; color:white; padding:4px 12px; border-radius:20px; font-size:14px; font-weight:bold; box-shadow: 0 0 10px rgba(239, 68, 68, 0.5);">0</div>
+            </div>
+            <div id="globalRequestList" style="margin-bottom:25px; max-height:400px; overflow-y:auto; padding-right:5px;"></div>
+        `;
+        // Insert it right at the top of the admin box
+        adminBox.insertAdjacentHTML('afterbegin', requestBtnHtml);
+    }
+
+    cleanupDeletedData(); 
     startAdminListener();
+    
+    // --- 🔥 START LISTENING FOR REQUESTS ---
+    listenForGlobalRequests();
 }
 
 // 2. RENDER TABLE
@@ -1892,7 +1918,16 @@ async function initStudentDashboard() {
     if (forceLogoutSnap.exists()) {
         await remove(ref(db, `users/${currentUser.uid}/forceLogoutTrigger`));
     }
+  const reqBtn = document.getElementById("requestExtraBtn");
+    if(reqBtn) reqBtn.classList.remove("hidden");
 
+    // Check if a request is already pending to change button style
+    const snap = await get(ref(db, `admin/REQUESTS/${currentUser.uid}`));
+    if(snap.exists()) {
+        reqBtn.innerText = "⏳ REQUEST PENDING...";
+        reqBtn.disabled = true;
+        reqBtn.style.opacity = "0.6";
+    }
     // --- 2. FORCE UI VISIBILITY ---
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox").classList.remove("hidden");
@@ -3148,31 +3183,21 @@ window.requestExtraWork = async function() {
   window.handleExtraRequest = async function(studentUid, action) {
     const requestRef = ref(db, `admin/REQUESTS/${studentUid}`);
 
-    try {
-        if (action === "REJECT") {
-            // Remove the request so it disappears from the box
-            await remove(requestRef);
-            // Send a red alert to the student
-            await update(ref(db, `users/${studentUid}`), { 
-                activeAlert: "Admin: Your extra work request was declined." 
-            });
-            alert("Request Rejected.");
-        } else {
-            // 1. Mark as accepted so it disappears from the pending list
-            await remove(requestRef);
-            
-            // 2. Notify Student
-            await update(ref(db, `users/${studentUid}`), { 
-                activeAlert: "Admin accepted your request! Assigning new tasks now..." 
-            });
-
-            // 3. Trigger the normal Assignment Window
-            // This reuses your standard 'adminAssignTasks' logic
-            window.adminAssignTasks(studentUid);
-        }
-    } catch (e) {
-        console.error("Request handling error:", e);
-        alert("Error: " + e.message);
+    if (action === "REJECT") {
+        await remove(requestRef);
+        alert("Request Cleared.");
+    } else {
+        // 1. Remove from inbox first so it doesn't duplicate
+        await remove(requestRef);
+        
+        // 2. Open the Assign Window specifically for this UID
+        // This is your existing function that handles the module/topic popup
+        window.adminAssignTasks(studentUid);
+        
+        // 3. Optional: Send alert to student
+        await update(ref(db, `users/${studentUid}`), { 
+            activeAlert: "Admin: Extra work request accepted. Check your roadmap!" 
+        });
     }
 };
 window.updateProgress = async function() {
@@ -3694,6 +3719,40 @@ window.resetWatchdog = function() {
         alert("Failed to add extra work: " + e.message);
     }
 };
+  window.listenForGlobalRequests = function() {
+    const listDiv = document.getElementById("globalRequestList");
+    const counter = document.getElementById("requestCounter");
+    if(!listDiv) return;
+
+    onValue(ref(db, `admin/REQUESTS`), (snapshot) => {
+        listDiv.innerHTML = "";
+        if (!snapshot.exists()) {
+            counter.innerText = "0";
+            return;
+        }
+
+        const requests = snapshot.val();
+        const uids = Object.keys(requests);
+        counter.innerText = uids.length;
+
+        uids.forEach(uid => {
+            const req = requests[uid];
+            const row = document.createElement("div");
+            row.style.cssText = "background:#0f172a; padding:15px; border-radius:10px; border:1px solid #334155; display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;";
+            row.innerHTML = `
+                <div>
+                    <div style="color:#38bdf8; font-weight:bold; font-size:13px;">${req.email}</div>
+                    <div style="color:#e5e7eb; font-size:12px; margin-top:2px;">"${req.reason}"</div>
+                </div>
+                <div style="display:flex; gap:8px;">
+                    <button onclick="handleExtraRequest('${uid}', 'ACCEPT')" style="width:auto; background:#22c55e; padding:8px 15px; font-size:11px;">ACCEPT & ASSIGN</button>
+                    <button onclick="handleExtraRequest('${uid}', 'REJECT')" style="width:auto; background:#ef4444; padding:8px 15px; font-size:11px;">REJECT</button>
+                </div>
+            `;
+            listDiv.appendChild(row);
+        });
+    });
+};
 // --- ATTACH TO WINDOW ---
 window.handleLoginFlow = handleLoginFlow;
 window.resetWatchdog = resetWatchdog; // Fixed for Watchdog Reset
@@ -3750,8 +3809,9 @@ window.recalculateAllocatedTime = recalculateAllocatedTime;
 window.renderAdminSelectedSubject = renderAdminSelectedSubject;
 window.initAdminSubjectDropdown = initAdminSubjectDropdown;
   window.requestExtraWork = requestExtraWork;
-window.listenForStudentRequests = listenForStudentRequests;
+window.listenForGlobalRequests = listenForGlobalRequests;
 window.handleExtraRequest = handleExtraRequest;
+  
   </script>
 
 </body>
