@@ -2833,26 +2833,33 @@ window.openRoadmapWindow = function(subjectFilter) {
         });
 
         // Live Countdown Logic
-        if (roadmapInterval) clearInterval(roadmapInterval);
-        const activeNode = filteredTasks.find(t => t.status === "RUNNING");
-        if (activeNode) {
-            let timeLeft = activeNode.allocatedTime;
-            // Inside your roadmapWindow's setInterval:
-roadmapInterval = setInterval(() => {
-    timeLeft -= 1000;
-    const timerEl = roadmapWin.document.getElementById("activeTimer");
-    if (timerEl) {
-        if (timeLeft <= 0) {
-            timerEl.innerText = "OVERTIME!";
-            timerEl.style.color = "#ef4444"; // Red
-        } else {
-            const min = Math.floor(timeLeft / 60000);
-            const sec = Math.floor((timeLeft % 60000) / 1000);
-            timerEl.innerText = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        // ⏱ FIXED LIVE TICKING LOGIC (Anti-Lag Version)
+if (roadmapInterval) clearInterval(roadmapInterval);
+const activeNode = filteredTasks.find(t => t.status === "RUNNING");
+
+if (activeNode) {
+    // Calculate the exact moment this task should end
+    const startTime = data.SHIFT_START_TS || Date.now();
+    const taskEndTime = Date.now() + activeNode.allocatedTime;
+
+    roadmapInterval = setInterval(() => {
+        const now = Date.now();
+        const timeLeft = taskEndTime - now; // Always calculate based on real clock time
+        
+        const display = roadmapWin.document.getElementById("activeTimer");
+        if (display) {
+            if (timeLeft <= 0) {
+                display.innerText = "OVERTIME!";
+                display.style.color = "#ef4444";
+            } else {
+                const min = Math.floor(timeLeft / 60000);
+                const sec = Math.floor((timeLeft % 60000) / 1000);
+                display.innerText = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+                display.style.color = "#facc15"; // Keep yellow if on time
+            }
         }
-    }
-}, 1000);
-        }
+    }, 1000);
+}
     });
 };
 window.startRoadmapTask = async function(taskId) {
@@ -2894,7 +2901,8 @@ window.completeRoadmapTask = async function(taskId) {
 
     let roadmap = JSON.parse(data.ROADMAP);
     const shiftTotal = data.SHIFT_TOTAL_TIME;
-    const shiftStart = data.SHIFT_START_TS || Date.now();
+    // Use the stored Start TS to ensure all 4 devices use the same "Zero Hour"
+    const shiftStart = data.SHIFT_START_TS;
     
     const idx = roadmap.findIndex(t => t.id === taskId);
     if(idx === -1) return;
@@ -2903,33 +2911,36 @@ window.completeRoadmapTask = async function(taskId) {
     roadmap[idx].status = "DONE";
     roadmap[idx].doneTime = new Date().toLocaleTimeString();
     
-    // 2. CALCULATE REAL REMAINING TIME
-    // Remaining = Total Shift - (Current Time - Start of Shift)
+    // 2. CALCULATE REAL ELAPSED TIME
+    // This is the "Truth". If 11 minutes passed, this will show 11m regardless of UI lag.
     let timeConsumedSoFar = Date.now() - shiftStart;
     let shiftRemaining = Math.max(0, shiftTotal - timeConsumedSoFar);
 
-    // 3. APPLY YOUR FORMULA: Remaining Time / Remaining Subtopics
-    const pendingTasks = roadmap.filter(t => t.status === "PENDING");
+    // 3. APPLY FORMULA: Remaining Time / Remaining Subtopics
+    // We filter for PENDING (and any accidentally RUNNING tasks)
+    const pendingTasks = roadmap.filter(t => t.status === "PENDING" || (t.status === "RUNNING" && t.id !== taskId));
     
     if(pendingTasks.length > 0) {
         let newAllocation = Math.floor(shiftRemaining / pendingTasks.length);
         
         roadmap = roadmap.map(t => {
-            if(t.status === "PENDING") {
+            if(t.status === "PENDING" || (t.status === "RUNNING" && t.id !== taskId)) {
+                t.status = "PENDING"; // Reset any stray running tasks to pending
                 t.allocatedTime = newAllocation;
             }
             return t;
         });
     }
 
-    // 4. SYNC TO ALL 4 DEVICES
+    // 4. SYNC TO FIREBASE
+    // This will trigger the 'onValue' on all other devices to update their maps
     await update(ref(db, `users/${currentUser.uid}`), { 
         ROADMAP: JSON.stringify(roadmap),
         SHIFT_REMAINING_TIME: shiftRemaining,
         TIME_CONSUMED: timeConsumedSoFar
     });
 
-    updateProgress(); // Moves the speedometer needle
+    if (typeof updateProgress === "function") updateProgress(); 
 };
 function renderMapNodes(win, roadmap) {
     let container = win.document.getElementById("mapContainer");
