@@ -2752,7 +2752,6 @@ window.openRoadmapWindow = function(subjectFilter) {
             .map-container { display: flex; flex-direction: column; align-items: center; padding: 60px 40px; }
             .node-wrapper { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
             
-            /* The Main Box */
             .node-box { 
                 width: 450px; padding: 25px; background: #0f172a; 
                 border: 2px solid #1e293b; border-radius: 24px; 
@@ -2761,7 +2760,6 @@ window.openRoadmapWindow = function(subjectFilter) {
             .node-box.active { border-color: #facc15; box-shadow: 0 0 25px rgba(250, 204, 21, 0.2); }
             .node-box.done { border-color: #22c55e; background: #064e3b; opacity: 0.8; }
             
-            /* The Circular Part (Always present and aligned) */
             .node-circle { 
                 width: 65px; height: 65px; border-radius: 50%; 
                 background: #1e293b; border: 4px solid #38bdf8; 
@@ -2772,14 +2770,16 @@ window.openRoadmapWindow = function(subjectFilter) {
             .node-box.active .node-circle { border-color: #facc15; color: #facc15; }
             .node-box.done .node-circle { border-color: #22c55e; color: #22c55e; }
             
-            /* Connection Line */
             .connector { width: 4px; height: 50px; background: #1e293b; margin-left: -35px; }
 
             .btn-action { 
-                background: #38bdf8; color: #020617; width: 100%; padding: 15px; 
-                border-radius: 12px; border: none; cursor: pointer; 
-                font-weight: 800; font-size: 16px; margin-top: 15px; text-transform: uppercase;
+                padding: 15px; border-radius: 12px; border: none; cursor: pointer; 
+                font-weight: 800; font-size: 14px; text-transform: uppercase; flex: 1;
             }
+            .btn-start { background: #38bdf8; color: #020617; width: 100%; margin-top: 15px; }
+            .btn-finish { background: #22c55e; color: white; }
+            .btn-abort { background: #ef4444; color: white; margin-left: 10px; }
+            
             .timer-text { font-family: monospace; font-size: 32px; color: #facc15; margin: 10px 0; display: block; }
         </style>
         <div class="header-bar">
@@ -2798,7 +2798,7 @@ window.openRoadmapWindow = function(subjectFilter) {
         const roadmap = JSON.parse(data.ROADMAP || "[]");
         const filteredTasks = roadmap.filter(t => `${t.subject} - ${t.module}` === subjectFilter);
         
-        // Update Header
+        // Header Sync
         const consumed = data.TIME_CONSUMED || 0;
         const remaining = data.SHIFT_REMAINING_TIME || 0;
         roadmapWin.document.getElementById("headConsumed").innerText = Math.floor(consumed/60000) + "m";
@@ -2821,18 +2821,23 @@ window.openRoadmapWindow = function(subjectFilter) {
                     
                     ${isActive ? `<span id="activeTimer" class="timer-text">--:--</span>` : `<div style="font-size:12px; color:#38bdf8;">Allocated: ${Math.floor(task.allocatedTime/60000)}m</div>`}
                     
-                    ${!isDone ? `
-                        <button class="btn-action" onclick="window.opener.${isActive ? 'completeRoadmapTask' : 'startRoadmapTask'}(${task.id})">
-                            ${isActive ? 'FINISH TOPIC' : 'START SESSION'}
-                        </button>
-                    ` : `<div style="color:#4ade80; font-weight:bold; margin-top:10px;">COMPLETED @ ${task.doneTime}</div>`}
+                    <div style="display:flex; margin-top:15px;">
+                        ${!isDone ? (
+                            !isActive ? 
+                            `<button class="btn-action btn-start" onclick="window.opener.startRoadmapTask(${task.id})">START SESSION</button>` :
+                            `
+                             <button class="btn-action btn-finish" onclick="window.opener.completeRoadmapTask(${task.id})">FINISH</button>
+                             <button class="btn-action btn-abort" onclick="window.opener.abortRoadmapTask(${task.id})">ABORT</button>
+                            `
+                        ) : `<div style="color:#4ade80; font-weight:bold; margin-top:10px;">COMPLETED @ ${task.doneTime}</div>`}
+                    </div>
                 </div>
                 ${i < filteredTasks.length - 1 ? `<div class="connector"></div>` : ''}
             `;
             mapBody.appendChild(nodeWrap);
         });
 
-        // ⏱ LIVE TICKING LOGIC
+        // Live Countdown Logic
         if (roadmapInterval) clearInterval(roadmapInterval);
         const activeNode = filteredTasks.find(t => t.status === "RUNNING");
         if (activeNode) {
@@ -2879,44 +2884,52 @@ window.abortRoadmapTask = async function(taskId) {
     });
 
     await update(ref(db, `users/${currentUser.uid}`), { ROADMAP: JSON.stringify(roadmap) });
+    // After abort, we trigger a recalculation to fix the timers
+    window.recalculateAllocatedTime();
 };
 window.completeRoadmapTask = async function(taskId) {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
     const data = snap.val();
+    if(!data || !data.ROADMAP) return;
+
     let roadmap = JSON.parse(data.ROADMAP);
+    const shiftTotal = data.SHIFT_TOTAL_TIME;
+    const shiftStart = data.SHIFT_START_TS || Date.now();
     
     const idx = roadmap.findIndex(t => t.id === taskId);
     if(idx === -1) return;
 
-    // 1. Mark as DONE
+    // 1. Mark current task DONE
     roadmap[idx].status = "DONE";
     roadmap[idx].doneTime = new Date().toLocaleTimeString();
     
-    // 2. FORMULA CALCULATION
-    // Time spent is derived from the current actual time vs the shift start
-    let shiftTotal = data.SHIFT_TOTAL_TIME;
-    let shiftStart = data.SHIFT_START_TS || Date.now();
-    let realTimeConsumed = Date.now() - shiftStart;
-    let shiftRemaining = Math.max(0, shiftTotal - realTimeConsumed);
+    // 2. CALCULATE REAL REMAINING TIME
+    // Remaining = Total Shift - (Current Time - Start of Shift)
+    let timeConsumedSoFar = Date.now() - shiftStart;
+    let shiftRemaining = Math.max(0, shiftTotal - timeConsumedSoFar);
 
-    // 3. Redistribute remaining time to pending tasks
-    const pending = roadmap.filter(t => t.status === "PENDING");
-    if(pending.length > 0) {
-        let newAllocation = Math.floor(shiftRemaining / pending.length);
+    // 3. APPLY YOUR FORMULA: Remaining Time / Remaining Subtopics
+    const pendingTasks = roadmap.filter(t => t.status === "PENDING");
+    
+    if(pendingTasks.length > 0) {
+        let newAllocation = Math.floor(shiftRemaining / pendingTasks.length);
+        
         roadmap = roadmap.map(t => {
-            if(t.status === "PENDING") t.allocatedTime = newAllocation;
+            if(t.status === "PENDING") {
+                t.allocatedTime = newAllocation;
+            }
             return t;
         });
     }
 
-    // 4. Sync Everything
+    // 4. SYNC TO ALL 4 DEVICES
     await update(ref(db, `users/${currentUser.uid}`), { 
         ROADMAP: JSON.stringify(roadmap),
         SHIFT_REMAINING_TIME: shiftRemaining,
-        TIME_CONSUMED: realTimeConsumed
+        TIME_CONSUMED: timeConsumedSoFar
     });
 
-    updateProgress(); // Sync the speedometer needle
+    updateProgress(); // Moves the speedometer needle
 };
 function renderMapNodes(win, roadmap) {
     let container = win.document.getElementById("mapContainer");
@@ -3129,13 +3142,15 @@ window.finalDayEnd = async function() {
             else summary[t.subject].due.push(t.topic);
         });
 
-        for (let sub in summary) {
-            await window.saveAutomatedSubjectProgress(
-                sub, 
-                summary[sub].covered.join(", ") || "None", 
-                summary[sub].due.join(", ") || "None"
-            );
-        }
+        // Add this inside your finalDayEnd loop
+for (let sub in summary) {
+    const timeSpent = Math.floor((data.TIME_CONSUMED || 0) / 60000); // Minutes
+    await window.saveAutomatedSubjectProgress(
+        sub, 
+        `${summary[sub].covered.join(", ")} (Spent: ${timeSpent}m)`, 
+        summary[sub].due.join(", ") || "None"
+    );
+}
 
         const p = calculate();
         const reportHTML = `<div class="card" style="background:#1e1b4b; text-align:center; padding:30px;"><h2 style="color:#a5b4fc;">SESSION COMPLETED</h2><div style="font-size:60px;color:#38bdf8;">${p.percent}%</div><button onclick="dismissReportLock()" style="width:100%; background:#22c55e; padding:15px; margin-top:20px; color:white; border:none; border-radius:8px; font-weight:bold;">START NEW DAY (LOGIN)</button></div>`;
