@@ -2983,27 +2983,150 @@ async function updateProgressiveTiming() {
 }
   // --- NEW: ROADMAP MAP VIEW RENDERER ---
 window.openRoadmapWindow = function() {
-    const roadmapWin = window.open("", "Roadmap", "width=800,height=600");
+    const roadmapWin = window.open("", "StudyMap", "width=900,height=700");
     roadmapWin.document.write(`
         <style>
-            body { background: #020617; color: white; font-family: sans-serif; text-align: center; }
-            .node { border: 2px solid #38bdf8; padding: 15px; border-radius: 50%; width: 80px; height: 80px; display: inline-flex; align-items: center; justify-content: center; margin: 20px; cursor: pointer; position: relative; }
-            .node.done { border-color: #22c55e; color: #22c55e; }
-            .node.active { border-color: #facc15; box-shadow: 0 0 15px #facc15; }
-            .line { height: 2px; background: #1e293b; width: 50px; display: inline-block; vertical-align: middle; }
-            .timer-sub { font-size: 10px; position: absolute; bottom: -20px; width: 100px; }
+            body { background: #020617; color: #e5e7eb; font-family: Segoe UI, sans-serif; margin: 0; padding: 20px; }
+            .header { background: #0f172a; padding: 15px; border-radius: 12px; border: 1px solid #1e293b; margin-bottom: 20px; text-align: center; }
+            .map-container { display: flex; flex-direction: column; align-items: center; gap: 30px; padding-bottom: 50px; }
+            .node { 
+                width: 300px; padding: 15px; background: #0f172a; 
+                border: 2px solid #38bdf8; border-radius: 15px; 
+                position: relative; transition: 0.3s;
+            }
+            .node.done { border-color: #22c55e; background: #064e3b; }
+            .node.active { border-color: #facc15; box-shadow: 0 0 20px rgba(250, 204, 21, 0.4); }
+            .timer-circle { 
+                width: 50px; height: 50px; border-radius: 50%; 
+                background: #1e293b; border: 3px solid #38bdf8; 
+                display: flex; align-items: center; justify-content: center; 
+                position: absolute; left: -60px; top: 50%; transform: translateY(-50%);
+                font-weight: bold; font-size: 12px;
+            }
+            .line { width: 3px; height: 30px; background: #1e293b; }
+            .btn-group { margin-top: 10px; display: flex; gap: 5px; }
+            .btn { flex: 1; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+            .btn-start { background: #38bdf8; color: #020617; }
+            .btn-done { background: #22c55e; color: white; }
+            .btn-abort { background: #ef4444; color: white; }
         </style>
-        <div id="header"></div>
-        <div id="mapContainer" style="padding: 50px;"></div>
+        <div id="statusHeader" class="header">Loading Shift Data...</div>
+        <div id="mapBody" class="map-container"></div>
     `);
 
+    // Real-time Sync for all 4 devices inside the window
     onValue(ref(db, `users/${currentUser.uid}`), (snapshot) => {
         const data = snapshot.val();
+        if(!data) return;
+
         const roadmap = JSON.parse(data.ROADMAP || "[]");
-        renderMapNodes(roadmapWin, roadmap);
+        const remainingTime = data.SHIFT_REMAINING_TIME || 0;
+        const totalShift = localStorage.getItem(key("SHIFT_TOTAL_TIME"));
+
+        // Header Update
+        roadmapWin.document.getElementById("statusHeader").innerHTML = `
+            <h2 style="margin:0; color:#38bdf8">${roadmap.length > 0 ? roadmap[0].subject : 'No Tasks'}</h2>
+            <div style="font-size:13px; color:#94a3b8; margin-top:5px;">
+                Shift Time: ${Math.floor(remainingTime/60000)}m left | 
+                Progress: ${roadmap.filter(t => t.status === 'DONE').length}/${roadmap.length}
+            </div>
+        `;
+
+        // Map Body Rendering
+        const mapBody = roadmapWin.document.getElementById("mapBody");
+        mapBody.innerHTML = "";
+        
+        roadmap.forEach((task, index) => {
+            const isDone = task.status === "DONE";
+            const isActive = task.status === "RUNNING";
+            
+            const node = roadmapWin.document.createElement("div");
+            node.className = `node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}`;
+            
+            node.innerHTML = `
+                <div class="timer-circle" style="border-color: ${isDone ? '#22c55e' : isActive ? '#facc15' : '#38bdf8'}">
+                    ${isDone ? '✔' : isActive ? '⏳' : index + 1}
+                </div>
+                <div style="font-weight:bold; color: ${isDone ? '#86efac' : '#fff'}">${task.topic}</div>
+                <div style="font-size:11px; color:#94a3b8">${task.module}</div>
+                ${!isDone ? `
+                    <div class="btn-group">
+                        ${!isActive ? 
+                            `<button class="btn btn-start" onclick="window.opener.startRoadmapTask(${task.id})">START (${Math.floor(task.allocatedTime/60000)}m)</button>` : 
+                            `<button class="btn btn-done" onclick="window.opener.completeRoadmapTask(${task.id})">DONE</button>
+                             <button class="btn btn-abort" onclick="window.opener.abortRoadmapTask(${task.id})">ABORT</button>`
+                        }
+                    </div>
+                ` : `<div style="font-size:11px; color:#4ade80; margin-top:5px;">Completed: ${task.doneTime}</div>`}
+            `;
+            
+            mapBody.appendChild(node);
+            if(index < roadmap.length - 1) {
+                const line = roadmapWin.document.createElement("div");
+                line.className = "line";
+                mapBody.appendChild(line);
+            }
+        });
     });
 };
+window.startRoadmapTask = async function(taskId) {
+    const snap = await get(ref(db, `users/${currentUser.uid}`));
+    let roadmap = JSON.parse(snap.val().ROADMAP);
+    
+    roadmap = roadmap.map(t => {
+        if(t.id === taskId) t.status = "RUNNING";
+        return t;
+    });
 
+    await update(ref(db, `users/${currentUser.uid}`), { ROADMAP: JSON.stringify(roadmap) });
+};
+
+window.abortRoadmapTask = async function(taskId) {
+    const snap = await get(ref(db, `users/${currentUser.uid}`));
+    let roadmap = JSON.parse(snap.val().ROADMAP);
+    
+    roadmap = roadmap.map(t => {
+        if(t.id === taskId) t.status = "PENDING";
+        return t;
+    });
+
+    await update(ref(db, `users/${currentUser.uid}`), { ROADMAP: JSON.stringify(roadmap) });
+};
+
+window.completeRoadmapTask = async function(taskId) {
+    const snap = await get(ref(db, `users/${currentUser.uid}`));
+    const data = snap.val();
+    let roadmap = JSON.parse(data.ROADMAP);
+    let shiftRemaining = data.SHIFT_REMAINING_TIME;
+
+    const taskIndex = roadmap.findIndex(t => t.id === taskId);
+    if(taskIndex === -1) return;
+
+    // 1. Mark as Done
+    roadmap[taskIndex].status = "DONE";
+    roadmap[taskIndex].doneTime = new Date().toLocaleTimeString();
+    
+    // 2. Adjust Remaining Shift Time (Example: subtract the allocated chunk)
+    shiftRemaining = Math.max(0, shiftRemaining - roadmap[taskIndex].allocatedTime);
+
+    // 3. Recalculate Time for Remaining Tasks
+    const pendingTasks = roadmap.filter(t => t.status === "PENDING");
+    if(pendingTasks.length > 0) {
+        const newChunk = Math.floor(shiftRemaining / pendingTasks.length);
+        roadmap = roadmap.map(t => {
+            if(t.status === "PENDING") t.allocatedTime = newChunk;
+            return t;
+        });
+    }
+
+    // 4. Sync All
+    await update(ref(db, `users/${currentUser.uid}`), { 
+        ROADMAP: JSON.stringify(roadmap),
+        SHIFT_REMAINING_TIME: shiftRemaining
+    });
+    
+    updateProgress(); // Update dashboard speedometer
+};
 function renderMapNodes(win, roadmap) {
     let container = win.document.getElementById("mapContainer");
     container.innerHTML = "";
@@ -3294,75 +3417,50 @@ window.openDayEnd = function() {
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
 window.finalDayEnd = async function() {
-    if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT? All devices will be synced.")) return;
+    if(!confirm("CONFIRM DAY END: Syncing all 4 devices and clearing tasks.")) return;
 
     const snap = await get(ref(db, `users/${currentUser.uid}`));
     const userData = snap.exists() ? snap.val() : {};
     const roadmap = JSON.parse(userData.ROADMAP || "[]");
     
-    // 1. Separate Tasks for Reporting
-    const completedTasks = roadmap.filter(t => t.status === "DONE");
-    const pendingTasks = roadmap.filter(t => t.status === "PENDING");
+    const completed = roadmap.filter(t => t.status === "DONE");
+    const pending = roadmap.filter(t => t.status === "PENDING");
 
-    // 2. Multi-Device Logic: If pending, check for Admin Carry Forward
-    if(pendingTasks.length > 0) {
-        let cf = confirm(`You have ${pendingTasks.length} tasks left. Request Admin to Carry Forward?`);
-        if(cf) {
-            await update(ref(db, `users/${currentUser.uid}`), { 
-                CARRY_FORWARD_REQ: JSON.stringify(pendingTasks) 
-            });
+    // Subject Tracker Logic: Prevent cross-subject contamination
+    let groupedBySubject = {};
+    completed.forEach(t => {
+        if(!groupedBySubject[t.subject]) {
+            groupedBySubject[t.subject] = { covered: [], due: [] };
         }
-    }
-
-    // 3. Subject Tracker Sync: Group by Subject to prevent messing up data
-    let dailySummary = {};
-    completedTasks.forEach(task => {
-        if(!dailySummary[task.subject]) dailySummary[task.subject] = { covered: [], uncovered: [] };
-        dailySummary[task.subject].covered.push(task.topic);
-        if(task.due) dailySummary[task.subject].uncovered.push(task.due);
+        groupedBySubject[t.subject].covered.push(t.topic);
+    });
+    
+    // Check pending tasks to add to "uncovered" for that subject
+    pending.forEach(t => {
+        if(!groupedBySubject[t.subject]) {
+            groupedBySubject[t.subject] = { covered: [], due: [] };
+        }
+        groupedBySubject[t.subject].due.push(t.topic);
     });
 
-    // Save to Subject Tracker (One row per subject)
-    for (let sub in dailySummary) {
+    // Save to Subject Progress: One row per subject
+    for (let sub in groupedBySubject) {
         await saveAutomatedSubjectProgress(
             sub, 
-            dailySummary[sub].covered.join(", "), 
-            dailySummary[sub].uncovered.join(", ") || "None"
+            groupedBySubject[sub].covered.join(", ") || "None", 
+            groupedBySubject[sub].due.join(", ") || "None"
         );
     }
 
-    // 4. Calculate Stats for the Report
-    const p = calculate(); // Uses your existing calc logic
-    const timeStr = document.getElementById("liveDetails") ? document.getElementById("liveDetails").innerText : "Session End";
-
-    // 5. Generate Permanent Report HTML
-    const reportHTML = `
-        <div style="padding:20px; max-width:500px; margin:0 auto; background:#020617; min-height:100vh; display:flex; align-items:center;">
-            <div class="card" style="background:#0f172a; border:2px solid #38bdf8; text-align:center; padding:30px; border-radius:15px; width:100%;">
-                <h2 style="color:#38bdf8; margin-bottom:10px;">DAY END COMPLETED</h2>
-                <div style="font-size:70px; font-weight:900; color:#4ade80;">${p.percent}%</div>
-                <div style="font-size:20px; color:#94a3b8; margin-bottom:20px;">Rating: ${getLabel(p.percent)}</div>
-                <div style="background:#1e293b; padding:15px; border-radius:10px; margin-bottom:20px; text-align:left;">
-                    <div style="color:#facc15">📊 Tasks Completed: ${completedTasks.length}</div>
-                    <div style="color:#f87171">⏳ Tasks Pending: ${pendingTasks.length}</div>
-                </div>
-                <button onclick="dismissReportLock()" style="width:100%; background:#3b82f6; color:white; padding:15px; border-radius:10px; font-weight:bold; cursor:pointer; border:none;">
-                    LOGIN FOR NEW DAY
-                </button>
-            </div>
-        </div>`;
-
-    // 6. GLOBAL CLEAR: Sync all 4 devices by updating Firebase
-    await update(ref(db, `users/${currentUser.uid}`), {
-        LOCKED_REPORT_VIEW: reportHTML,
-        ROADMAP: null, // Clear all tasks for the new day
-        activeTask: null,
-        forceLogoutTrigger: Date.now() // This kills sessions on all other devices
+    // 4-Device Sync Logout
+    await update(ref(db, `users/${currentUser.uid}`), { 
+        ROADMAP: null, 
+        SHIFT_ACTIVE: null, 
+        forceLogoutTrigger: Date.now() 
     });
 
-    // 7. Local Clear & Logout
     localStorage.clear();
-    signOut(auth).then(() => { location.reload(); });
+    signOut(auth).then(() => location.reload());
 };
 // --- NEW UNLOCK FUNCTION ---
 window.dismissReportLock = function () {
@@ -3491,7 +3589,80 @@ window.requestSubjectDelete = async function(subject, rowId) {
     alert("Failed to send delete request: " + e.message);
   }
 };
+window.adminAssignTasks = async function(uid) {
+    const roadmapWin = window.open("", "AssignTasks", "width=500,height=600");
+    roadmapWin.document.write(`
+        <style>
+            body { background: #0f172a; color: white; font-family: Segoe UI, sans-serif; padding: 20px; }
+            h3 { color: #38bdf8; border-bottom: 1px solid #334155; padding-bottom: 10px; }
+            label { font-size: 12px; color: #94a3b8; text-transform: uppercase; }
+            select, input, textarea { 
+                width: 100%; padding: 12px; margin: 8px 0 15px 0; 
+                background: #020617; border: 1px solid #334155; 
+                color: white; border-radius: 8px; 
+            }
+            button { 
+                width: 100%; padding: 15px; background: #22c55e; 
+                color: white; border: none; border-radius: 8px; 
+                font-weight: bold; cursor: pointer; 
+            }
+            button:hover { background: #16a34a; }
+        </style>
+        <h3>Assign Daily Roadmap</h3>
+        <label>Select Subject:</label>
+        <select id="sub">
+            ${FIXED_SUBJECTS.map(s => `<option value="${s}">${s}</option>`).join('')}
+        </select>
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+            <div>
+                <label>Module No.</label>
+                <input id="mod" placeholder="e.g. 1">
+            </div>
+            <div>
+                <label>Module Name</label>
+                <input id="modName" placeholder="e.g. Calculus">
+            </div>
+        </div>
+        <label>Subtopics (One per line or comma separated):</label>
+        <textarea id="topics" placeholder="Topic 1&#10;Topic 2&#10;Topic 3" style="height:120px;"></textarea>
+        <button id="saveBtn">PUSH TO STUDENT DEVICES</button>
+    `);
 
+    roadmapWin.document.getElementById("saveBtn").onclick = async () => {
+        const sub = roadmapWin.document.getElementById("sub").value;
+        const mod = roadmapWin.document.getElementById("mod").value;
+        const modName = roadmapWin.document.getElementById("modName").value;
+        const rawText = roadmapWin.document.getElementById("topics").value;
+        
+        if(!mod || !rawText) { alert("Please fill all fields"); return; }
+
+        const topics = rawText.includes(",") ? rawText.split(",") : rawText.split("\n");
+
+        let newRoadmap = [];
+        topics.forEach((t, index) => {
+            if(t.trim()) {
+                newRoadmap.push({
+                    id: Date.now() + index,
+                    subject: sub,
+                    module: `Mod ${mod}: ${modName}`,
+                    topic: t.trim(),
+                    status: "PENDING",
+                    allocatedTime: 0,
+                    doneTime: null,
+                    due: ""
+                });
+            }
+        });
+
+        try {
+            await update(ref(db, `users/${uid}`), { ROADMAP: JSON.stringify(newRoadmap) });
+            alert("Roadmap synced to all 4 devices.");
+            roadmapWin.close();
+        } catch (e) {
+            alert("Sync Failed: " + e.message);
+        }
+    };
+};
 
 
 // --- ATTACH TO WINDOW ---
