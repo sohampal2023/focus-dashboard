@@ -503,6 +503,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
             <button class="tab-btn" onclick="switchAdminTab('history')">Performance</button>
             <button class="tab-btn" onclick="switchAdminTab('mocks')" style="color:#facc15">Mock Tests</button>
             <button class="tab-btn" onclick="switchAdminTab('subjects')" style="color:#a78bfa">Subject View</button>
+            
         </div>
 
         <div id="tabLogs">
@@ -1208,13 +1209,14 @@ function startAdminListener() {
                     <div class="admin-btn-group">
                         ${leaveActions}
                         ${deleteReqBtn}  <button style="background:#be123c; margin-top:4px;" onclick="sendWarning('${uid}')">⚠ Warn</button>
-                        <button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
+                        // Change the button in your startAdminListener loop to this:
+html += `<button style="background:#10b981; margin-top:4px;" onclick="openAdminControlPanel('${uid}')">⚙ COMMAND CONTROL</button>`;
+html += `<button style="background:#3b82f6; margin-top:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>`;
                         <button style="background:#ea580c; margin-top:4px;" onclick="terminateStudent('${uid}')">Lock / Terminate</button>
                         <button style="background:#0891b2; margin-top:4px;" onclick="resetLeaveBalance('${uid}')">Reset Balance (6)</button>
                         <button style="background:#0ea5e9; margin-top:4px;" onclick="sendNotice('${uid}')">📢 Notice</button>
                         <button style="background:#1e40af; margin-top:4px;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
-                        <button style="background:#10b981; margin-top:4px;" onclick="adminAssignJourney('${uid}')">📘 Assign Journey</button>
-                        <button style="background:#f59e0b; margin-top:4px;" onclick="manageExtraRequests('${uid}')">📩 Extra Requests</button>
+                        
 
                         <button
                           style="background:#991b1b; margin-top:4px"
@@ -1550,37 +1552,33 @@ window.openAdminModal = function(uid, email) {
     window.switchAdminTab('logs');
 };
   function startStudentLiveSync() {
-    const userRef = ref(db, `users/${currentUser.uid}`);
+    // Only listen to MY specific data path
+    const myDataRef = ref(db, `users/${currentUser.uid}`);
     
-    // onValue creates a persistent connection. 
-    // If you change a status on Device 1, Device 2, 3, and 4 update instantly.
-    onValue(userRef, (snapshot) => {
+    onValue(myDataRef, (snapshot) => {
         const data = snapshot.val();
         if (!data) return;
 
-        // Sync remote data to local variables
+        // Any change the Admin makes in the 'Command Center' hits Firebase
+        // and instantly triggers this listener on all 4 of the student's devices.
         if (data.TASKS) localStorage.setItem(key("TASKS"), data.TASKS);
         if (data.EXTRA) localStorage.setItem(key("EXTRA"), data.EXTRA);
-        if (data.PENALTY) penalty = parseInt(data.PENALTY);
         
-        // Refresh dashboard components
-        loadTasks();
-        updateProgress();
-        checkLeaveStatus(data);
-        renderLogs();
-
-        // Remote Lockout Check
-        if(data.lockout && data.lockout > Date.now()) {
-            alert("This session has been terminated or locked by Admin: " + (data.lockoutReason || "No reason"));
-            location.reload();
-        }
+        loadTasks(); // Refreshes UI
+        updateProgress(); // Refreshes Speedometer
     });
 }
   window.adminAssignJourney = async function(uid) {
-    const subject = prompt("Select Subject:\n" + FIXED_SUBJECTS.join("\n"));
+    // Safety check to ensure the UID matches the intended target
+    if (!uid || uid !== window.activeControlUid) {
+        alert("Error: Target Student Mismatch. Please reopen the control panel.");
+        return;
+    }
+
+    const subject = prompt("Assign Subject:\n" + FIXED_SUBJECTS.join("\n"));
     if (!FIXED_SUBJECTS.includes(subject)) return alert("Invalid Subject.");
 
-    const moduleName = prompt("Enter Module Name & No (e.g., Power Systems Module 1):");
+    const moduleName = prompt("Enter Module Name (e.g., Module 1):");
     const topicsRaw = prompt("Enter Sub-topics (comma separated):");
     if (!topicsRaw) return;
 
@@ -1595,18 +1593,18 @@ window.openAdminModal = function(uid, email) {
     const taskId = Date.now();
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     
-    // Fetch current tasks to append
+    // FETCH ONLY THIS STUDENT'S TASKS
     const snap = await get(ref(db, `users/${uid}/TASKS`));
     const currentTasks = JSON.parse(snap.val() || "[]");
     currentTasks.push({ name: subject, id: taskId, done: false });
     
-    // Update Firebase - All devices of the student will see this instantly
+    // UPDATE ONLY THIS STUDENT'S PATH
     await update(ref(db, `users/${uid}`), {
         TASKS: JSON.stringify(currentTasks),
         [`dailyMaps/${todayKey}/${taskId}`]: topics
     });
     
-    alert("Journey and Task assigned successfully.");
+    alert(`Journey assigned to Student ID: ${uid.substring(0,5)}...`);
 };
   // STUDENT SIDE: Requesting
 window.requestExtraWork = async function() {
@@ -1978,7 +1976,55 @@ window.deletePerformanceEntry = async function(uid, index) {
         alert("Delete failed: " + e.message);
     }
 };
+window.viewExtraRequests = async function(uid) {
+    try {
+        // Fetch pending requests from Firebase
+        const snap = await get(ref(db, `users/${uid}/EXTRA_REQUESTS`));
+        
+        if (!snap.exists()) {
+            alert("No pending extra work requests for this student.");
+            return;
+        }
 
+        const requests = snap.val();
+        
+        // Loop through each request in the student's inbox
+        for (const id in requests) {
+            const req = requests[id];
+            const decision = confirm(
+                `ADMIN ACTION REQUIRED: Extra Work Request\n\n` +
+                `Subject: ${req.subject}\n` +
+                `Topic: ${req.work}\n\n` +
+                `[OK] = APPROVE (Add to Student Dashboard)\n` +
+                `[CANCEL] = REJECT (Delete Request)`
+            );
+
+            if (decision) {
+                // If Approved, add to the student's actual EXTRA work list
+                const extraSnap = await get(ref(db, `users/${uid}/EXTRA`));
+                let currentExtra = JSON.parse(extraSnap.val() || "[]");
+
+                currentExtra.push({
+                    name: `${req.subject}: ${req.work}`,
+                    done: false,
+                    id: Date.now()
+                });
+
+                // Push update to Firebase - This triggers auto-sync on all student devices
+                await update(ref(db, `users/${uid}`), { 
+                    EXTRA: JSON.stringify(currentExtra) 
+                });
+                alert("Request Approved and added to Live Dashboard.");
+            }
+
+            // Remove the request from the inbox after the decision is made
+            await remove(ref(db, `users/${uid}/EXTRA_REQUESTS/${id}`));
+        }
+    } catch (e) {
+        console.error("Inbox Sync Error:", e);
+        alert("Failed to process request: " + e.message);
+    }
+};
 window.deleteLogEntry = async function(uid, index) {
     if(!confirm("CONFIRM DELETION:\n\nAre you sure you want to delete this log entry? It will vanish from the student view immediately.")) return;
     try {
@@ -3869,7 +3915,7 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
  window.finalDayEnd = async function() {
-    if(!confirm("End Day? This will logout all devices and store progress.")) return;
+    if(!confirm("End Day? This clears current assignments and archives them to the Subject Progress table.")) return;
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
@@ -3878,14 +3924,14 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     const tableSnap = await get(ref(db, `users/${currentUser.uid}/SUBJECT_WISE_TABLE`));
     const table = JSON.parse(tableSnap.val() || "{}");
 
-    // Loop through every journey assigned by Admin
+    // Logic: If Admin named it "Module 1", it goes under "Module 1" in history
     for (const taskId in maps) {
         const nodes = maps[taskId];
         nodes.forEach(n => {
-            const mod = n.module || "General";
-            if(!table[mod]) table[mod] = [];
+            const modName = n.module || "General Journey";
+            if(!table[modName]) table[modName] = [];
             
-            table[mod].push({
+            table[modName].push({
                 date: new Date().toLocaleDateString(),
                 covered: n.status === 'done' ? n.label : "-",
                 uncovered: n.status !== 'done' ? n.label : "-"
@@ -3893,7 +3939,7 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
         });
     }
 
-    // Reset student for new day (No tasks remain unless Admin assigns)
+    // Server-First Wipe: Clears all devices instantly
     await update(ref(db, `users/${currentUser.uid}`), {
         SUBJECT_WISE_TABLE: JSON.stringify(table),
         TASKS: "[]", 
@@ -3905,6 +3951,25 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     localStorage.clear();
     signOut(auth).then(() => location.reload());
 };
+  window.openAdminControlPanel = function(uid, email) {
+    // LOCK the specific student UID to this window session
+    window.activeControlUid = uid;
+    
+    const modal = document.getElementById("adminTaskControlModal");
+    if(modal) {
+        // Update the modal title so the Admin knows EXACTLY who they are controlling
+        modal.querySelector('h3').innerText = `⚙ CONTROL: ${email.split('@')[0].toUpperCase()}`;
+        modal.classList.remove("hidden");
+    }
+};
+
+window.closeAdminControl = function() {
+    document.getElementById("adminTaskControlModal").classList.add("hidden");
+};
+
+// Ensure this is attached to window
+window.openAdminControlPanel = openAdminControlPanel;
+window.closeAdminControl = closeAdminControl;
 // --- ATTACH TO WINDOW ---
     // --- ATTACH TO WINDOW (ADMIN & STUDENT CORE) ---
 window.handleLoginFlow = handleLoginFlow;
@@ -3954,6 +4019,29 @@ window.showByjusMap = showByjusMap;
 window.handleNodeAction = handleNodeAction; // Multi-device redistribution logic
 window.closeMap = closeMap;
   </script>
+<div id="adminTaskControlModal" class="modal-overlay hidden">
+    <div class="modal-content" style="border-color: #10b981; max-width: 500px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h3 style="margin:0; color:#10b981">⚙ ADMIN COMMAND CENTER</h3>
+            <button onclick="closeAdminControl()" style="width:auto; padding:5px 10px; background:#334155">Close</button>
+        </div>
+        
+        <div style="display:flex; flex-direction:column; gap:12px;">
+            <div style="padding:15px; background:#020617; border-radius:10px; border:1px solid #1e293b;">
+                <h4 style="margin:0 0 10px 0; color:#38bdf8; font-size:12px;">PRIMARY ASSIGNMENT</h4>
+                <button onclick="adminAssignJourney(window.activeControlUid)" style="background:#059669; padding:12px; font-weight:bold;">📘 ASSIGN NEW JOURNEY</button>
+            </div>
 
+            <div style="padding:15px; background:#020617; border-radius:10px; border:1px solid #1e293b;">
+                <h4 style="margin:0 0 10px 0; color:#f59e0b; font-size:12px;">REQUESTED TASKS</h4>
+                <button onclick="viewExtraRequests(window.activeControlUid)" style="background:#d97706; padding:12px; font-weight:bold;">📩 VIEW EXTRA REQUESTS</button>
+            </div>
+            
+            <div style="font-size:11px; color:#64748b; text-align:center; margin-top:10px;">
+                *All assignments sync instantly to all 4 student devices.
+            </div>
+        </div>
+    </div>
+</div>
 </body>
 </html>
