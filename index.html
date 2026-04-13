@@ -1884,51 +1884,42 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // --- RESTORE UI VISIBILITY ---
+    // 1. Restore UI Visibility
     document.getElementById("studentView").classList.remove("hidden");
-    document.getElementById("taskBox").classList.remove("hidden"); 
+    document.getElementById("taskBox").classList.remove("hidden");
     document.getElementById("adminBox").classList.add("hidden");
     document.getElementById("statusBox").innerText = `Student: ${currentUser.email}`;
     document.getElementById("loginBtn").classList.add("hidden");
     document.getElementById("studentControls").classList.remove("hidden");
+    document.getElementById("idleBox").classList.remove("hidden"); // Ensure timer shows
 
-    // --- TRIGGER NEW SHIFT INITIALIZATION ---
+    // 2. Trigger Shift Logic for the Day
     await initializeShift();
 
-    // --- LIVE WARNING LISTENER ---
-    onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
-        const msg = snapshot.val();
-        const popup = document.getElementById("rejectedPopup");
-        const popupTxt = document.getElementById("rejectedMsg");
-        if (msg) {
-            popupTxt.innerText = `Admin: "${msg}"`;
-            popup.classList.remove("hidden");
-        } else {
-            popup.classList.add("hidden");
-        }
-    });
-
-    // --- MULTI-DEVICE SYNC & DATA LOAD ---
+    // 3. Download Server Data
     const serverData = await downloadData(currentUser.uid);
     
-    // Check Lockout logic
+    // 4. Check for Terminations/Lockouts
     if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
         const minLeft = Math.ceil((parseInt(serverData.lockout) - Date.now())/60000);
         document.body.innerHTML = `<div style="display:flex;justify-content:center;align-items:center;height:100vh;flex-direction:column;text-align:center;background:#020617;color:#e5e7eb;"><h1 style="color:#ef4444;font-size:3rem;margin-bottom:0">TERMINATED</h1><h2 style="color:#f87171;margin-top:10px">${serverData.lockoutReason || "Admin Action"}</h2><p style="margin-top:10px">Time remaining: ${minLeft} minutes</p></div>`;
         return; 
     }
 
-    // Refresh Roadmap into the Dashboard
+    // 5. Restore Original Watchdog Timer
+    startIdle(1800);
+
+    // 6. Live Listener for Roadmap (This populates the "Assigned Tasks" section)
     onValue(ref(db, `users/${currentUser.uid}/ROADMAP`), (snap) => {
-        loadTasks(); // RESTORED: This puts tasks back into the list
-        updateProgress(); // RESTORED: Moves the needle
+        loadTasks(); 
+        updateProgress(); 
     });
 
-    // Existing original listeners
+    // 7. Load Other UI Elements
     loadNotices();
     checkLeaveStatus(serverData);
-    startIdle(1800);
     renderLogs();
+    loadSubjectList();
 }
 window.dismissFeedback = async function() {
     sessionStorage.removeItem("FEEDBACK_SEEN");
