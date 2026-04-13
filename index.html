@@ -2681,36 +2681,31 @@ window.assignRoadmapTasks = async function(uid) {
 };
   // --- NEW: DYNAMIC TIME ALLOCATION ---
 window.initializeShift = async function() {
-    // 1. Check if shift data already exists on the server for today
     const snap = await get(ref(db, `users/${currentUser.uid}/SHIFT_ACTIVE`));
     
     if(!snap.exists()) {
-        const totalHours = prompt("NEW SESSION DETECTED\nEnter total study shift duration (Hours):", "2");
-        
+        const totalHours = prompt("FIRST LOGIN: Enter total shift for today (Hours):", "2");
         if(!totalHours || isNaN(totalHours)) {
-            alert("Error: Study shift duration is required to start.");
-            // Re-prompt or stay logged out
             signOut(auth).then(() => location.reload());
             return;
         }
 
         const totalMillis = parseFloat(totalHours) * 60 * 60 * 1000;
         
-        // 2. Sync Shift Initialization to Firebase
         await update(ref(db, `users/${currentUser.uid}`), {
             SHIFT_TOTAL_TIME: totalMillis,
             SHIFT_REMAINING_TIME: totalMillis,
             SHIFT_ACTIVE: true,
-            SHIFT_START_TS: Date.now()
+            SHIFT_START_TS: Date.now(), // Sets the "Zero" point for Time Consumed
+            TIME_CONSUMED: 0
         });
         
         localStorage.setItem(key("SHIFT_ACTIVE"), "true");
+
+        // 🔥 CRITICAL: Run the math immediately so '0m' becomes '120m' (or whatever)
+        await window.recalculateAllocatedTime();
         
-        // 3. Refresh so all listeners connect to the newly created shift
-        location.reload();
-    } else {
-        // Shift is already active, ensure local flag is set
-        localStorage.setItem(key("SHIFT_ACTIVE"), "true");
+        location.reload(); 
     }
 };
 async function updateProgressiveTiming() {
@@ -2842,16 +2837,21 @@ window.openRoadmapWindow = function(subjectFilter) {
         const activeNode = filteredTasks.find(t => t.status === "RUNNING");
         if (activeNode) {
             let timeLeft = activeNode.allocatedTime;
-            roadmapInterval = setInterval(() => {
-                timeLeft -= 1000;
-                const min = Math.floor(timeLeft / 60000);
-                const sec = Math.floor((timeLeft % 60000) / 1000);
-                const display = roadmapWin.document.getElementById("activeTimer");
-                if (display) {
-                    display.innerText = (timeLeft > 0 ? "" : "-") + `${Math.abs(min)}:${String(Math.abs(sec)).padStart(2,'0')}`;
-                    if (timeLeft <= 0) display.style.color = "#ef4444";
-                }
-            }, 1000);
+            // Inside your roadmapWindow's setInterval:
+roadmapInterval = setInterval(() => {
+    timeLeft -= 1000;
+    const timerEl = roadmapWin.document.getElementById("activeTimer");
+    if (timerEl) {
+        if (timeLeft <= 0) {
+            timerEl.innerText = "OVERTIME!";
+            timerEl.style.color = "#ef4444"; // Red
+        } else {
+            const min = Math.floor(timeLeft / 60000);
+            const sec = Math.floor((timeLeft % 60000) / 1000);
+            timerEl.innerText = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        }
+    }
+}, 1000);, 1000);
         }
     });
 };
@@ -3376,29 +3376,33 @@ window.adminAssignTasks = async function(uid) {
     };
 };
 window.recalculateAllocatedTime = async function() {
-    const snap = await get(ref(db, `users/${currentUser.uid}`));
+    const userRef = ref(db, `users/${currentUser.uid}`);
+    const snap = await get(userRef);
+    if(!snap.exists()) return;
     const data = snap.val();
-    if(!data || !data.ROADMAP || !data.SHIFT_REMAINING_TIME) return;
+    
+    // Ensure we have a roadmap and time to work with
+    if(!data.ROADMAP || !data.SHIFT_REMAINING_TIME) return;
 
     let roadmap = JSON.parse(data.ROADMAP);
-    let shiftRemaining = data.SHIFT_REMAINING_TIME;
+    let remainingTime = parseFloat(data.SHIFT_REMAINING_TIME);
     
-    // Formula: Total Time / ALL subtopics across all subjects
+    // Find ALL subtopics that are not 'DONE' across ALL subjects
     let pendingTasks = roadmap.filter(t => t.status !== "DONE");
 
     if(pendingTasks.length > 0) {
-        let initialChunk = Math.floor(shiftRemaining / pendingTasks.length);
+        // FORMULA: Total Remaining Time / Total Pending Subtopics
+        let perTaskTime = Math.floor(remainingTime / pendingTasks.length);
         
         roadmap = roadmap.map(t => {
             if(t.status !== "DONE") {
-                t.allocatedTime = initialChunk;
+                t.allocatedTime = perTaskTime;
             }
             return t;
         });
 
-        await update(ref(db, `users/${currentUser.uid}`), { 
-            ROADMAP: JSON.stringify(roadmap) 
-        });
+        // Push to Firebase so all 4 devices update from 0m to the correct time
+        await update(userRef, { ROADMAP: JSON.stringify(roadmap) });
     }
 };
 window.resetWatchdog = function() {
