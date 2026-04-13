@@ -2740,105 +2740,64 @@ window.openRoadmapWindow = function(subjectFilter) {
     const roadmapWin = window.open("", "StudyMap", "width=1100,height=850");
     roadmapWin.document.write(`
         <style>
-            body { background: #020617; color: white; font-family: 'Segoe UI', sans-serif; padding: 50px; margin:0; }
-            .map-container { display: flex; flex-direction: column; align-items: center; }
-            .node-container { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
-            
-            .node-box { 
-                width: 450px; padding: 25px; background: #0f172a; 
-                border: 2px solid #1e293b; border-radius: 24px; 
-                position: relative; transition: all 0.3s ease;
-                margin-left: 50px;
+            body { background: #020617; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
+            .header-bar { 
+                position: sticky; top: 0; background: #0f172a; padding: 20px; 
+                border-bottom: 2px solid #38bdf8; z-index: 100; text-align: center;
+                display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;
             }
-            .node-box.done { border-color: #22c55e; background: #064e3b; opacity: 0.8; }
-            .node-box.active { border-color: #facc15; box-shadow: 0 0 25px rgba(250, 204, 21, 0.2); transform: scale(1.02); }
-            
-            /* The Circular Number Part */
-            .node-circle { 
-                width: 70px; height: 70px; border-radius: 50%; 
-                background: #1e293b; border: 5px solid #38bdf8; 
-                display: flex; align-items: center; justify-content: center; 
-                position: absolute; left: -95px; top: 50%; transform: translateY(-50%);
-                font-weight: 900; font-size: 24px; color: #38bdf8; z-index: 10;
-            }
-            .node-box.done .node-circle { border-color: #22c55e; color: #22c55e; }
-            .node-box.active .node-circle { border-color: #facc15; color: #facc15; animation: pulse 2s infinite; }
-            
-            /* Connection Line */
-            .connector { width: 4px; height: 50px; background: #1e293b; margin: -5px 0; margin-left: -45px; }
-
-            .topic-title { font-size: 20px; font-weight: 800; margin-bottom: 5px; }
-            .timer-text { font-family: monospace; font-size: 26px; color: #facc15; margin: 10px 0; font-weight: bold; }
-            
-            .btn { padding: 12px 24px; border-radius: 10px; border: none; cursor: pointer; font-weight: 800; text-transform: uppercase; }
-            .btn-start { background: #38bdf8; color: #020617; width: 100%; }
-            .btn-done { background: #22c55e; color: white; flex: 1; }
-            .btn-abort { background: #ef4444; color: white; flex: 1; margin-left: 10px; }
-            
-            @keyframes pulse { 0% { box-shadow: 0 0 0 0px #facc1544; } 70% { box-shadow: 0 0 0 15px #facc1500; } 100% { box-shadow: 0 0 0 0px #facc1500; } }
+            .stat-box { background: #020617; padding: 10px; border-radius: 10px; border: 1px solid #1e293b; }
+            .stat-val { font-family: monospace; font-size: 20px; color: #facc15; font-weight: bold; }
+            .map-container { display: flex; flex-direction: column; align-items: center; padding: 40px; }
+            .node-box { width: 450px; padding: 25px; background: #0f172a; border: 2px solid #1e293b; border-radius: 24px; position: relative; margin-left: 50px; }
+            .node-box.active { border-color: #facc15; box-shadow: 0 0 25px rgba(250, 204, 21, 0.2); }
+            .node-box.done { border-color: #22c55e; background: #064e3b; }
+            .node-circle { width: 60px; height: 60px; border-radius: 50%; background: #1e293b; border: 4px solid #38bdf8; position: absolute; left: -85px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; }
+            .connector { width: 4px; height: 40px; background: #1e293b; margin-left: -45px; }
+            .btn-start { background: #38bdf8; color: #020617; width: 100%; padding: 12px; border-radius: 10px; border: none; cursor: pointer; font-weight: 800; margin-top: 15px; }
+            .timer-text { font-family: monospace; font-size: 24px; color: #facc15; margin: 10px 0; }
         </style>
+        <div class="header-bar">
+            <div class="stat-box"><div>TIME CONSUMED</div><div id="headConsumed" class="stat-val">00:00</div></div>
+            <div id="subjectTitle" style="font-weight: 800; font-size: 18px; color: #38bdf8;">--</div>
+            <div class="stat-box"><div>TIME REMAINING</div><div id="headRemaining" class="stat-val">00:00</div></div>
+        </div>
         <div id="mapBody" class="map-container"></div>
     `);
 
-    let mapTimer = null;
-
-    onValue(ref(db, `users/${currentUser.uid}/ROADMAP`), (snap) => {
-        const roadmap = JSON.parse(snap.val() || "[]");
+    onValue(ref(db, `users/${currentUser.uid}`), (snap) => {
+        const data = snap.val();
+        if(!data) return;
+        const roadmap = JSON.parse(data.ROADMAP || "[]");
         const filteredTasks = roadmap.filter(t => `${t.subject} - ${t.module}` === subjectFilter);
-        const mapBody = roadmapWin.document.getElementById("mapBody");
         
-        mapBody.innerHTML = `<h1 style="color:#7dd3fc; margin-bottom:60px;">${subjectFilter}</h1>`;
+        // Update Header Stats
+        const consumed = data.TIME_CONSUMED || 0;
+        const remaining = data.SHIFT_REMAINING_TIME || 0;
+        roadmapWin.document.getElementById("headConsumed").innerText = Math.floor(consumed/60000) + "m";
+        roadmapWin.document.getElementById("headRemaining").innerText = Math.floor(remaining/60000) + "m";
+        roadmapWin.document.getElementById("subjectTitle").innerText = subjectFilter;
+
+        const mapBody = roadmapWin.document.getElementById("mapBody");
+        mapBody.innerHTML = "";
 
         filteredTasks.forEach((task, i) => {
             const isDone = task.status === 'DONE';
             const isActive = task.status === 'RUNNING';
             
             const nodeWrap = roadmapWin.document.createElement("div");
-            nodeWrap.className = "node-container";
-
+            nodeWrap.style.textAlign = "center";
             nodeWrap.innerHTML = `
                 <div class="node-box ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
-                    <div class="node-circle">${isDone ? '✔' : i + 1}</div>
-                    <div class="topic-title">${task.topic}</div>
-                    
-                    ${isActive ? `<div id="liveTimer" class="timer-text">--:--</div>` : ''}
-
-                    <div style="margin-top:15px;">
-                        ${!isDone ? (
-                            !isActive ? 
-                            `<button class="btn btn-start" onclick="window.opener.startRoadmapTask(${task.id})">START (${Math.floor(task.allocatedTime/60000)}m)</button>` :
-                            `<div style="display:flex">
-                                <button class="btn btn-done" onclick="window.opener.completeRoadmapTask(${task.id})">DONE</button>
-                                <button class="btn btn-abort" onclick="window.opener.abortRoadmapTask(${task.id})">ABORT</button>
-                             </div>`
-                        ) : `<div style="color:#4ade80; font-weight:bold;">Completed at ${task.doneTime}</div>`}
-                    </div>
+                    <div class="node-circle" style="border-color:${isDone ? '#22c55e' : isActive ? '#facc15' : '#38bdf8'}">${isDone ? '✔' : i+1}</div>
+                    <div style="font-weight:800; font-size:18px;">${task.topic}</div>
+                    ${isActive ? `<div class="timer-text" id="nodeTimer">--:--</div>` : `<div style="font-size:11px; color:#38bdf8; margin-top:5px;">Allocated: ${Math.floor(task.allocatedTime/60000)}m</div>`}
+                    ${!isDone ? `<button class="btn-start" onclick="window.opener.${isActive ? 'completeRoadmapTask' : 'startRoadmapTask'}(${task.id})">${isActive ? 'FINISH TOPIC' : 'START'}</button>` : `<div style="color:#4ade80; font-weight:bold; margin-top:10px;">DONE</div>`}
                 </div>
+                ${i < filteredTasks.length - 1 ? `<div class="connector"></div>` : ''}
             `;
             mapBody.appendChild(nodeWrap);
-            if(i < filteredTasks.length - 1) {
-                const line = roadmapWin.document.createElement("div");
-                line.className = "connector";
-                mapBody.appendChild(line);
-            }
         });
-
-        // Live Countdown Logic
-        if(mapTimer) clearInterval(mapTimer);
-        const activeTask = filteredTasks.find(t => t.status === "RUNNING");
-        if(activeTask) {
-            let remaining = activeTask.allocatedTime;
-            mapTimer = setInterval(() => {
-                remaining -= 1000;
-                const m = Math.floor(remaining / 60000);
-                const s = Math.floor((remaining % 60000) / 1000);
-                const timerEl = roadmapWin.document.getElementById("liveTimer");
-                if(timerEl) {
-                    timerEl.innerText = remaining > 0 ? `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : "TIME UP!";
-                    if(remaining <= 0) timerEl.style.color = "#ef4444";
-                }
-            }, 1000);
-        }
     });
 };
 window.startRoadmapTask = async function(taskId) {
@@ -2874,37 +2833,54 @@ window.abortRoadmapTask = async function(taskId) {
 window.completeRoadmapTask = async function(taskId) {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
     const data = snap.val();
-    let roadmap = JSON.parse(data.ROADMAP);
-    let shiftRemaining = data.SHIFT_REMAINING_TIME;
+    if(!data || !data.ROADMAP) return;
 
+    let roadmap = JSON.parse(data.ROADMAP);
+    let shiftTotal = data.SHIFT_TOTAL_TIME;
+    let shiftStart = data.SHIFT_START_TS || Date.now();
+    
     const idx = roadmap.findIndex(t => t.id === taskId);
     if(idx === -1) return;
 
-    // 1. Mark this specific subtopic as done
+    // 1. Mark current task as DONE and record actual time
     roadmap[idx].status = "DONE";
     roadmap[idx].doneTime = new Date().toLocaleTimeString();
     
-    // 2. Reduce the global remaining shift time by the time spent
-    shiftRemaining = Math.max(0, shiftRemaining - roadmap[idx].allocatedTime);
+    // Calculate how much time passed since the shift started or last update
+    // This gives us the REAL time spent till this moment
+    let timeConsumedSoFar = Date.now() - shiftStart;
+    let shiftRemaining = Math.max(0, shiftTotal - timeConsumedSoFar);
 
-    // 3. Recalculate: Remaining Time / Remaining Tasks
-    const pending = roadmap.filter(t => t.status === "PENDING");
-    if(pending.length > 0) {
-        const newChunk = Math.floor(shiftRemaining / pending.length);
+    // 2. RECALCULATION FORMULA: (Total Shift - Time Spent) / Remaining Subtopics
+    // This applies to ALL subjects in the combined roadmap
+    const remainingTasks = roadmap.filter(t => t.status === "PENDING");
+    
+    if(remainingTasks.length > 0) {
+        let newAllocation = Math.floor(shiftRemaining / remainingTasks.length);
+        
         roadmap = roadmap.map(t => {
-            if(t.status === "PENDING") t.allocatedTime = newChunk;
+            if(t.status === "PENDING") {
+                t.allocatedTime = newAllocation;
+            }
             return t;
         });
     }
 
-    // 4. Force Update to Server
+    // 3. Subject-Specific Time Consumption Logic
+    // We calculate how much total time this specific subject has taken today
+    let currentSubject = roadmap[idx].subject;
+    let subjectTimeTaken = roadmap
+        .filter(t => t.subject === currentSubject && t.status === "DONE")
+        .length * (roadmap[idx].allocatedTime); // Estimate or track precisely
+
+    // 4. Sync All to Firebase for 4-device update
     await update(ref(db, `users/${currentUser.uid}`), { 
         ROADMAP: JSON.stringify(roadmap),
-        SHIFT_REMAINING_TIME: shiftRemaining
+        SHIFT_REMAINING_TIME: shiftRemaining,
+        TIME_CONSUMED: timeConsumedSoFar
     });
 
-    // 5. Update Speedometer
-    updateProgress();
+    updateProgress(); // Sync the speedometer needle
 };
 function renderMapNodes(win, roadmap) {
     let container = win.document.getElementById("mapContainer");
@@ -3350,29 +3326,25 @@ window.adminAssignTasks = async function(uid) {
 };
 window.recalculateAllocatedTime = async function() {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
-    if(!snap.exists()) return;
     const data = snap.val();
-    
-    if(!data.ROADMAP || !data.SHIFT_REMAINING_TIME) return;
+    if(!data || !data.ROADMAP || !data.SHIFT_REMAINING_TIME) return;
 
     let roadmap = JSON.parse(data.ROADMAP);
     let shiftRemaining = data.SHIFT_REMAINING_TIME;
     
-    // Calculate based on all tasks that are not finished
+    // Formula: Total Time / ALL subtopics across all subjects
     let pendingTasks = roadmap.filter(t => t.status !== "DONE");
 
     if(pendingTasks.length > 0) {
-        // Your Formula: Remaining Shift Time / Remaining Tasks
-        let newChunk = Math.floor(shiftRemaining / pendingTasks.length);
+        let initialChunk = Math.floor(shiftRemaining / pendingTasks.length);
         
         roadmap = roadmap.map(t => {
             if(t.status !== "DONE") {
-                t.allocatedTime = newChunk;
+                t.allocatedTime = initialChunk;
             }
             return t;
         });
 
-        // 🔥 Save back to Firebase so time shows up on buttons
         await update(ref(db, `users/${currentUser.uid}`), { 
             ROADMAP: JSON.stringify(roadmap) 
         });
