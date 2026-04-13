@@ -3629,11 +3629,60 @@ window.resetWatchdog = function() {
         console.error("Error saving subject progress:", e);
     }
 };
-// --- ATTACH TO WINDOW ---
-   // --- ATTACH TO WINDOW ---
-// --- 🌎 GLOBAL SCOPE ATTACHMENTS ---
-// This allows HTML onclick attributes to access module-scoped functions.
+  window.addExtra = async function() {
+    // 1. Build a numbered menu for subjects
+    let menu = "SELECT SUBJECT FOR EXTRA WORK:\n\n";
+    FIXED_SUBJECTS.forEach((sub, index) => {
+        menu += `${index + 1}. ${sub}\n`;
+    });
+    
+    const choice = prompt(menu);
+    if (!choice) return;
 
+    const index = parseInt(choice) - 1;
+    if (isNaN(index) || index < 0 || index >= FIXED_SUBJECTS.length) {
+        alert("Invalid selection.");
+        return;
+    }
+
+    const subjectName = FIXED_SUBJECTS[index];
+    const modName = prompt(`Enter Module/Topic Name for ${subjectName}:`, "Extra Practice");
+    if (!modName) return;
+
+    try {
+        // 2. Fetch current roadmap from Firebase
+        const snap = await get(ref(db, `users/${currentUser.uid}/ROADMAP`));
+        let existingRoadmap = snap.exists() ? JSON.parse(snap.val()) : [];
+
+        // 3. Create the new Task object
+        const newTask = {
+            id: Date.now(),
+            subject: subjectName,
+            module: "Extra Work",
+            topic: modName,
+            status: "PENDING",
+            allocatedTime: 0, // This will be recalculated below
+            doneTime: null
+        };
+
+        existingRoadmap.push(newTask);
+
+        // 4. Save to Firebase
+        await update(ref(db, `users/${currentUser.uid}`), { 
+            ROADMAP: JSON.stringify(existingRoadmap) 
+        });
+
+        // 5. Trigger Recalculation so the time remains balanced
+        await window.recalculateAllocatedTime();
+        
+        alert(`✅ ${subjectName} added to your Roadmap.`);
+        
+        // UI will auto-update because of the onValue listener in initStudentDashboard
+    } catch (e) {
+        alert("Failed to add extra work: " + e.message);
+    }
+};
+// --- ATTACH TO WINDOW ---
 window.handleLoginFlow = handleLoginFlow;
 window.resetWatchdog = resetWatchdog; // Fixed for Watchdog Reset
 window.bioBreak = bioBreak;
