@@ -1213,6 +1213,8 @@ function startAdminListener() {
                         <button style="background:#0891b2; margin-top:4px;" onclick="resetLeaveBalance('${uid}')">Reset Balance (6)</button>
                         <button style="background:#0ea5e9; margin-top:4px;" onclick="sendNotice('${uid}')">📢 Notice</button>
                         <button style="background:#1e40af; margin-top:4px;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
+                        <button style="background:#10b981; margin-top:4px;" onclick="adminAssignJourney('${uid}')">📘 Assign Journey</button>
+                        <button style="background:#f59e0b; margin-top:4px;" onclick="manageExtraRequests('${uid}')">📩 Extra Requests</button>
 
                         <button
                           style="background:#991b1b; margin-top:4px"
@@ -1576,10 +1578,10 @@ window.openAdminModal = function(uid, email) {
 }
   window.adminAssignJourney = async function(uid) {
     const subject = prompt("Select Subject:\n" + FIXED_SUBJECTS.join("\n"));
-    if (!FIXED_SUBJECTS.includes(subject)) return alert("Please select a valid subject from the list.");
+    if (!FIXED_SUBJECTS.includes(subject)) return alert("Invalid Subject.");
 
-    const moduleName = prompt("Enter Module Name/No (e.g., Module 1):");
-    const topicsRaw = prompt("Enter Sub-topics (Separate each with a comma):");
+    const moduleName = prompt("Enter Module Name & No (e.g., Power Systems Module 1):");
+    const topicsRaw = prompt("Enter Sub-topics (comma separated):");
     if (!topicsRaw) return;
 
     const topics = topicsRaw.split(",").map(t => ({
@@ -1587,18 +1589,18 @@ window.openAdminModal = function(uid, email) {
         status: "todo",
         module: moduleName,
         completedAt: null,
-        dynamicMins: 30 // Default allocation; redistributed when student starts
+        dynamicMins: 30
     }));
 
     const taskId = Date.now();
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     
-    // Get current tasks to append the new assignment
+    // Fetch current tasks to append
     const snap = await get(ref(db, `users/${uid}/TASKS`));
     const currentTasks = JSON.parse(snap.val() || "[]");
     currentTasks.push({ name: subject, id: taskId, done: false });
     
-    // Update Firebase: This triggers the student's live sync on all devices
+    // Update Firebase - All devices of the student will see this instantly
     await update(ref(db, `users/${uid}`), {
         TASKS: JSON.stringify(currentTasks),
         [`dailyMaps/${todayKey}/${taskId}`]: topics
@@ -3835,23 +3837,23 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     uploadData(); 
 };
  window.finalDayEnd = async function() {
-    if(!confirm("Are you sure? This will archive your modules and subtopics into the progress table and logout all devices.")) return;
+    if(!confirm("End Day? This will logout all devices and store progress.")) return;
 
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const snap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-    const maps = snap.val() || {};
+    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    const maps = mapSnap.val() || {};
     
-    const subjectTableSnap = await get(ref(db, `users/${currentUser.uid}/SUBJECT_WISE_TABLE`));
-    const subjectTable = JSON.parse(subjectTableSnap.val() || "{}");
+    const tableSnap = await get(ref(db, `users/${currentUser.uid}/SUBJECT_WISE_TABLE`));
+    const table = JSON.parse(tableSnap.val() || "{}");
 
-    // Process each assigned journey
+    // Loop through every journey assigned by Admin
     for (const taskId in maps) {
         const nodes = maps[taskId];
         nodes.forEach(n => {
-            const modLabel = n.module || "General";
-            if(!subjectTable[modLabel]) subjectTable[modLabel] = [];
+            const mod = n.module || "General";
+            if(!table[mod]) table[mod] = [];
             
-            subjectTable[modLabel].push({
+            table[mod].push({
                 date: new Date().toLocaleDateString(),
                 covered: n.status === 'done' ? n.label : "-",
                 uncovered: n.status !== 'done' ? n.label : "-"
@@ -3859,63 +3861,66 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
         });
     }
 
-    // Hard Clear for the next day
+    // Reset student for new day (No tasks remain unless Admin assigns)
     await update(ref(db, `users/${currentUser.uid}`), {
-        SUBJECT_WISE_TABLE: JSON.stringify(subjectTable),
+        SUBJECT_WISE_TABLE: JSON.stringify(table),
         TASKS: "[]", 
         EXTRA: "[]",
-        NEXT_TASKS: "[]", // Students can no longer set their own next tasks
-        [`dailyMaps/${todayKey}`]: null // Archive today's map
+        NEXT_TASKS: "[]",
+        [`dailyMaps/${todayKey}`]: null 
     });
     
-    // Clear LocalStorage and Logout
     localStorage.clear();
-    signOut(auth).then(() => {
-        location.reload();
-    });
+    signOut(auth).then(() => location.reload());
 };
 // --- ATTACH TO WINDOW ---
-    window.handleLoginFlow = handleLoginFlow;
-    window.resetWatchdog = resetWatchdog;
-    window.bioBreak = bioBreak;
-    window.openDayEnd = openDayEnd;
-    window.finalDayEnd = finalDayEnd;
-    window.startMockTestSetup = startMockTestSetup;
-    window.triggerEndTest = triggerEndTest;
-    window.addExtra = addExtra;
-    window.clearSingleSubject = window.clearSingleSubject;
-    window.toggleHistory = toggleHistory;
-    window.requestLeave = requestLeave;
-    window.forceLogout = forceLogout;
-    window.handleLeave = window.handleLeave;
-    window.openAdminModal = window.openAdminModal;
-    window.deleteLogEntry = window.deleteLogEntry;
-    window.closeAdminModal = window.closeAdminModal;
-    window.unlockStudent = window.unlockStudent;
-    window.switchAdminTab = window.switchAdminTab;
-    window.addAdminReview = window.addAdminReview;
-    window.terminateStudent = window.terminateStudent;
-    window.dismissFeedback = window.dismissFeedback;
-    window.sendWarning = window.sendWarning;
-    window.dismissRejected = window.dismissRejected;
-    window.clearLeave = window.clearLeave;
-    window.dismissLeaveStatus = window.dismissLeaveStatus;
-    window.resetLeaveBalance = window.resetLeaveBalance;
-    window.toggleNoticeBoard = window.toggleNoticeBoard;
-    window.dismissRejected = window.dismissRejected;
-    window.sendNotice = window.sendNotice;
-    window.dismissNoticePopup = window.dismissNoticePopup;
-    window.softRefresh = window.softRefresh;
-    window.dismissReportLock = window.dismissReportLock;
-    window.toggleSubjectProgress = window.toggleSubjectProgress;
-    window.renderSubjectTable = window.renderSubjectTable;
-    window.clearSubjectProgress = window.clearSubjectProgress;
-    window.requestSubjectDelete = window.requestSubjectDelete;
-    window.openSubjectJourney = openSubjectJourney;
-    window.generateMapFromBulk = generateMapFromBulk;
-    window.showByjusMap = showByjusMap;
-    window.toggleNodeStatus = toggleNodeStatus;
-    window.closeMap = closeMap;
+    // --- ATTACH TO WINDOW (ADMIN & STUDENT CORE) ---
+window.handleLoginFlow = handleLoginFlow;
+window.resetWatchdog = resetWatchdog;
+window.bioBreak = bioBreak;
+window.openDayEnd = openDayEnd; // Student still opens this, but UI no longer asks for tasks
+window.finalDayEnd = finalDayEnd; // Updated: Archives journey to subject table
+window.startMockTestSetup = startMockTestSetup;
+window.triggerEndTest = triggerEndTest;
+
+// --- UPDATED: ADMIN CONTROL FUNCTIONS ---
+window.adminAssignJourney = adminAssignJourney; // Admin creates the map/journey
+window.manageExtraRequests = manageExtraRequests; // Admin accepts/rejects requests
+window.viewExtraRequests = viewExtraRequests; // Internal helper for admin modal
+
+// --- UPDATED: STUDENT REQUEST FUNCTIONS ---
+window.requestExtraWork = requestExtraWork; // Replaces addExtra
+
+// --- ADMIN SYSTEM FUNCTIONS ---
+window.forceLogout = forceLogout;
+window.handleLeave = window.handleLeave;
+window.openAdminModal = window.openAdminModal;
+window.deleteLogEntry = window.deleteLogEntry;
+window.closeAdminModal = window.closeAdminModal;
+window.unlockStudent = window.unlockStudent;
+window.switchAdminTab = window.switchAdminTab;
+window.addAdminReview = window.addAdminReview;
+window.terminateStudent = window.terminateStudent;
+window.dismissFeedback = window.dismissFeedback;
+window.sendWarning = window.sendWarning;
+window.dismissRejected = window.dismissRejected;
+window.clearLeave = window.clearLeave;
+window.dismissLeaveStatus = window.dismissLeaveStatus;
+window.resetLeaveBalance = window.resetLeaveBalance;
+window.toggleNoticeBoard = window.toggleNoticeBoard;
+window.sendNotice = window.sendNotice;
+window.dismissNoticePopup = window.dismissNoticePopup;
+window.softRefresh = window.softRefresh;
+window.dismissReportLock = window.dismissReportLock;
+
+// --- SUBJECT & MAP UI ---
+window.toggleSubjectProgress = window.toggleSubjectProgress;
+window.renderSubjectTable = window.renderSubjectTable;
+window.clearSubjectProgress = window.clearSubjectProgress;
+window.requestSubjectDelete = window.requestSubjectDelete;
+window.showByjusMap = showByjusMap;
+window.handleNodeAction = handleNodeAction; // Multi-device redistribution logic
+window.closeMap = closeMap;
   </script>
 
 </body>
