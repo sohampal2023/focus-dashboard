@@ -814,6 +814,11 @@ async function initAdminDashboard() {
     
     // --- 🔥 START LISTENING FOR REQUESTS ---
     listenForGlobalRequests();
+  if (currentUser.email === "admin@study.com") {
+        console.log("Admin verified. Running maintenance...");
+        cleanupDeletedData(); 
+        listenForGlobalRequests();
+    }
 }
 
 // 2. RENDER TABLE
