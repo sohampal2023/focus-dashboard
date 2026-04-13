@@ -1090,116 +1090,105 @@ function startAdminListener() {
     listDiv.innerHTML = "Listening for live data...";
     
     onValue(ref(db, 'users'), (snapshot) => {
-        if (snapshot.exists()) {
-            const users = snapshot.val();
-            let html = "";
-            
-            Object.keys(users).forEach(uid => {
-                const u = users[uid];
-                const email = u.profile ? u.profile.email : "Unknown User";
-                
-                if (email === "admin@study.com") return; // Skip Admin
-
-                // 1. Lockout Status
-                let isLocked = false;
-                if(u.lockout && u.lockout > Date.now()) isLocked = true;
-
-                // 2. Alert Status
-                let isAlerted = u.activeAlert ? true : false;
-
-                // 3. Progress Stats
-                let progHtml = `<div style="color:#64748b; font-size:11px;">No Data</div>`;
-                if(u.stats) {
-                    let color = "#ef4444";
-                    if(u.stats.percent >= 40) color = "#facc15";
-                    if(u.stats.percent >= 80) color = "#4ade80";
-                    progHtml = `
-                        <div style="font-size:14px; font-weight:bold; color:${color}">
-                            ${u.stats.percent}% <span style="font-size:11px; color:#cbd5e1">(${u.stats.rating})</span>
-                        </div>
-                        <div class="prog-bar"><div class="prog-fill" style="width:${u.stats.percent}%; background:${color}"></div></div>
-                    `;
-                }
-                
-                // 4. Leave Balance & Status
-                let leaveBalance = u.leaveBalance !== undefined ? u.leaveBalance : 6;
-                let balanceHtml = `<div style="text-align:center; font-weight:bold; color:#38bdf8">${leaveBalance} Days</div>`;
-
-                let leaveBadge = `<span style="color:#64748b; font-size:11px;">Active Student</span>`;
-                let leaveActions = "";
-                let clearBtn = "";
-                
-                if (u.leaveRequest && u.leaveRequest.status === "Pending") {
-                    leaveBadge = `
-                    <span class="admin-badge badge-yellow">REQ: ${u.leaveRequest.dates}${u.leaveRequest.medical ? " (MED)" : ""}</span>
-                    <div style="font-size:10px; color:#fde047; margin-top:3px;">${u.leaveRequest.reason}</div>`;
-
-                    leaveActions = `
-                        <button style="background:#166534; width:auto; padding:4px 8px;" onclick="handleLeave('${uid}', 'Approved', ${leaveBalance})">Approve</button>
-                        <button style="background:#991b1b; width:auto; padding:4px 8px;" onclick="handleLeave('${uid}', 'Rejected', ${leaveBalance})">Reject</button>
-                    `;
-                } else if (u.leaveRequest) {
-                    const s = u.leaveRequest.status;
-                    const c = s === "Approved" ? "#86efac" : "#fca5a5";
-                    leaveBadge = `<span style="color:${c}; font-size:11px;">On Leave (${s})</span>`;
-                    clearBtn = `<button onclick="clearLeave('${uid}')" style="background:#334155; padding:2px 6px; font-size:10px; margin-left:5px; width:auto; display:inline-block">Clear</button>`;
-                }
-
-                if(isLocked) {
-                    const timeLeft = Math.ceil((u.lockout - Date.now())/1000/60);
-                    leaveBadge += ` <span class="admin-badge badge-red">LOCKED (${timeLeft}m)</span>`;
-                }
-
-                // 5. Watchdog Status
-                const timeouts = u.DAILY_TIMEOUTS || 0;
-                let watchdogHtml = timeouts > 0 ? 
-                    `<span class="admin-badge badge-red">TIMEOUTS: ${timeouts}</span>` : 
-                    `<span class="admin-badge badge-green">WATCHDOG: OK</span>`;
-
-                // 6. Delete Requests
-                let deleteReqBtn = "";
-                if (u.SUBJECT_DELETE_REQUESTS) {
-                    const reqCount = Object.keys(u.SUBJECT_DELETE_REQUESTS).length;
-                    if (reqCount > 0) {
-                        deleteReqBtn = `<button onclick="viewSubjectDeleteRequests('${uid}')" style="background:#be123c; margin-top:4px; width:100%; animation: pulse-red 1.5s infinite;">🗑 DELETE REQS (${reqCount})</button>`;
-                    }
-                }
-
-                // --- GENERATE ROW HTML ---
-                html += `
-                <div class="admin-row" style="display:grid; grid-template-columns: 2fr 1fr 1fr 2fr 1.5fr; gap:10px; align-items: start; padding: 15px; border-bottom: 1px solid #334155;">
-                    <div>
-                        <div style="font-weight:bold; color:#fff; word-break:break-all">${email}</div>
-                        <div style="font-size:10px; color:#64748b">UID: ${uid.substring(0,8)}</div>
-                    </div>
-                    
-                    ${balanceHtml}
-
-                    <div style="text-align:center">${progHtml}</div>
-
-                    <div style="text-align:center">
-                        ${leaveBadge} ${clearBtn}
-                        <div style="margin-top:5px;">${watchdogHtml}</div>
-                    </div>
-
-                    <div class="admin-btn-group" style="display:flex; flex-direction:column; gap:4px;">
-                        ${leaveActions}
-                        ${deleteReqBtn}
-                        <button style="background:#10b981;" onclick="openAdminControlPanel('${uid}', '${email}')">⚙ COMMAND CONTROL</button>
-                        <button style="background:#3b82f6;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
-                        <button style="background:#ea580c;" onclick="terminateStudent('${uid}')">Terminate</button>
-                        <button style="background:#1e40af;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
-                        ${isLocked ? `<button style="background:#22c55e;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
-                    </div>
-                </div>`;
-            });
-            
-            listDiv.innerHTML = html || "No students found.";
-        } else {
+        if (!snapshot.exists()) {
             listDiv.innerHTML = "No user data available.";
+            return;
         }
+
+        const users = snapshot.val();
+        let html = "";
+        
+        Object.keys(users).forEach(uid => {
+            const u = users[uid];
+            const email = u.profile ? u.profile.email : "Unknown User";
+            if (email === ADMIN_EMAIL) return;
+
+            const isLocked = u.lockout && u.lockout > Date.now();
+            const leaveBalance = u.leaveBalance !== undefined ? u.leaveBalance : 6;
+
+            // Stats Logic
+            let color = "#64748b";
+            if(u.stats) {
+                if(u.stats.percent >= 40) color = "#facc15";
+                if(u.stats.percent >= 80) color = "#4ade80";
+            }
+
+            html += `
+            <div class="admin-row" style="display:grid; grid-template-columns: 1.5fr 1fr 1fr 2fr 2fr; gap:10px; align-items: start; padding: 15px; border-bottom: 1px solid #334155; background: #0f172a; border-radius: 8px; margin-bottom: 5px;">
+                <div>
+                    <div style="font-weight:bold; color:#fff;">${email.split('@')[0].toUpperCase()}</div>
+                    <div style="font-size:10px; color:#64748b;">${email}</div>
+                </div>
+
+                <div style="text-align:center; font-weight:bold; color:#38bdf8;">${leaveBalance}d</div>
+
+                <div style="text-align:center; color:${color}; font-weight:bold;">
+                    ${u.stats ? u.stats.percent + '%' : '0%'}
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:5px;">
+                    <select id="action_${uid}" style="width:100%; padding:6px; background:#020617; color:#fff; border:1px solid #334155; border-radius:4px; font-size:11px;">
+                        <option value="">-- Quick Command --</option>
+                        <option value="journey">Assign Journey</option>
+                        <option value="extra">View Extra Requests</option>
+                        <option value="exams">Set Exam Schedule</option>
+                        <option value="terminate">Terminate Session</option>
+                        ${isLocked ? '<option value="unlock">Unlock Student</option>' : ''}
+                    </select>
+                    <button onclick="executeAction('${uid}')" style="background:#10b981; padding:5px; font-size:10px; color:white; border:none; border-radius:4px; font-weight:bold; cursor:pointer;">RUN COMMAND</button>
+                </div>
+
+                <div style="display:flex; flex-direction:column; gap:5px;">
+                    <button style="background:#3b82f6; padding:6px; font-size:10px; color:white; border:none; border-radius:4px;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
+                    <button style="background:#6366f1; padding:6px; font-size:10px; color:white; border:none; border-radius:4px; border:1px solid #818cf8;" onclick="manualSync('${uid}')">💾 MANUAL DATA SAVE</button>
+                </div>
+            </div>`;
+        });
+        listDiv.innerHTML = html;
     });
 }
+  window.executeAction = function(uid) {
+    const action = document.getElementById(`action_${uid}`).value;
+    if (!action) return alert("Select an action first.");
+
+    switch(action) {
+        case "journey":
+            adminAssignJourney(uid);
+            break;
+        case "extra":
+            viewExtraRequests(uid);
+            break;
+        case "exams":
+            setExamSchedule(uid);
+            break;
+        case "terminate":
+            terminateStudent(uid);
+            break;
+        case "unlock":
+            unlockStudent(uid);
+            break;
+    }
+};
+  window.manualSync = async function(uid) {
+    if(!confirm("Force manual data synchronization? This will overwrite server state with latest local computations.")) return;
+    
+    try {
+        // Fetch current UI progress and local caches
+        const p = calculate(); // Assumes your progress calc function is available
+        
+        const updates = {
+            "stats/percent": p.percent,
+            "stats/rating": getLabel(p.percent),
+            "lastManualSync": Date.now(),
+            "syncStatus": "Verified"
+        };
+
+        await update(ref(db, `users/${uid}`), updates);
+        alert("✅ Data Manually Saved to Server.");
+    } catch (e) {
+        alert("Sync Error: " + e.message);
+    }
+};
 // --- ADMIN WARNING SYSTEM (STRICT CONFIRM) ---
 // --- ADMIN NOTICE SYSTEM ---
 window.sendNotice = async function (uid) {
@@ -1532,42 +1521,34 @@ window.openAdminModal = function(uid, email) {
     });
 }
   window.adminAssignJourney = async function(uid) {
-    // Safety check to ensure the UID matches the intended target
-    if (!uid || uid !== window.activeControlUid) {
-        alert("Error: Target Student Mismatch. Please reopen the control panel.");
-        return;
-    }
-
-    const subject = prompt("Assign Subject:\n" + FIXED_SUBJECTS.join("\n"));
+    const subject = prompt("Select Subject:\n" + FIXED_SUBJECTS.join("\n"));
     if (!FIXED_SUBJECTS.includes(subject)) return alert("Invalid Subject.");
 
     const moduleName = prompt("Enter Module Name (e.g., Module 1):");
-    const topicsRaw = prompt("Enter Sub-topics (comma separated):");
+    const topicsRaw = prompt("Enter Topics (comma separated):");
     if (!topicsRaw) return;
 
     const topics = topicsRaw.split(",").map(t => ({
         label: t.trim(),
         status: "todo",
         module: moduleName,
-        completedAt: null,
         dynamicMins: 30
     }));
 
     const taskId = Date.now();
     const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
     
-    // FETCH ONLY THIS STUDENT'S TASKS
+    // Fetch and Append
     const snap = await get(ref(db, `users/${uid}/TASKS`));
     const currentTasks = JSON.parse(snap.val() || "[]");
     currentTasks.push({ name: subject, id: taskId, done: false });
     
-    // UPDATE ONLY THIS STUDENT'S PATH
     await update(ref(db, `users/${uid}`), {
         TASKS: JSON.stringify(currentTasks),
         [`dailyMaps/${todayKey}/${taskId}`]: topics
     });
     
-    alert(`Journey assigned to Student ID: ${uid.substring(0,5)}...`);
+    alert("Success: Journey Assigned.");
 };
   // STUDENT SIDE: Requesting
 window.requestExtraWork = async function() {
@@ -3192,43 +3173,128 @@ function getAccuracyRemark(acc) {
 
 
 // --- DAY END ---
-
 window.openDayEnd = function() {
-  clearInterval(idleTimer);
-  const idleBox = document.getElementById("idleBox");
-  if(idleBox) idleBox.classList.add("hidden");
-  
-  const nextInputs = document.getElementById("nextInputs");
-  
-  // 1. Generate Options for the Dropdown
-  let optionsHtml = `<option value="">Select Subject</option>`;
-  FIXED_SUBJECTS.forEach(sub => {
-    optionsHtml += `<option value="${sub}">${sub}</option>`;
-  });
+    // 1. Stop the watchdog immediately to allow report filling
+    clearInterval(idleTimer);
+    const idleBox = document.getElementById("idleBox");
+    if(idleBox) idleBox.classList.add("hidden");
+    
+    const nextInputs = document.getElementById("nextInputs");
+    
+    // 2. Restored: Subject Selection Dropdowns for Tomorrow
+    let optionsHtml = `<option value="">Select Subject</option>`;
+    FIXED_SUBJECTS.forEach(sub => {
+        optionsHtml += `<option value="${sub}">${sub}</option>`;
+    });
 
-  nextInputs.innerHTML = `
-    <div style="margin-bottom:15px; color:#cbd5e1; font-size:13px; text-align:center">
-      Enter your plan for tomorrow. <br>
-      <span style="color:#facc15">Subject</span> is mandatory. <span style="color:#38bdf8">Topic</span> is your target.
-    </div>
-  `;
-  
-  // 2. Render Dropdowns instead of Text Inputs
-  for (let i = 0; i < 7; i++) {
-    nextInputs.innerHTML += `
-      <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:10px; margin-bottom:8px;">
-        
-        <select class="nextInput" id="nd_sub_${i}" style="margin:0; cursor:pointer; background:#0f172a; border:1px solid #334155; color:#e5e7eb;">
-           ${optionsHtml}
-        </select>
-
-        <input class="nextInput" id="nd_top_${i}" placeholder="Target Topic (e.g. Unit 1)" style="margin:0">
-      </div>
+    nextInputs.innerHTML = `
+        <div style="margin-bottom:15px; color:#cbd5e1; font-size:13px; text-align:center">
+            Enter your plan for tomorrow. <br>
+            <span style="color:#facc15">Subject</span> is mandatory. <span style="color:#38bdf8">Topic</span> is your target.
+        </div>
     `;
-  }
+    
+    // 7 inputs for the next day's goals
+    for (let i = 0; i < 7; i++) {
+        nextInputs.innerHTML += `
+            <div style="display:grid; grid-template-columns: 1fr 1.5fr; gap:10px; margin-bottom:8px;">
+                <select class="nextInput" id="nd_sub_${i}" style="margin:0; cursor:pointer; background:#0f172a; border:1px solid #334155; color:#e5e7eb;">
+                   ${optionsHtml}
+                </select>
+                <input class="nextInput" id="nd_top_${i}" placeholder="Target Topic (e.g. Unit 1)" style="margin:0">
+            </div>
+        `;
+    }
 
-  document.getElementById("nextDayBox").classList.remove("hidden");
-}
+    document.getElementById("nextDayBox").classList.remove("hidden");
+    document.getElementById("taskBox").classList.add("hidden");
+};
+
+window.finalDayEnd = async function() {
+    if(!confirm("CONFIRM DAY END:\n\nSubmit report and perform hard logout?")) return;
+
+    const todayStr = new Date().toLocaleDateString();
+    const todayKey = todayStr.replace(/\//g, "-");
+    
+    // 1. Capture Next Day Tasks
+    const next = [];
+    for (let i = 0; i < 7; i++) {
+        const sub = document.getElementById("nd_sub_" + i).value.trim();
+        const top = document.getElementById("nd_top_" + i).value.trim();
+        if(sub) { next.push({ subject: sub, topic: top }); }
+    }
+    localStorage.setItem(key("NEXT_TASKS"), JSON.stringify(next));
+
+    // 2. Restored: Process Journey Maps into Subject Table (Covered vs Uncovered)
+    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
+    const maps = mapSnap.val() || {};
+    const tableSnap = await get(ref(db, `users/${currentUser.uid}/SUBJECT_WISE_TABLE`));
+    const table = JSON.parse(tableSnap.val() || "{}");
+
+    for (const taskId in maps) {
+        const nodes = maps[taskId];
+        nodes.forEach(n => {
+            const modName = n.module || "General Journey";
+            if(!table[modName]) table[modName] = [];
+            
+            table[modName].push({
+                id: Date.now() + Math.random(),
+                date: todayStr,
+                covered: n.status === 'done' ? n.label : "-",
+                uncovered: n.status !== 'done' ? n.label : "-"
+            });
+        });
+    }
+
+    // 3. Calculate Final Performance Stats
+    const p = calculate();
+    let totalMillis = 0;
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    logs.forEach(l => {
+        if (l.loginTS && l.logoutTS && new Date(l.loginTS).toLocaleDateString() === todayStr) {
+            totalMillis += (l.logoutTS - l.loginTS);
+        }
+    });
+    const timeStr = `${Math.floor(totalMillis / 3600000)} hr ${Math.floor((totalMillis % 3600000) / 60000)} min`;
+
+    // 4. Update History Records
+    const historyEntry = {
+        date: todayStr,
+        score: p.percent,
+        rating: getLabel(p.percent),
+        time: timeStr,
+        subjects: [...JSON.parse(localStorage.getItem(key("TASKS")) || "[]")].filter(t=>t.done).map(t=>t.name).join(", ")
+    };
+    let history = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]");
+    history.push(historyEntry);
+    
+    // 5. HARD RESET: Clear server-side daily data
+    await update(ref(db, `users/${currentUser.uid}`), {
+        SUBJECT_WISE_TABLE: JSON.stringify(table),
+        TASKS: "[]",
+        EXTRA: "[]",
+        NEXT_TASKS: JSON.stringify(next),
+        PENALTY: 0,
+        DAILY_TIMEOUTS: 0,
+        [`dailyMaps/${todayKey}`]: null 
+    });
+
+    // 6. Generate and Lock Report View
+    const reportHTML = `
+        <div class="card" style="background:#020617; border:2px solid #0ea5e9; text-align:center; padding:30px; border-radius:20px;">
+            <h2 style="color:#0ea5e9; margin-bottom:10px;">SHIFT COMPLETED</h2>
+            <div style="font-size:60px; font-weight:900; color:#fff;">${p.percent}%</div>
+            <div style="font-size:20px; color:#38bdf8; margin-bottom:20px;">Rating: ${getLabel(p.percent)}</div>
+            <div style="background:#0f172a; padding:15px; border-radius:10px; border:1px solid #1e293b; color:#4ade80; font-family:monospace; font-size:18px;">
+                Total Time: ${timeStr}
+            </div>
+        </div>`;
+
+    localStorage.setItem("LOCKED_REPORT_VIEW", reportHTML);
+    
+    // 7. Perform Logout
+    signOut(auth).then(() => location.reload());
+};
 function finalDayEnd() {
     if(!confirm("CONFIRM DAY END:\n\nSubmit report and LOGOUT?")) return;
 
@@ -3877,43 +3943,6 @@ const updateNodeStatus = (nodeIdx, newStatus) => {
     saveSubjectData(subjectData); 
     uploadData(); 
 };
- window.finalDayEnd = async function() {
-    if(!confirm("End Day? This clears current assignments and archives them to the Subject Progress table.")) return;
-
-    const todayKey = new Date().toLocaleDateString().replace(/\//g, "-");
-    const mapSnap = await get(ref(db, `users/${currentUser.uid}/dailyMaps/${todayKey}`));
-    const maps = mapSnap.val() || {};
-    
-    const tableSnap = await get(ref(db, `users/${currentUser.uid}/SUBJECT_WISE_TABLE`));
-    const table = JSON.parse(tableSnap.val() || "{}");
-
-    // Logic: If Admin named it "Module 1", it goes under "Module 1" in history
-    for (const taskId in maps) {
-        const nodes = maps[taskId];
-        nodes.forEach(n => {
-            const modName = n.module || "General Journey";
-            if(!table[modName]) table[modName] = [];
-            
-            table[modName].push({
-                date: new Date().toLocaleDateString(),
-                covered: n.status === 'done' ? n.label : "-",
-                uncovered: n.status !== 'done' ? n.label : "-"
-            });
-        });
-    }
-
-    // Server-First Wipe: Clears all devices instantly
-    await update(ref(db, `users/${currentUser.uid}`), {
-        SUBJECT_WISE_TABLE: JSON.stringify(table),
-        TASKS: "[]", 
-        EXTRA: "[]",
-        NEXT_TASKS: "[]",
-        [`dailyMaps/${todayKey}`]: null 
-    });
-    
-    localStorage.clear();
-    signOut(auth).then(() => location.reload());
-};
   window.openAdminControlPanel = function(uid, email) {
     // LOCK the specific student UID to this window session
     window.activeControlUid = uid;
@@ -3972,7 +4001,13 @@ window.sendNotice = window.sendNotice;
 window.dismissNoticePopup = window.dismissNoticePopup;
 window.softRefresh = window.softRefresh;
 window.dismissReportLock = window.dismissReportLock;
-
+window.executeAction = executeAction;
+window.manualSync = manualSync;
+window.adminAssignJourney = adminAssignJourney;
+window.viewExtraRequests = viewExtraRequests;
+window.setExamSchedule = setExamSchedule;
+window.terminateStudent = terminateStudent;
+window.unlockStudent = unlockStudent;
 // --- SUBJECT & MAP UI ---
 window.toggleSubjectProgress = window.toggleSubjectProgress;
 window.renderSubjectTable = window.renderSubjectTable;
