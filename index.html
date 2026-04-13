@@ -3054,26 +3054,32 @@ function save(tasks, extras) {
 
 // --- PROGRESS ---
 function calculate(roadmapArray = []) {
-    const extras = JSON.parse(localStorage.getItem(key("EXTRA")) || "[]");
+    // 1. Separate Mandatory vs. Extra
+    // Mandatory = Tasks assigned via standard Admin Assign
+    // Extra = Tasks added via the "Accept & Assign" Extra Work flow
+    const mandatoryTasks = roadmapArray.filter(t => t.module !== "Extra Work");
+    const extraTasks = roadmapArray.filter(t => t.module === "Extra Work");
+
+    // 2. Count Completed
+    const mandatoryDone = mandatoryTasks.filter(t => t.status === "DONE").length;
+    const extraDone = extraTasks.filter(t => t.status === "DONE").length;
+
+    // 3. Formula: ((Mandatory Done + Extra Done) / Total Mandatory) * 100
+    // We use Math.max(1, ...) to prevent division by zero if no tasks are assigned yet.
+    const totalMandatoryCount = Math.max(1, mandatoryTasks.length);
+    const rawPercent = ((mandatoryDone + extraDone) / totalMandatoryCount) * 100;
+
+    // 4. Penalty Check
+    const penaltyValue = parseInt(localStorage.getItem(key("PENALTY")) || "0");
     
-    const roadmapDone = roadmapArray.filter(t => t.status === "DONE").length;
-    const extraDone = extras.filter(e => e.done).length;
-    
-    // Logic: Base tasks give up to 100%. 
-    // Extra tasks or "Early Finish" bonuses can push it to 300%.
-    const baseProgress = roadmapArray.length > 0 ? (roadmapDone / roadmapArray.length) * 100 : 0;
-    const extraBonus = extraDone * 10; // Each extra task gives 10% bonus
-    
-    const penalty = parseInt(localStorage.getItem(key("PENALTY")) || "0");
-    
-    // Total calculation capped at 300%
-    const finalPercent = Math.min(300, Math.max(0, Math.round(baseProgress + extraBonus - penalty)));
+    // 5. Final Result (Capped at 300%, Floor at 0%)
+    const finalPercent = Math.min(300, Math.max(0, Math.round(rawPercent - penaltyValue)));
 
     return { 
         percent: finalPercent, 
-        assigned: roadmapArray.length, 
-        extra: extras.length, 
-        penalty 
+        assigned: mandatoryTasks.length, 
+        extraDone: extraDone, 
+        penalty: penaltyValue 
     };
 }
 window.requestExtraWork = async function() {
@@ -3166,11 +3172,15 @@ window.updateProgress = async function() {
         document.getElementById("livePercent").innerText = p.percent + "%";
         document.getElementById("liveRating").innerText = getLabel(p.percent);
         
-        // Update Details with the new scale in mind
-        const detailEl = document.getElementById("liveDetails");
-        if(detailEl) {
-            detailEl.innerText = `Tasks: ${p.assigned} | Penalty: -${p.penalty}% | Cap: 300%`;
-        }
+        // Inside updateProgress() find the detailEl section and update:
+const detailEl = document.getElementById("liveDetails");
+if(detailEl) {
+    detailEl.innerHTML = `
+        <span style="color:#38bdf8">Target: ${p.assigned}</span> | 
+        <span style="color:#4ade80">Bonus: +${p.extraDone}</span> | 
+        <span style="color:#ef4444">Penalty: -${p.penalty}%</span>
+    `;
+}
 
         // Sync to Firebase for Admin
         update(ref(db, `users/${currentUser.uid}/stats`), {
