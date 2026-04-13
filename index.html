@@ -1882,11 +1882,14 @@ async function loadNotices() {
     }
 }
 async function initStudentDashboard() {
-    // --- 1. FORCE SHIFT CHECK (Must be first to trigger prompt) ---
-    // This ensures the 2-hour logic starts before anything else loads
-    await initializeShift();
+    // --- 1. CLEANUP PREVIOUS SESSION TRIGGERS ---
+    // This stops the "Automatic Day End" loop on login
+    const forceLogoutSnap = await get(ref(db, `users/${currentUser.uid}/forceLogoutTrigger`));
+    if (forceLogoutSnap.exists()) {
+        await remove(ref(db, `users/${currentUser.uid}/forceLogoutTrigger`));
+    }
 
-    // --- 2. RESTORE UI VISIBILITY ---
+    // --- 2. FORCE UI VISIBILITY ---
     document.getElementById("studentView").classList.remove("hidden");
     document.getElementById("taskBox").classList.remove("hidden");
     document.getElementById("adminBox").classList.add("hidden");
@@ -1895,43 +1898,44 @@ async function initStudentDashboard() {
     document.getElementById("studentControls").classList.remove("hidden");
     document.getElementById("idleBox").classList.remove("hidden");
 
-    // --- 3. ENABLE SIDEBAR BUTTONS ---
+    // --- 3. ENABLE ALL SIDEBAR BUTTONS ---
     document.getElementById("bioBtn").disabled = false;
     document.getElementById("histBtn").disabled = false;
     document.getElementById("dayBtn").disabled = false;
     const subProgBtn = document.querySelector("button[onclick='toggleSubjectProgress()']");
     if(subProgBtn) subProgBtn.disabled = false;
 
-    // --- 4. REAL-TIME DATA LISTENERS ---
-    
-    // Listener for Roadmap (Now groups by subject to prevent mixing)
+    // --- 4. INITIALIZE SHIFT (Prompt for 2-Hours if New) ---
+    await initializeShift();
+
+    // --- 5. MULTI-DEVICE ROADMAP & PROGRESS LISTENER ---
     onValue(ref(db, `users/${currentUser.uid}/ROADMAP`), (snap) => {
-        // loadTasks now handles filtering and group-key creation
-        loadTasks(); 
-        updateProgress(); 
+        loadTasks(); // Renders the Subject Cards
+        updateProgress(); // Syncs the speedometer
     });
 
-    // Listener for Admin Warnings
+    // --- 6. SETUP LIVE ALERT LISTENER (WARNINGS) ---
     onValue(ref(db, `users/${currentUser.uid}/activeAlert`), (snapshot) => {
         const msg = snapshot.val();
+        const popup = document.getElementById("rejectedPopup");
+        const popupTxt = document.getElementById("rejectedMsg");
         if (msg) {
-            document.getElementById("rejectedMsg").innerText = `Admin: "${msg}"`;
-            document.getElementById("rejectedPopup").classList.remove("hidden");
+            popupTxt.innerText = `Admin: "${msg}"`;
+            popup.classList.remove("hidden");
         } else {
-            document.getElementById("rejectedPopup").classList.add("hidden");
+            popup.classList.add("hidden");
         }
     });
 
-    // --- 5. DATA DOWNLOAD & SYNC ---
+    // --- 7. FINAL UI LOADS & DATA SYNC ---
     const serverData = await downloadData(currentUser.uid);
     
-    // Check if lockout is active from another device
+    // Safety check for lockout (Terminal state)
     if(serverData && serverData.lockout && parseInt(serverData.lockout) > Date.now()) {
-        location.reload(); // Redirects to termination screen via the guard in authStateChanged
-        return;
+        location.reload(); 
+        return; 
     }
 
-    // --- 6. ORIGINAL CORE FUNCTIONS ---
     loadNotices();
     checkLeaveStatus(serverData);
     startIdle(1800);
@@ -3043,32 +3047,21 @@ window.openDayEnd = function() {
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
 window.finalDayEnd = async function() {
-    if(!confirm("CONFIRM DAY END:\n\nThis will perform a hard logout on ALL 4 linked devices and save your progress.")) return;
+    if(!confirm("CONFIRM DAY END: This will sync all 4 devices and end the session.")) return;
 
     try {
         const snap = await get(ref(db, `users/${currentUser.uid}`));
         const userData = snap.val() || {};
         const roadmap = JSON.parse(userData.ROADMAP || "[]");
         
-        const completed = roadmap.filter(t => t.status === "DONE");
-        const pending = roadmap.filter(t => t.status !== "DONE");
-
-        // Logic: Group by Subject to ensure data never mixes
+        // Subject Tracker Sync Logic
         let summary = {};
-        
-        // Process Completed
-        completed.forEach(t => {
+        roadmap.forEach(t => {
             if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
-            summary[t.subject].covered.push(t.topic);
-        });
-        
-        // Process Pending as Due
-        pending.forEach(t => {
-            if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
-            summary[t.subject].due.push(t.topic);
+            if(t.status === "DONE") summary[t.subject].covered.push(t.topic);
+            else summary[t.subject].due.push(t.topic);
         });
 
-        // Save to Tracker: One Subject, One Row
         for (let sub in summary) {
             await window.saveAutomatedSubjectProgress(
                 sub, 
@@ -3077,32 +3070,42 @@ window.finalDayEnd = async function() {
             );
         }
 
-        // Generate Report HTML for persistence
+        // Generate the Lock Screen for all devices
         const p = calculate();
-        const timeStr = document.getElementById("liveDetails") ? document.getElementById("liveDetails").innerText : "Session End";
-        const reportHTML = `<div class="card" style="background:#1e1b4b; text-align:center; padding:30px;"><h2 style="color:#a5b4fc;">SESSION COMPLETED</h2><div style="font-size:60px;color:#38bdf8;">${p.percent}%</div><div style="color:#facc15;">⏱ ${timeStr}</div><button onclick="dismissReportLock()" style="width:100%; background:#22c55e; padding:15px; margin-top:20px; color:white; border:none; border-radius:8px; font-weight:bold;">START NEW DAY (LOGIN)</button></div>`;
+        const reportHTML = `<div class="card" style="background:#1e1b4b; text-align:center; padding:30px;"><h2 style="color:#a5b4fc;">SESSION COMPLETED</h2><div style="font-size:60px;color:#38bdf8;">${p.percent}%</div><button onclick="dismissReportLock()" style="width:100%; background:#22c55e; padding:15px; margin-top:20px; color:white; border:none; border-radius:8px; font-weight:bold;">START NEW DAY (LOGIN)</button></div>`;
 
-        // 📡 TRIGGER HARD LOGOUT ON ALL 4 DEVICES
+        // 📡 SIGNAL ALL DEVICES TO LOGOUT
         await update(ref(db, `users/${currentUser.uid}`), { 
             ROADMAP: null, 
-            SHIFT_ACTIVE: null,
+            SHIFT_ACTIVE: null, // This allows the prompt to appear next time
             SHIFT_REMAINING_TIME: null,
             forceLogoutTrigger: Date.now(), 
             LOCKED_REPORT_VIEW: reportHTML
         });
 
+        // Local Cleanup
         localStorage.clear();
         sessionStorage.clear();
+        
         signOut(auth).then(() => {
             location.reload(); 
         });
     } catch (err) {
-        alert("Day End Error: " + err.message);
+        console.error("Day End Error:", err);
     }
 };
 // --- NEW UNLOCK FUNCTION ---
-window.dismissReportLock = function () {
+window.dismissReportLock = async function () {
     localStorage.removeItem("LOCKED_REPORT_VIEW");
+    
+    // If user is still technically logged in, wipe the server trigger
+    if (currentUser) {
+        await update(ref(db, `users/${currentUser.uid}`), {
+            LOCKED_REPORT_VIEW: null,
+            forceLogoutTrigger: null
+        });
+    }
+    
     signOut(auth).finally(() => {
         location.reload();
     });
