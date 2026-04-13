@@ -2703,98 +2703,78 @@ async function updateProgressiveTiming() {
 }
   // --- NEW: ROADMAP MAP VIEW RENDERER ---
 window.openRoadmapWindow = function() {
-    const roadmapWin = window.open("", "StudyMap", "width=900,height=700");
+    const roadmapWin = window.open("", "StudyRoadmap", "width=1000,height=800");
     roadmapWin.document.write(`
         <style>
-            body { background: #020617; color: #e5e7eb; font-family: Segoe UI, sans-serif; margin: 0; padding: 20px; }
-            .header { background: #0f172a; padding: 15px; border-radius: 12px; border: 1px solid #1e293b; margin-bottom: 20px; text-align: center; }
-            .map-container { display: flex; flex-direction: column; align-items: center; gap: 30px; padding-bottom: 50px; }
+            body { background: #020617; color: white; font-family: Segoe UI, sans-serif; padding: 30px; text-align: center; }
+            .roadmap-container { display: flex; flex-direction: column; align-items: center; gap: 40px; }
             .node { 
-                width: 300px; padding: 15px; background: #0f172a; 
-                border: 2px solid #38bdf8; border-radius: 15px; 
-                position: relative; transition: 0.3s;
+                width: 350px; padding: 20px; background: #0f172a; 
+                border: 2px solid #38bdf8; border-radius: 20px; 
+                position: relative; transition: all 0.3s;
             }
             .node.done { border-color: #22c55e; background: #064e3b; }
-            .node.active { border-color: #facc15; box-shadow: 0 0 20px rgba(250, 204, 21, 0.4); }
-            .timer-circle { 
-                width: 50px; height: 50px; border-radius: 50%; 
-                background: #1e293b; border: 3px solid #38bdf8; 
+            .node.active { border-color: #facc15; transform: scale(1.05); box-shadow: 0 0 25px #facc1544; }
+            
+            /* Circular Number/Timer Part */
+            .timer-part { 
+                width: 60px; height: 60px; border-radius: 50%; 
+                background: #1e293b; border: 4px solid #38bdf8; 
                 display: flex; align-items: center; justify-content: center; 
-                position: absolute; left: -60px; top: 50%; transform: translateY(-50%);
-                font-weight: bold; font-size: 12px;
+                position: absolute; left: -80px; top: 50%; transform: translateY(-50%);
+                font-weight: 900; font-size: 18px;
             }
-            .line { width: 3px; height: 30px; background: #1e293b; }
-            .btn-group { margin-top: 10px; display: flex; gap: 5px; }
-            .btn { flex: 1; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+            .node.active .timer-part { border-color: #facc15; animation: pulse 2s infinite; }
+            @keyframes pulse { 0% { box-shadow: 0 0 0 0px #facc15; } 70% { box-shadow: 0 0 0 15px #facc1500; } 100% { box-shadow: 0 0 0 0px #facc1500; } }
+            
+            .line { width: 4px; height: 40px; background: #1e293b; }
+            .btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; margin: 5px; }
             .btn-start { background: #38bdf8; color: #020617; }
             .btn-done { background: #22c55e; color: white; }
-            .btn-abort { background: #ef4444; color: white; }
         </style>
-        <div id="statusHeader" class="header">Loading Shift Data...</div>
-        <div id="mapBody" class="map-container"></div>
+        <div id="roadmapView" class="roadmap-container"></div>
     `);
 
-    // Real-time Sync for all 4 devices inside the window
     onValue(ref(db, `users/${currentUser.uid}`), (snapshot) => {
         const data = snapshot.val();
-        if(!data) return;
-
-        const roadmap = JSON.parse(data.ROADMAP || "[]");
-        const remainingTime = data.SHIFT_REMAINING_TIME || 0;
-        const totalShift = localStorage.getItem(key("SHIFT_TOTAL_TIME"));
-
-        // Header Update
-        roadmapWin.document.getElementById("statusHeader").innerHTML = `
-            <h2 style="margin:0; color:#38bdf8">${roadmap.length > 0 ? roadmap[0].subject : 'No Tasks'}</h2>
-            <div style="font-size:13px; color:#94a3b8; margin-top:5px;">
-                Shift Time: ${Math.floor(remainingTime/60000)}m left | 
-                Progress: ${roadmap.filter(t => t.status === 'DONE').length}/${roadmap.length}
-            </div>
-        `;
-
-        // Map Body Rendering
-        const mapBody = roadmapWin.document.getElementById("mapBody");
-        mapBody.innerHTML = "";
+        if(!data || !data.ROADMAP) return;
+        const roadmap = JSON.parse(data.ROADMAP);
         
-        roadmap.forEach((task, index) => {
-            const isDone = task.status === "DONE";
-            const isActive = task.status === "RUNNING";
+        const container = roadmapWin.document.getElementById("roadmapView");
+        container.innerHTML = `<h1 style="color:#7dd3fc; margin-bottom:40px;">${roadmap[0].subject} Roadmap</h1>`;
+
+        roadmap.forEach((task, i) => {
+            const isDone = task.status === 'DONE';
+            const isActive = task.status === 'RUNNING';
             
             const node = roadmapWin.document.createElement("div");
             node.className = `node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}`;
             
             node.innerHTML = `
-                <div class="timer-circle" style="border-color: ${isDone ? '#22c55e' : isActive ? '#facc15' : '#38bdf8'}">
-                    ${isDone ? '✔' : isActive ? '⏳' : index + 1}
+                <div class="timer-part">${isDone ? '✓' : i + 1}</div>
+                <div style="font-weight:bold; font-size:16px;">${task.topic}</div>
+                <div style="font-size:11px; color:#94a3b8; margin-top:5px;">${task.module}</div>
+                <div style="margin-top:15px;">
+                    ${!isDone ? `
+                        <button class="btn btn-start" onclick="window.opener.startRoadmapTask(${task.id})">
+                            ${isActive ? 'IN PROGRESS...' : 'START SESSION'}
+                        </button>
+                        ${isActive ? `<button class="btn btn-done" onclick="window.opener.completeRoadmapTask(${task.id})">MARK DONE</button>` : ''}
+                    ` : `<span style="color:#86efac; font-weight:bold;">COMPLETED @ ${task.doneTime}</span>`}
                 </div>
-                <div style="font-weight:bold; color: ${isDone ? '#86efac' : '#fff'}">${task.topic}</div>
-                <div style="font-size:11px; color:#94a3b8">${task.module}</div>
-                ${!isDone ? `
-                    <div class="btn-group">
-                        ${!isActive ? 
-                            `<button class="btn btn-start" onclick="window.opener.startRoadmapTask(${task.id})">START (${Math.floor(task.allocatedTime/60000)}m)</button>` : 
-                            `<button class="btn btn-done" onclick="window.opener.completeRoadmapTask(${task.id})">DONE</button>
-                             <button class="btn btn-abort" onclick="window.opener.abortRoadmapTask(${task.id})">ABORT</button>`
-                        }
-                    </div>
-                ` : `<div style="font-size:11px; color:#4ade80; margin-top:5px;">Completed: ${task.doneTime}</div>`}
             `;
-            
-            mapBody.appendChild(node);
-            if(index < roadmap.length - 1) {
-                const line = roadmapWin.document.createElement("div");
-                line.className = "line";
-                mapBody.appendChild(line);
-            }
+            container.appendChild(node);
+            if(i < roadmap.length - 1) container.innerHTML += `<div class="line"></div>`;
         });
     });
 };
 window.startRoadmapTask = async function(taskId) {
-    const snap = await get(ref(db, `users/${currentUser.uid}`));
-    let roadmap = JSON.parse(snap.val().ROADMAP);
+    const snap = await get(ref(db, `users/${currentUser.uid}/ROADMAP`));
+    let roadmap = JSON.parse(snap.val());
     
     roadmap = roadmap.map(t => {
         if(t.id === taskId) t.status = "RUNNING";
+        else if(t.status === "RUNNING") t.status = "PENDING"; // Auto-abort other running tasks
         return t;
     });
 
@@ -2874,25 +2854,41 @@ function loadTasks() {
 
     get(ref(db, `users/${currentUser.uid}/ROADMAP`)).then((snap) => {
         if(!snap.exists()) {
-            tList.innerHTML = "<div style='color:#64748b; padding:10px;'>Waiting for Admin Assignment...</div>";
+            tList.innerHTML = "<div style='color:#64748b; padding:15px; text-align:center; border:1px dashed #334155; border-radius:10px;'>Waiting for Admin to PUSH study roadmap...</div>";
             return;
         }
 
         const roadmap = JSON.parse(snap.val());
-        roadmap.forEach(t => {
+        roadmap.forEach((t, index) => {
             const container = document.createElement("div");
-            container.style.cssText = "padding:12px; border:1px solid #334155; border-radius:10px; margin-bottom:10px; background:#0f172a; display:flex; justify-content:space-between; align-items:center;";
-            
-            let statusColor = t.status === "DONE" ? "#22c55e" : t.status === "RUNNING" ? "#facc15" : "#38bdf8";
-            let timeInfo = t.allocatedTime ? `<span style="font-size:11px; color:#38bdf8; margin-left:10px;">(${(t.allocatedTime/60000).toFixed(0)}m)</span>` : "";
+            // Design to match your roadmap request
+            container.style.cssText = `
+                padding: 15px; 
+                border: 1px solid #1e293b; 
+                border-radius: 12px; 
+                margin-bottom: 12px; 
+                background: #0f172a; 
+                display: flex; 
+                justify-content: space-between; 
+                align-items: center; 
+                border-left: 4px solid ${t.status === 'DONE' ? '#22c55e' : t.status === 'RUNNING' ? '#facc15' : '#38bdf8'};
+            `;
+
+            let timeInfo = t.allocatedTime ? `<span style="color:#38bdf8; font-size:11px; margin-left:10px;">[${Math.floor(t.allocatedTime/60000)}m allocated]</span>` : "";
 
             container.innerHTML = `
-                <div style="border-left: 4px solid ${statusColor}; padding-left:12px;">
-                    <div style="font-weight:bold; color:#f8fafc; font-size:14px;">${t.topic} ${timeInfo}</div>
-                    <div style="font-size:10px; color:#94a3b8;">${t.subject} • ${t.module}</div>
+                <div style="display:flex; align-items:center; gap:15px;">
+                    <div style="font-size: 20px; font-weight: 800; color: #38bdf8; min-width: 30px;">${index + 1}</div>
+                    <div>
+                        <div style="font-weight:bold; color:#f8fafc; font-size:14px;">${t.topic} ${timeInfo}</div>
+                        <div style="font-size:11px; color:#94a3b8;">${t.subject} • ${t.module}</div>
+                    </div>
                 </div>
-                <div style="font-size:11px; font-weight:bold; color:${statusColor}">
-                    ${t.status === "DONE" ? "COMPLETED" : t.status === "RUNNING" ? "IN PROGRESS" : "PENDING"}
+                <div style="text-align:right">
+                    <span style="font-size:11px; font-weight:bold; color:${t.status === 'DONE' ? '#22c55e' : t.status === 'RUNNING' ? '#facc15' : '#64748b'}">
+                        ${t.status || 'PENDING'}
+                    </span>
+                    ${t.doneTime ? `<div style="font-size:9px; color:#4ade80; margin-top:4px;">${t.doneTime}</div>` : ""}
                 </div>
             `;
             tList.append(container);
@@ -3019,50 +3015,51 @@ window.openDayEnd = function() {
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
 window.finalDayEnd = async function() {
-    if(!confirm("CONFIRM DAY END: Syncing all 4 devices and clearing tasks.")) return;
+    if(!confirm("CONFIRM DAY END:\n\nThis will perform a hard logout on ALL 4 linked devices and save your progress.")) return;
 
     const snap = await get(ref(db, `users/${currentUser.uid}`));
-    const userData = snap.exists() ? snap.val() : {};
+    const userData = snap.val() || {};
     const roadmap = JSON.parse(userData.ROADMAP || "[]");
     
     const completed = roadmap.filter(t => t.status === "DONE");
-    const pending = roadmap.filter(t => t.status === "PENDING");
+    const pending = roadmap.filter(t => t.status !== "DONE");
 
-    // Subject Tracker Logic: Prevent cross-subject contamination
-    let groupedBySubject = {};
+    // Logic: Group by Subject to ensure data never mixes
+    let summary = {};
     completed.forEach(t => {
-        if(!groupedBySubject[t.subject]) {
-            groupedBySubject[t.subject] = { covered: [], due: [] };
-        }
-        groupedBySubject[t.subject].covered.push(t.topic);
+        if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
+        summary[t.subject].covered.push(t.topic);
     });
-    
-    // Check pending tasks to add to "uncovered" for that subject
     pending.forEach(t => {
-        if(!groupedBySubject[t.subject]) {
-            groupedBySubject[t.subject] = { covered: [], due: [] };
-        }
-        groupedBySubject[t.subject].due.push(t.topic);
+        if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
+        summary[t.subject].due.push(t.topic);
     });
 
-    // Save to Subject Progress: One row per subject
-    for (let sub in groupedBySubject) {
+    // Save to Tracker: One Subject, One Row
+    for (let sub in summary) {
         await saveAutomatedSubjectProgress(
             sub, 
-            groupedBySubject[sub].covered.join(", ") || "None", 
-            groupedBySubject[sub].due.join(", ") || "None"
+            summary[sub].covered.join(", ") || "None", 
+            summary[sub].due.join(", ") || "None"
         );
     }
 
-    // 4-Device Sync Logout
+    // 🔥 TRIGGER HARD LOGOUT ON ALL DEVICES
+    const reportHTML = localStorage.getItem("LOCKED_REPORT_VIEW") || "Session Completed Successfully";
+    
     await update(ref(db, `users/${currentUser.uid}`), { 
         ROADMAP: null, 
-        SHIFT_ACTIVE: null, 
-        forceLogoutTrigger: Date.now() 
+        SHIFT_ACTIVE: null,
+        SHIFT_REMAINING_TIME: null,
+        forceLogoutTrigger: Date.now(), // 📡 Signals other devices
+        LOCKED_REPORT_VIEW: reportHTML
     });
 
     localStorage.clear();
-    signOut(auth).then(() => location.reload());
+    sessionStorage.clear();
+    signOut(auth).then(() => {
+        location.reload(); 
+    });
 };
 // --- NEW UNLOCK FUNCTION ---
 window.dismissReportLock = function () {
