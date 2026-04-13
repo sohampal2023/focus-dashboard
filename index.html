@@ -945,82 +945,66 @@ window.startAdminListener = function() {
     const listDiv = document.getElementById("studentList");
     if (!listDiv) return;
 
-    listDiv.innerHTML = "<div style='color:#38bdf8'>⚡ Attempting Secure Connection...</div>";
+    listDiv.innerHTML = "<div style='color:#38bdf8'>⚡ Connecting to Live System...</div>";
     
-    // 🔥 FORCE PROFILE CREATION (In case Rules are looking for it)
-    if (currentUser && currentUser.email === "admin@study.com") {
-        update(ref(db, `users/${currentUser.uid}/profile`), {
-            email: "admin@study.com",
-            role: "admin",
-            lastSeen: Date.now()
-        });
-    }
-
     const usersRef = ref(db, 'users');
-
-    // Clear old listeners
-    off(usersRef);
+    off(usersRef); // Now works with the import fix
 
     onValue(usersRef, (snapshot) => {
         if (snapshot.exists()) {
             const users = snapshot.val();
             let html = "";
             
-            // Convert to array to sort if needed, but here we just loop
             Object.keys(users).forEach(uid => {
                 const u = users[uid];
-                
-                // Fallback email logic if profile path is missing
-                let email = "Inactive/Guest";
-                if (u.profile && u.profile.email) email = u.profile.email;
-                else if (u.TASKS) email = `User_${uid.substring(0,5)}`; // Fallback for existing users
-
+                let email = u.profile?.email || u.email || "Unknown User";
                 if (email === "admin@study.com") return; 
 
-                // Progress Math
-                let progress = u.stats ? Math.min(u.stats.percent, 300) : 0;
+                // Progress & UI Status
+                let progress = u.stats ? u.stats.percent : 0;
                 let color = progress >= 100 ? "#4ade80" : (progress > 40 ? "#facc15" : "#ef4444");
-                let barWidth = Math.min((progress / 300) * 100, 100); // Scale bar to 300% max
+                let barWidth = Math.min((progress / 300) * 100, 100);
+                let isLocked = u.lockout && u.lockout > Date.now();
 
+                // Build the full multi-button row
                 html += `
-                <div class="admin-row">
+                <div class="admin-row" style="grid-template-columns: 2fr 1fr 1fr 2fr 1.5fr;">
                     <div>
                         <div style="font-weight:bold; color:#fff;">${email}</div>
-                        <div style="font-size:9px; color:#64748b">${uid}</div>
+                        <div style="font-size:9px; color:#64748b">ID: ${uid.substring(0,8)}...</div>
                     </div>
+                    
                     <div style="text-align:center; color:#38bdf8; font-weight:bold;">${u.leaveBalance ?? 6} Days</div>
+                    
                     <div>
                         <div style="font-weight:bold; color:${color}">${progress}%</div>
                         <div class="prog-bar" style="background:#1e293b"><div class="prog-fill" style="width:${barWidth}%; background:${color}"></div></div>
                     </div>
+                    
                     <div style="text-align:center;">
-                        <span class="admin-badge ${u.lockout > Date.now() ? 'badge-red' : 'badge-green'}">
-                            ${u.lockout > Date.now() ? 'TERMINATED' : 'ACTIVE'}
+                        <span class="admin-badge ${isLocked ? 'badge-red' : 'badge-green'}">
+                            ${isLocked ? 'TERMINATED' : 'ACTIVE'}
                         </span>
+                        ${u.DAILY_TIMEOUTS > 0 ? `<div style="font-size:10px; color:#ef4444">Timeouts: ${u.DAILY_TIMEOUTS}</div>` : ''}
                     </div>
+
                     <div class="admin-btn-group">
-                        <button onclick="adminAssignTasks('${uid}')" style="background:#0ea5e9;">ASSIGN</button>
-                        <button onclick="openAdminModal('${uid}', '${email}')" style="background:#3b82f6;">LOGS</button>
-                        <button onclick="terminateStudent('${uid}')" style="background:#7f1d1d;">LOCK</button>
+                        <button style="background:#0ea5e9; font-weight:800;" onclick="adminAssignTasks('${uid}')">📋 ASSIGN ROADMAP</button>
+                        <button style="background:#be123c;" onclick="sendWarning('${uid}')">⚠ Warn</button>
+                        <button style="background:#3b82f6;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
+                        <button style="background:#ea580c;" onclick="terminateStudent('${uid}')">Lock / Terminate</button>
+                        <button style="background:#0891b2;" onclick="resetLeaveBalance('${uid}')">Reset Balance</button>
+                        <button style="background:#0ea5e9;" onclick="sendNotice('${uid}')">📢 Notice</button>
+                        <button style="background:#1e40af;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
+                        <button style="background:#991b1b;" onclick="clearSingleSubject('${uid}')">🗑 Delete Subject</button>
+                        ${isLocked ? `<button style="background:#22c55e;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
                     </div>
                 </div>`;
             });
-            listDiv.innerHTML = html || "<div style='color:#64748b'>No students found.</div>";
-        } else {
-            listDiv.innerHTML = "<div style='color:#facc15'>⚠ Connection established, but no users exist yet.</div>";
+            listDiv.innerHTML = html;
         }
     }, (error) => {
-        console.error("Firebase Listener Error:", error);
-        
-        if (error.message.includes("Permission denied")) {
-            listDiv.innerHTML = `
-                <div style='background:#450a0a; color:#fca5a5; padding:20px; border-radius:12px; border:1px solid #ef4444; text-align:center;'>
-                    <div style="font-size:24px; margin-bottom:10px;">🔒 Access Blocked</div>
-                    <p style="font-size:13px; margin-bottom:15px;">Firebase Rules are preventing this Admin account from viewing the student list.</p>
-                    <button onclick="location.reload()" style="background:#ef4444; color:white; width:auto; padding:8px 20px;">Force Retry Connection</button>
-                    <div style="margin-top:10px; font-family:monospace; font-size:10px; color:rgba(252,165,165,0.5)">Error: ${error.code}</div>
-                </div>`;
-        }
+        listDiv.innerHTML = `<div style="color:#ef4444; padding:20px;">Connection Error: ${error.message}</div>`;
     });
 };
 // --- ADMIN WARNING SYSTEM (STRICT CONFIRM) ---
