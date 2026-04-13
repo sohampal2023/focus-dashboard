@@ -715,7 +715,14 @@ async function handleLoginFlow() {
     try {
         document.getElementById("syncStatus").innerText = "Authenticating...";
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        currentUser = userCredential.user;
+        currentUser = userCredential.user;  
+if (currentUser.email === "admin@study.com") {
+    // This creates the folder the Rules are looking for
+    await update(ref(db, `users/${currentUser.uid}/profile`), {
+        email: "admin@study.com",
+        role: "admin"
+    });
+}
         
         // --- 🧹 HARD RESET ON LOGIN ---
         // Wipe all triggers and active shift flags to force the time prompt
