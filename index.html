@@ -2703,68 +2703,81 @@ async function updateProgressiveTiming() {
 }
   // --- NEW: ROADMAP MAP VIEW RENDERER ---
 window.openRoadmapWindow = function() {
-    const roadmapWin = window.open("", "StudyRoadmap", "width=1000,height=800");
+    const roadmapWin = window.open("", "StudyRoadmap", "width=1100,height=850");
     roadmapWin.document.write(`
         <style>
-            body { background: #020617; color: white; font-family: Segoe UI, sans-serif; padding: 30px; text-align: center; }
-            .roadmap-container { display: flex; flex-direction: column; align-items: center; gap: 40px; }
+            body { background: #020617; color: white; font-family: Segoe UI, sans-serif; padding: 40px; margin:0; }
+            .map-container { display: flex; flex-direction: column; align-items: center; gap: 0; padding-bottom: 100px; }
+            .node-wrapper { display: flex; flex-direction: column; align-items: center; width: 100%; }
+            
             .node { 
-                width: 350px; padding: 20px; background: #0f172a; 
-                border: 2px solid #38bdf8; border-radius: 20px; 
-                position: relative; transition: all 0.3s;
+                width: 400px; padding: 25px; background: #0f172a; 
+                border: 2px solid #1e293b; border-radius: 24px; 
+                position: relative; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                z-index: 2;
             }
-            .node.done { border-color: #22c55e; background: #064e3b; }
-            .node.active { border-color: #facc15; transform: scale(1.05); box-shadow: 0 0 25px #facc1544; }
+            .node.done { border-color: #22c55e; background: linear-gradient(145deg, #064e3b, #020617); }
+            .node.active { border-color: #facc15; transform: scale(1.05); box-shadow: 0 0 30px rgba(250, 204, 21, 0.2); }
             
-            /* Circular Number/Timer Part */
-            .timer-part { 
-                width: 60px; height: 60px; border-radius: 50%; 
-                background: #1e293b; border: 4px solid #38bdf8; 
+            .circle-part { 
+                width: 70px; height: 70px; border-radius: 50%; 
+                background: #1e293b; border: 5px solid #38bdf8; 
                 display: flex; align-items: center; justify-content: center; 
-                position: absolute; left: -80px; top: 50%; transform: translateY(-50%);
-                font-weight: 900; font-size: 18px;
+                position: absolute; left: -90px; top: 50%; transform: translateY(-50%);
+                font-weight: 900; font-size: 22px; color: #38bdf8;
             }
-            .node.active .timer-part { border-color: #facc15; animation: pulse 2s infinite; }
-            @keyframes pulse { 0% { box-shadow: 0 0 0 0px #facc15; } 70% { box-shadow: 0 0 0 15px #facc1500; } 100% { box-shadow: 0 0 0 0px #facc1500; } }
+            .node.done .circle-part { border-color: #22c55e; color: #22c55e; background: #064e3b; }
+            .node.active .circle-part { border-color: #facc15; color: #facc15; animation: pulse 1.5s infinite; }
             
-            .line { width: 4px; height: 40px; background: #1e293b; }
-            .btn { padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: bold; margin: 5px; }
-            .btn-start { background: #38bdf8; color: #020617; }
-            .btn-done { background: #22c55e; color: white; }
+            @keyframes pulse { 0% { box-shadow: 0 0 0 0px rgba(250, 204, 21, 0.4); } 70% { box-shadow: 0 0 0 20px rgba(250, 204, 21, 0); } 100% { box-shadow: 0 0 0 0px rgba(250, 204, 21, 0); } }
+            
+            .v-line { width: 4px; height: 60px; background: #1e293b; margin: -5px 0; z-index: 1; }
+            .btn { padding: 12px 24px; border-radius: 10px; border: none; cursor: pointer; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; }
+            .btn-start { background: #38bdf8; color: #020617; width: 100%; margin-top: 15px; }
+            .btn-done { background: #22c55e; color: white; margin-right: 10px; }
+            .btn-abort { background: #ef4444; color: white; }
         </style>
-        <div id="roadmapView" class="roadmap-container"></div>
+        <div id="mapBody" class="map-container"></div>
     `);
 
     onValue(ref(db, `users/${currentUser.uid}`), (snapshot) => {
         const data = snapshot.val();
         if(!data || !data.ROADMAP) return;
         const roadmap = JSON.parse(data.ROADMAP);
-        
-        const container = roadmapWin.document.getElementById("roadmapView");
-        container.innerHTML = `<h1 style="color:#7dd3fc; margin-bottom:40px;">${roadmap[0].subject} Roadmap</h1>`;
+        const mapBody = roadmapWin.document.getElementById("mapBody");
+        mapBody.innerHTML = `<h1 style="color:#7dd3fc; margin-bottom:60px; font-size:32px;">${roadmap[0].subject} Roadmap</h1>`;
 
         roadmap.forEach((task, i) => {
             const isDone = task.status === 'DONE';
             const isActive = task.status === 'RUNNING';
             
-            const node = roadmapWin.document.createElement("div");
-            node.className = `node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}`;
-            
-            node.innerHTML = `
-                <div class="timer-part">${isDone ? '✓' : i + 1}</div>
-                <div style="font-weight:bold; font-size:16px;">${task.topic}</div>
-                <div style="font-size:11px; color:#94a3b8; margin-top:5px;">${task.module}</div>
-                <div style="margin-top:15px;">
+            const wrapper = roadmapWin.document.createElement("div");
+            wrapper.className = "node-wrapper";
+
+            wrapper.innerHTML = `
+                <div class="node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
+                    <div class="circle-part">${isDone ? '✔' : i + 1}</div>
+                    <div style="font-weight:800; font-size:18px; color:${isDone ? '#86efac' : '#fff'}">${task.topic}</div>
+                    <div style="font-size:12px; color:#94a3b8; margin-top:6px;">${task.module}</div>
+                    
                     ${!isDone ? `
-                        <button class="btn btn-start" onclick="window.opener.startRoadmapTask(${task.id})">
-                            ${isActive ? 'IN PROGRESS...' : 'START SESSION'}
-                        </button>
-                        ${isActive ? `<button class="btn btn-done" onclick="window.opener.completeRoadmapTask(${task.id})">MARK DONE</button>` : ''}
-                    ` : `<span style="color:#86efac; font-weight:bold;">COMPLETED @ ${task.doneTime}</span>`}
+                        ${!isActive ? 
+                            `<button class="btn btn-start" onclick="window.opener.startRoadmapTask(${task.id})">START TOPIC (${Math.floor(task.allocatedTime/60000)}m)</button>` : 
+                            `<div style="margin-top:15px; display:flex;">
+                                <button class="btn btn-done" onclick="window.opener.completeRoadmapTask(${task.id})">DONE</button>
+                                <button class="btn btn-abort" onclick="window.opener.abortRoadmapTask(${task.id})">ABORT</button>
+                             </div>`
+                        }
+                    ` : `<div style="color:#4ade80; font-size:12px; margin-top:10px; font-weight:bold;">Completed at ${task.doneTime}</div>`}
                 </div>
             `;
-            container.appendChild(node);
-            if(i < roadmap.length - 1) container.innerHTML += `<div class="line"></div>`;
+            
+            mapBody.appendChild(wrapper);
+            if(i < roadmap.length - 1) {
+                const line = roadmapWin.document.createElement("div");
+                line.className = "v-line";
+                mapBody.appendChild(line);
+            }
         });
     });
 };
@@ -2792,40 +2805,40 @@ window.abortRoadmapTask = async function(taskId) {
 
     await update(ref(db, `users/${currentUser.uid}`), { ROADMAP: JSON.stringify(roadmap) });
 };
-
 window.completeRoadmapTask = async function(taskId) {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
     const data = snap.val();
     let roadmap = JSON.parse(data.ROADMAP);
     let shiftRemaining = data.SHIFT_REMAINING_TIME;
 
-    const taskIndex = roadmap.findIndex(t => t.id === taskId);
-    if(taskIndex === -1) return;
+    const idx = roadmap.findIndex(t => t.id === taskId);
+    if(idx === -1) return;
 
-    // 1. Mark as Done
-    roadmap[taskIndex].status = "DONE";
-    roadmap[taskIndex].doneTime = new Date().toLocaleTimeString();
+    // 1. Mark Completion
+    roadmap[idx].status = "DONE";
+    roadmap[idx].doneTime = new Date().toLocaleTimeString();
     
-    // 2. Adjust Remaining Shift Time (Example: subtract the allocated chunk)
-    shiftRemaining = Math.max(0, shiftRemaining - roadmap[taskIndex].allocatedTime);
+    // 2. Subtract the time consumed for this task from total shift
+    // Logic: Remaining Shift = Previous Remaining - This Task's Allocated Time
+    shiftRemaining = Math.max(0, shiftRemaining - (roadmap[idx].allocatedTime || 0));
 
-    // 3. Recalculate Time for Remaining Tasks
-    const pendingTasks = roadmap.filter(t => t.status === "PENDING");
-    if(pendingTasks.length > 0) {
-        const newChunk = Math.floor(shiftRemaining / pendingTasks.length);
+    // 3. Recalculate Logic: Divide what's left of the 2-hour shift by remaining topics
+    const pending = roadmap.filter(t => t.status === "PENDING");
+    if(pending.length > 0) {
+        const newChunk = Math.floor(shiftRemaining / pending.length);
         roadmap = roadmap.map(t => {
             if(t.status === "PENDING") t.allocatedTime = newChunk;
             return t;
         });
     }
 
-    // 4. Sync All
+    // 4. Sync Everything to Firebase
     await update(ref(db, `users/${currentUser.uid}`), { 
         ROADMAP: JSON.stringify(roadmap),
         SHIFT_REMAINING_TIME: shiftRemaining
     });
-    
-    updateProgress(); // Update dashboard speedometer
+
+    updateProgress(); // Sync the speedometer needle
 };
 function renderMapNodes(win, roadmap) {
     let container = win.document.getElementById("mapContainer");
@@ -2854,43 +2867,52 @@ function loadTasks() {
 
     get(ref(db, `users/${currentUser.uid}/ROADMAP`)).then((snap) => {
         if(!snap.exists()) {
-            tList.innerHTML = "<div style='color:#64748b; padding:15px; text-align:center; border:1px dashed #334155; border-radius:10px;'>Waiting for Admin to PUSH study roadmap...</div>";
+            tList.innerHTML = "<div style='color:#64748b; padding:15px; text-align:center; border:1px dashed #334155; border-radius:10px;'>Waiting for Admin to Assign Roadmap...</div>";
             return;
         }
 
         const roadmap = JSON.parse(snap.val());
-        roadmap.forEach((t, index) => {
-            const container = document.createElement("div");
-            // Design to match your roadmap request
-            container.style.cssText = `
-                padding: 15px; 
-                border: 1px solid #1e293b; 
-                border-radius: 12px; 
-                margin-bottom: 12px; 
-                background: #0f172a; 
-                display: flex; 
-                justify-content: space-between; 
-                align-items: center; 
-                border-left: 4px solid ${t.status === 'DONE' ? '#22c55e' : t.status === 'RUNNING' ? '#facc15' : '#38bdf8'};
-            `;
+        
+        // Group by Subject and Module to create "Subject Cards"
+        let groups = {};
+        roadmap.forEach(t => {
+            const key = t.subject + "|" + t.module;
+            if(!groups[key]) groups[key] = [];
+            groups[key].push(t);
+        });
 
-            let timeInfo = t.allocatedTime ? `<span style="color:#38bdf8; font-size:11px; margin-left:10px;">[${Math.floor(t.allocatedTime/60000)}m allocated]</span>` : "";
+        Object.keys(groups).forEach(key => {
+            const parts = key.split("|");
+            const subject = parts[0];
+            const module = parts[1];
+            const tasksInGroup = groups[key];
+            const doneCount = tasksInGroup.filter(t => t.status === 'DONE').length;
+
+            const container = document.createElement("div");
+            container.style.cssText = `
+                padding: 15px; border: 1px solid #334155; border-radius: 12px; 
+                margin-bottom: 12px; background: #0f172a; cursor: pointer;
+                transition: 0.3s; border-left: 5px solid #38bdf8;
+            `;
+            
+            container.onclick = () => openRoadmapWindow(); // Opens the visual map window
 
             container.innerHTML = `
-                <div style="display:flex; align-items:center; gap:15px;">
-                    <div style="font-size: 20px; font-weight: 800; color: #38bdf8; min-width: 30px;">${index + 1}</div>
+                <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <div style="font-weight:bold; color:#f8fafc; font-size:14px;">${t.topic} ${timeInfo}</div>
-                        <div style="font-size:11px; color:#94a3b8;">${t.subject} • ${t.module}</div>
+                        <div style="font-weight:bold; color:#7dd3fc; font-size:16px;">${subject}</div>
+                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">${module}</div>
+                    </div>
+                    <div style="text-align:right">
+                        <div style="font-size:11px; color:#38bdf8; font-weight:bold;">${doneCount}/${tasksInGroup.length} COMPLETED</div>
+                        <div style="font-size:10px; color:#64748b; margin-top:4px;">Click to View Roadmap →</div>
                     </div>
                 </div>
-                <div style="text-align:right">
-                    <span style="font-size:11px; font-weight:bold; color:${t.status === 'DONE' ? '#22c55e' : t.status === 'RUNNING' ? '#facc15' : '#64748b'}">
-                        ${t.status || 'PENDING'}
-                    </span>
-                    ${t.doneTime ? `<div style="font-size:9px; color:#4ade80; margin-top:4px;">${t.doneTime}</div>` : ""}
-                </div>
             `;
+            
+            container.onmouseover = () => container.style.borderColor = "#38bdf8";
+            container.onmouseout = () => container.style.borderColor = "#334155";
+            
             tList.append(container);
         });
     });
