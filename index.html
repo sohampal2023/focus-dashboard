@@ -1919,7 +1919,35 @@ onValue(ref(db, `users/${currentUser.uid}/successAlert`), (snap) => {
         location.reload(); 
         return; 
     }
-
+// --- ⌚ TIME EXHAUSTION MONITOR ---
+// This listens to the DB and triggers a popup when time runs out
+onValue(ref(db, `users/${currentUser.uid}/SHIFT_REMAINING_TIME`), async (snap) => {
+    const remaining = snap.val();
+    
+    // If remaining time hits 0 or less
+    if (remaining !== null && remaining <= 0 && (localStorage.getItem(key("SHIFT_ACTIVE")) === "true")) {
+        clearInterval(idleTimer); // Stop the watchdog
+        
+        const extraHours = prompt("⌚ TIME EXHAUSTED!\nEnter EXTRA HOURS to continue session:", "1");
+        
+        if (extraHours && !isNaN(extraHours)) {
+            const extraMillis = parseFloat(extraHours) * 60 * 60 * 1000;
+            const currentTotal = (await get(ref(db, `users/${currentUser.uid}/SHIFT_TOTAL_TIME`))).val() || 0;
+            
+            await update(ref(db, `users/${currentUser.uid}`), {
+                SHIFT_TOTAL_TIME: currentTotal + extraMillis,
+                SHIFT_REMAINING_TIME: extraMillis,
+                SHIFT_START_TS: Date.now() // Offset start time to reset the consumed math
+            });
+            
+            alert("Extra time added. System Resuming...");
+            location.reload();
+        } else {
+            alert("No time added. Opening Day End...");
+            openDayEnd(); 
+        }
+    }
+});
     loadNotices();
     checkLeaveStatus(serverData);
     startIdle(1800);
@@ -2673,17 +2701,24 @@ window.assignRoadmapTasks = async function(uid) {
     }
 };
 window.initializeShift = async function() {
-    const snap = await get(ref(db, `users/${currentUser.uid}/SHIFT_ACTIVE`));
-    
-    if(snap.exists() && snap.val() === true) {
-        // ✅ DATA EXISTS: Just log it and proceed to dashboard
-        console.log("Resuming active session from database...");
-        localStorage.setItem(key("SHIFT_ACTIVE"), "true");
-        return; 
+    const snap = await get(ref(db, `users/${currentUser.uid}`));
+    const data = snap.val() || {};
+
+    // 1. If a shift is already active in the DB
+    if (data.SHIFT_ACTIVE === true) {
+        const startNew = confirm("You have an active session. Start a NEW DAY?\n(Cancel to continue previous session)");
+        
+        if (!startNew) {
+            // ✅ CONTINUE PREVIOUS: Do nothing, just enter the dashboard
+            console.log("Restoring previous session timings...");
+            localStorage.setItem(key("SHIFT_ACTIVE"), "true");
+            return; 
+        }
+        // If they clicked OK, we fall through to the New Day logic below
     }
 
-    // 🆕 NEW DAY: Only if SHIFT_ACTIVE is missing
-    const totalHours = prompt("ENTER SHIFT HOURS FOR TODAY:", "2");
+    // 2. NEW DAY LOGIC (Only if fresh start or confirmed "Yes")
+    const totalHours = prompt("NEW DAY: Enter total shift for today (Hours):", "2");
     if(!totalHours || isNaN(totalHours)) {
         signOut(auth).then(() => location.reload());
         return;
@@ -2695,7 +2730,8 @@ window.initializeShift = async function() {
         SHIFT_REMAINING_TIME: totalMillis,
         SHIFT_ACTIVE: true,
         SHIFT_START_TS: Date.now(),
-        TIME_CONSUMED: 0
+        TIME_CONSUMED: 0,
+        LOCKED_REPORT_VIEW: null // Clear old report locks
     });
     
     localStorage.setItem(key("SHIFT_ACTIVE"), "true");
