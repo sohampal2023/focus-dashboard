@@ -990,6 +990,11 @@ window.startAdminListener = function() {
                     </div>
 
                     <div class="admin-btn-group">
+                    <div style="width:100%; display:flex; gap:5px; margin-bottom:5px;">
+        <input id="shift_hrs_${uid}" type="number" step="0.5" placeholder="Hrs" 
+               style="width:50px; background:#020617; border:1px solid #334155; color:white; font-size:11px; padding:2px; border-radius:4px;">
+        <button style="background:#0ea5e9; font-size:9px; padding:4px;" onclick="adminSetShiftTime('${uid}')">SET TIME</button>
+    </div>
                         <button style="background:#0ea5e9; font-weight:800;" onclick="adminAssignTasks('${uid}')">📋 ASSIGN ROADMAP</button>
                         <button style="background:#be123c;" onclick="sendWarning('${uid}')">⚠ Warn</button>
                         <button style="background:#3b82f6;" onclick="openAdminModal('${uid}', '${email}')">View Logs</button>
@@ -998,6 +1003,7 @@ window.startAdminListener = function() {
                         <button style="background:#0ea5e9;" onclick="sendNotice('${uid}')">📢 Notice</button>
                         <button style="background:#1e40af;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
                         <button style="background:#991b1b;" onclick="clearSingleSubject('${uid}')">🗑 Delete Subject</button>
+                        
                         ${isLocked ? `<button style="background:#22c55e;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
                     </div>
                 </div>`;
@@ -1052,7 +1058,33 @@ window.sendNotice = async function (uid) {
 
   alert("Notice published successfully.");
 };
+window.adminSetShiftTime = async function(uid) {
+    const hrsInput = document.getElementById(`shift_hrs_${uid}`);
+    const hrs = hrsInput.value;
 
+    if (!hrs || isNaN(hrs) || hrs <= 0) {
+        alert("Please enter a valid number of hours.");
+        return;
+    }
+
+    const totalMillis = parseFloat(hrs) * 60 * 60 * 1000;
+
+    if (!confirm(`Set study time to ${hrs} hours for this student? This will activate their dashboard.`)) return;
+
+    try {
+        await update(ref(db, `users/${uid}`), {
+            SHIFT_TOTAL_TIME: totalMillis,
+            SHIFT_REMAINING_TIME: totalMillis,
+            SHIFT_ACTIVE: true,
+            SHIFT_START_TS: Date.now(),
+            TIME_CONSUMED: 0
+        });
+        alert("✅ Time set! Student shift is now LIVE.");
+        hrsInput.value = ""; // Clear input
+    } catch (e) {
+        alert("Error: " + e.message);
+    }
+};
 // --- NEW ADMIN FUNCTION: CLEAR SUBJECT PROGRESS ---
 window.clearSubjectProgress = async function(uid) {
   if (!isAdmin()) return;
@@ -2730,40 +2762,31 @@ window.initializeShift = async function() {
     const snap = await get(userRef);
     const data = snap.val() || {};
 
+    // Check if you (Admin) have activated the shift from your dashboard
     if (data.SHIFT_ACTIVE === true) {
-        const startNew = confirm("You have an active session.\n\nClick OK to start a NEW DAY (Wipes previous timers).\nClick CANCEL to continue PREVIOUS session (Keeps all data).");
+        console.log("Shift is active. Loading timers...");
+        localStorage.setItem(key("SHIFT_ACTIVE"), "true");
         
-        if (!startNew) {
-            console.log("User chose to continue. Database remains untouched.");
-            localStorage.setItem(key("SHIFT_ACTIVE"), "true");
-            return; 
+        // Sync the goal for the speedometer calculation
+        const roadmap = JSON.parse(data.ROADMAP || "[]");
+        if (roadmap.length > 0) {
+            localStorage.setItem(key("INITIAL_SHIFT_GOAL"), roadmap.length);
+        }
+
+        // Fix timers if you added work while they were away
+        await window.recalculateAllocatedTime();
+    } else {
+        // Silent waiting mode
+        localStorage.removeItem(key("SHIFT_ACTIVE"));
+        const taskBox = document.getElementById("taskList");
+        if (taskBox) {
+            taskBox.innerHTML = `
+                <div style="padding:40px; text-align:center; border:1px dashed #334155; border-radius:15px;">
+                    <h3 style="color:#38bdf8">Waiting for Today's Schedule</h3>
+                    <p style="color:#64748b; font-size:12px;">Admin has not activated your study shift yet. Please check back soon.</p>
+                </div>`;
         }
     }
-
-    const totalHours = prompt("NEW DAY SETUP: Enter total shift for today (Hours):", "2");
-    
-    if(!totalHours || isNaN(totalHours)) {
-        signOut(auth).then(() => {
-            location.reload();
-        });
-        return;
-    }
-
-    const totalMillis = parseFloat(totalHours) * 60 * 60 * 1000;
-
-    await update(userRef, {
-        SHIFT_TOTAL_TIME: totalMillis,
-        SHIFT_REMAINING_TIME: totalMillis,
-        SHIFT_ACTIVE: true,
-        SHIFT_START_TS: Date.now(),
-        TIME_CONSUMED: 0,
-        LOCKED_REPORT_VIEW: null,
-        INITIAL_SHIFT_GOAL: 0 
-    });
-    
-    localStorage.setItem(key("SHIFT_ACTIVE"), "true");
-    await window.recalculateAllocatedTime();
-    location.reload();
 };
 
 window.bioBreak = async function() {
