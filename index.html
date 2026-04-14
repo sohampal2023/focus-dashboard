@@ -2463,30 +2463,35 @@ function autoLogout() {
   setTimeout(() => location.reload(), 500);
 }
 
-function bioBreak() {
-  clearInterval(idleTimer);
+window.bioBreak = async function() {
+    // 1. Stop the watchdog
+    if(idleTimer) clearInterval(idleTimer);
 
-  const idleBox = document.getElementById("idleBox");
-  if (idleBox) idleBox.classList.add("hidden");
+    // 2. Hide the UI components
+    const idleBox = document.getElementById("idleBox");
+    if (idleBox) idleBox.classList.add("hidden");
+    
+    // 3. Mark the log as "Bio Break" without logging out
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    if (logs.length) {
+        const last = logs[logs.length - 1];
+        last.reason = "Bio Break / Pause";
+        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
 
-  localStorage.setItem(key("IDLE_STRIKES"), "0");
+    // 4. Show a "Resume" Overlay instead of logging out
+    const overlay = document.createElement("div");
+    overlay.id = "bioOverlay";
+    overlay.style.cssText = "position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(2,6,23,0.98); z-index:9999; display:flex; flex-direction:column; justify-content:center; align-items:center;";
+    overlay.innerHTML = `
+        <h2 style="color:#7dd3fc;">☕ BIO BREAK ACTIVE</h2>
+        <p style="color:#94a3b8;">Watchdog is paused. Timers are preserved.</p>
+        <button onclick="resumeFromBio()" style="width:200px; background:#0ea5e9; padding:15px; border-radius:12px; font-weight:bold; color:white; border:none; cursor:pointer;">RESUME STUDYING</button>
+    `;
+    document.body.appendChild(overlay);
 
-  const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-  if (logs.length) {
-    const last = logs[logs.length - 1];
-    last.logout = now();
-    last.logoutTS = Date.now();
-    last.reason = "Pending";
-    localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-  }
-
-  uploadData();
-
-  signOut(auth).then(() => location.reload());
-}
-
-
-
+    uploadData();
+};
 // --- MOCK TEST LOGIC ---
 function startMockTestSetup() {
   const name = prompt("Enter Test Name:");
@@ -2702,35 +2707,29 @@ window.assignRoadmapTasks = async function(uid) {
     }
 };
 window.initializeShift = async function() {
-    // 1. Get the current database state first
     const userRef = ref(db, `users/${currentUser.uid}`);
     const snap = await get(userRef);
     const data = snap.val() || {};
 
-    // 🚩 CHOICE PHASE: We do NOT touch the database here.
     if (data.SHIFT_ACTIVE === true) {
-        // We wait for your click. The rest of the code is "paused".
-        const startNew = confirm("NEW DAY CHECK:\n\nOK = Start Fresh (Wipe previous progress)\nCANCEL = Continue Previous Session (Keep everything)");
+        const startNew = confirm("You have an active session.\n\nClick OK to start a NEW DAY (Wipes previous timers).\nClick CANCEL to continue PREVIOUS session (Keeps all data).");
         
         if (!startNew) {
-            // 🛑 STOP: You clicked Cancel. 
-            // We exit the function immediately. No resets happen.
-            console.log("Session Restored. Timers and tasks preserved.");
+            console.log("User chose to continue. Database remains untouched.");
             localStorage.setItem(key("SHIFT_ACTIVE"), "true");
             return; 
         }
     }
 
-    // 🚩 INPUT PHASE: Only reached if it's a fresh login or you clicked "OK"
-    const totalHours = prompt("NEW DAY SETUP: Enter shift hours:", "2");
+    const totalHours = prompt("NEW DAY SETUP: Enter total shift for today (Hours):", "2");
     
     if(!totalHours || isNaN(totalHours)) {
-        // If you cancel the time prompt, we log out to keep data safe
-        signOut(auth).then(() => location.reload());
+        signOut(auth).then(() => {
+            location.reload();
+        });
         return;
     }
 
-    // 🚩 RESET PHASE: Only reached after BOTH prompts are finished.
     const totalMillis = parseFloat(totalHours) * 60 * 60 * 1000;
 
     await update(userRef, {
@@ -2744,34 +2743,86 @@ window.initializeShift = async function() {
     });
     
     localStorage.setItem(key("SHIFT_ACTIVE"), "true");
-    
-    // We only recalculate timers for a NEW day
     await window.recalculateAllocatedTime();
     location.reload();
 };
-async function updateProgressiveTiming() {
-    const snap = await get(ref(db, `users/${currentUser.uid}/ROADMAP`));
-    if(!snap.exists()) return;
 
-    let roadmap = JSON.parse(snap.val());
-    let remainingTasks = roadmap.filter(t => t.status === "PENDING").length;
-    let timeLeft = parseFloat(localStorage.getItem(key("SHIFT_REMAINING_TIME")));
-
-    if(remainingTasks > 0) {
-        let perTask = Math.floor(timeLeft / remainingTasks);
-        roadmap = roadmap.map(t => {
-            if(t.status === "PENDING") t.timeAllocated = perTask;
-            return t;
-        });
-        
-        // Sync to Firebase (All 4 devices will reflect this)
-        await update(ref(db, `users/${currentUser.uid}`), { 
-            ROADMAP: JSON.stringify(roadmap),
-            SHIFT_REMAINING_TIME: timeLeft 
-        });
+window.bioBreak = async function() {
+    if(idleTimer) {
+        clearInterval(idleTimer);
     }
-}
-  // --- NEW: ROADMAP MAP VIEW RENDERER ---
+
+    const idleBox = document.getElementById("idleBox");
+    if (idleBox) {
+        idleBox.classList.add("hidden");
+    }
+    
+    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
+    if (logs.length) {
+        const last = logs[logs.length - 1];
+        last.reason = "Bio Break - Timers Preserved";
+        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+    }
+
+    const overlay = document.createElement("div");
+    overlay.id = "bioOverlay";
+    overlay.style.position = "fixed";
+    overlay.style.top = "0";
+    overlay.style.left = "0";
+    overlay.style.width = "100%";
+    overlay.style.height = "100%";
+    overlay.style.background = "rgba(2,6,23,0.98)";
+    overlay.style.zIndex = "9999";
+    overlay.style.display = "flex";
+    overlay.style.flexDirection = "column";
+    overlay.style.justifyContent = "center";
+    overlay.style.alignItems = "center";
+    
+    overlay.innerHTML = `
+        <h2 style="color:#7dd3fc; margin-bottom:10px;">☕ BIO BREAK ACTIVE</h2>
+        <p style="color:#94a3b8; margin-bottom:20px;">Watchdog is paused. Your session data is safe.</p>
+        <button onclick="resumeFromBio()" style="width:220px; background:#0ea5e9; padding:15px; border-radius:12px; font-weight:bold; color:white; border:none; cursor:pointer;">RESUME STUDYING</button>
+    `;
+    document.body.appendChild(overlay);
+
+    uploadData();
+};
+
+window.resumeFromBio = function() {
+    const overlay = document.getElementById("bioOverlay");
+    if(overlay) {
+        overlay.remove();
+    }
+    
+    startIdle(1800);
+    
+    const idleBox = document.getElementById("idleBox");
+    if (idleBox) {
+        idleBox.classList.remove("hidden");
+    }
+};
+
+window.startRoadmapTask = async function(taskId) {
+    const snap = await get(ref(db, `users/${currentUser.uid}`));
+    const data = snap.val();
+    let roadmap = JSON.parse(data.ROADMAP || "[]");
+    
+    if(roadmap.some(t => t.status === "RUNNING")) {
+        alert("A task is already in progress!");
+        return;
+    }
+
+    roadmap = roadmap.map(t => {
+        if(t.id === taskId) {
+            t.status = "RUNNING";
+            t.targetEndTime = Date.now() + t.allocatedTime; 
+        }
+        return t;
+    });
+
+    await update(ref(db, `users/${currentUser.uid}`), { ROADMAP: JSON.stringify(roadmap) });
+};
+
 window.openRoadmapWindow = function(subjectFilter) {
     const roadmapWin = window.open("", "StudyMap", "width=1100,height=850");
     roadmapWin.document.write(`
@@ -2823,16 +2874,12 @@ window.openRoadmapWindow = function(subjectFilter) {
     onValue(ref(db, `users/${currentUser.uid}`), (snap) => {
         const data = snap.val();
         if(!data || !data.ROADMAP) return;
-        
         const roadmap = JSON.parse(data.ROADMAP || "[]");
         const filteredTasks = roadmap.filter(t => `${t.subject} - ${t.module}` === subjectFilter);
-        
-        // ✅ CRITICAL FIX: Find activeNode inside the listener scope every time it updates
         const activeNode = filteredTasks.find(t => t.status === 'RUNNING');
-
-        // Header Sync
         const consumed = data.TIME_CONSUMED || 0;
         const remaining = data.SHIFT_REMAINING_TIME || 0;
+        
         roadmapWin.document.getElementById("headConsumed").innerText = Math.floor(consumed/60000) + "m";
         roadmapWin.document.getElementById("headRemaining").innerText = Math.floor(remaining/60000) + "m";
         roadmapWin.document.getElementById("subjectTitle").innerText = subjectFilter;
@@ -2843,7 +2890,6 @@ window.openRoadmapWindow = function(subjectFilter) {
         filteredTasks.forEach((task, i) => {
             const isDone = task.status === 'DONE';
             const isActive = task.status === 'RUNNING';
-            
             const nodeWrap = roadmapWin.document.createElement("div");
             nodeWrap.className = "node-wrapper";
             nodeWrap.innerHTML = `
@@ -2865,7 +2911,6 @@ window.openRoadmapWindow = function(subjectFilter) {
             mapBody.appendChild(nodeWrap);
         });
 
-        // ✅ TIMER ENGINE: Only runs if there is an activeNode and targetEndTime
         if (activeNode && activeNode.targetEndTime) {
             if (roadmapInterval) clearInterval(roadmapInterval);
             roadmapInterval = setInterval(() => {
@@ -2892,27 +2937,29 @@ window.openRoadmapWindow = function(subjectFilter) {
         }
     });
 };
-window.startRoadmapTask = async function(taskId) {
-    const snap = await get(ref(db, `users/${currentUser.uid}`));
-    let roadmap = JSON.parse(snap.val().ROADMAP);
-    
-    if(roadmap.some(t => t.status === "RUNNING")) {
-        alert("A task is already in progress!");
-        return;
+async function updateProgressiveTiming() {
+    const snap = await get(ref(db, `users/${currentUser.uid}/ROADMAP`));
+    if(!snap.exists()) return;
+
+    let roadmap = JSON.parse(snap.val());
+    let remainingTasks = roadmap.filter(t => t.status === "PENDING").length;
+    let timeLeft = parseFloat(localStorage.getItem(key("SHIFT_REMAINING_TIME")));
+
+    if(remainingTasks > 0) {
+        let perTask = Math.floor(timeLeft / remainingTasks);
+        roadmap = roadmap.map(t => {
+            if(t.status === "PENDING") t.timeAllocated = perTask;
+            return t;
+        });
+        
+        // Sync to Firebase (All 4 devices will reflect this)
+        await update(ref(db, `users/${currentUser.uid}`), { 
+            ROADMAP: JSON.stringify(roadmap),
+            SHIFT_REMAINING_TIME: timeLeft 
+        });
     }
+}
 
-    roadmap = roadmap.map(t => {
-        if(t.id === taskId) {
-            t.status = "RUNNING";
-            // 🎯 Fixed Calculation: Current Time + Allocated Minutes
-            // This 'targetEndTime' is now an absolute point in future history
-            t.targetEndTime = Date.now() + t.allocatedTime; 
-        }
-        return t;
-    });
-
-    await update(ref(db, `users/${currentUser.uid}`), { ROADMAP: JSON.stringify(roadmap) });
-};
 window.abortRoadmapTask = async function(taskId) {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
     let roadmap = JSON.parse(snap.val().ROADMAP);
@@ -3743,6 +3790,7 @@ window.initAdminSubjectDropdown = initAdminSubjectDropdown;
 window.listenForGlobalRequests = listenForGlobalRequests;
 window.handleExtraRequest = handleExtraRequest;
   window.startAdminListener = startAdminListener;
+  window.resumeFromBio = resumeFromBio;
   </script>
 
 </body>
