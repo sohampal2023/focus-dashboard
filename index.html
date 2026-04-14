@@ -2701,37 +2701,43 @@ window.assignRoadmapTasks = async function(uid) {
     }
 };
 window.initializeShift = async function() {
-    const snap = await get(ref(db, `users/${currentUser.uid}`));
+    const userRef = ref(db, `users/${currentUser.uid}`);
+    const snap = await get(userRef);
     const data = snap.val() || {};
 
-    // 1. If a shift is already active in the DB
+    // 1. CHECK FOR EXISTING SESSION FIRST
     if (data.SHIFT_ACTIVE === true) {
-        const startNew = confirm("You have an active session. Start a NEW DAY?\n(Cancel to continue previous session)");
+        const startNew = confirm("You have an active session.\n\nClick OK to start a NEW DAY (Resets Timers).\nClick CANCEL to continue PREVIOUS session.");
         
         if (!startNew) {
-            // ✅ CONTINUE PREVIOUS: Do nothing, just enter the dashboard
-            console.log("Restoring previous session timings...");
+            // 🛑 STOP: User chose to continue. 
+            // We exit here immediately WITHOUT updating or deleting any data.
+            console.log("Restoring session. Database remains untouched.");
             localStorage.setItem(key("SHIFT_ACTIVE"), "true");
             return; 
         }
-        // If they clicked OK, we fall through to the New Day logic below
     }
 
-    // 2. NEW DAY LOGIC (Only if fresh start or confirmed "Yes")
+    // 2. NEW DAY SETUP (Only runs if NO shift exists OR user clicked OK)
     const totalHours = prompt("NEW DAY: Enter total shift for today (Hours):", "2");
+    
     if(!totalHours || isNaN(totalHours)) {
+        // If they cancel the prompt, log them out so data isn't corrupted
         signOut(auth).then(() => location.reload());
         return;
     }
 
     const totalMillis = parseFloat(totalHours) * 60 * 60 * 1000;
-    await update(ref(db, `users/${currentUser.uid}`), {
+
+    // 🛠️ DATA RESET (Only happens here)
+    await update(userRef, {
         SHIFT_TOTAL_TIME: totalMillis,
         SHIFT_REMAINING_TIME: totalMillis,
         SHIFT_ACTIVE: true,
         SHIFT_START_TS: Date.now(),
         TIME_CONSUMED: 0,
-        LOCKED_REPORT_VIEW: null // Clear old report locks
+        LOCKED_REPORT_VIEW: null,
+        INITIAL_SHIFT_GOAL: 0 
     });
     
     localStorage.setItem(key("SHIFT_ACTIVE"), "true");
