@@ -2823,80 +2823,84 @@ window.openRoadmapWindow = function(subjectFilter) {
 
     let roadmapInterval = null;
 
-    onValue(ref(db, `users/${currentUser.uid}`), (snap) => {
-        const data = snap.val();
-        if(!data || !data.ROADMAP) return;
-        const roadmap = JSON.parse(data.ROADMAP || "[]");
-        const filteredTasks = roadmap.filter(t => `${t.subject} - ${t.module}` === subjectFilter);
+onValue(ref(db, `users/${currentUser.uid}`), (snap) => {
+    const data = snap.val();
+    if(!data || !data.ROADMAP) return;
+    
+    const roadmap = JSON.parse(data.ROADMAP || "[]");
+    const filteredTasks = roadmap.filter(t => `${t.subject} - ${t.module}` === subjectFilter);
+    
+    // --- 🔍 SAFETY FIX: Find the currently running task in this roadmap ---
+    const activeNode = filteredTasks.find(t => t.status === 'RUNNING');
+
+    // Header Sync
+    const consumed = data.TIME_CONSUMED || 0;
+    const remaining = data.SHIFT_REMAINING_TIME || 0;
+    roadmapWin.document.getElementById("headConsumed").innerText = Math.floor(consumed/60000) + "m";
+    roadmapWin.document.getElementById("headRemaining").innerText = Math.floor(remaining/60000) + "m";
+    roadmapWin.document.getElementById("subjectTitle").innerText = subjectFilter;
+
+    const mapBody = roadmapWin.document.getElementById("mapBody");
+    mapBody.innerHTML = "";
+
+    filteredTasks.forEach((task, i) => {
+        const isDone = task.status === 'DONE';
+        const isActive = task.status === 'RUNNING';
         
-        // Header Sync
-        const consumed = data.TIME_CONSUMED || 0;
-        const remaining = data.SHIFT_REMAINING_TIME || 0;
-        roadmapWin.document.getElementById("headConsumed").innerText = Math.floor(consumed/60000) + "m";
-        roadmapWin.document.getElementById("headRemaining").innerText = Math.floor(remaining/60000) + "m";
-        roadmapWin.document.getElementById("subjectTitle").innerText = subjectFilter;
-
-        const mapBody = roadmapWin.document.getElementById("mapBody");
-        mapBody.innerHTML = "";
-
-        filteredTasks.forEach((task, i) => {
-            const isDone = task.status === 'DONE';
-            const isActive = task.status === 'RUNNING';
-            
-            const nodeWrap = roadmapWin.document.createElement("div");
-            nodeWrap.className = "node-wrapper";
-            nodeWrap.innerHTML = `
-                <div class="node-box ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
-                    <div class="node-circle">${isDone ? '✔' : i + 1}</div>
-                    <div style="font-weight:800; font-size:22px; margin-bottom:5px;">${task.topic}</div>
-                    
-                    ${isActive ? `<span id="activeTimer" class="timer-text">--:--</span>` : `<div style="font-size:12px; color:#38bdf8;">Allocated: ${Math.floor(task.allocatedTime/60000)}m</div>`}
-                    
-                    <div style="display:flex; margin-top:15px;">
-                        ${!isDone ? (
-                            !isActive ? 
-                            `<button class="btn-action btn-start" onclick="window.opener.startRoadmapTask(${task.id})">START SESSION</button>` :
-                            `
-                             <button class="btn-action btn-finish" onclick="window.opener.completeRoadmapTask(${task.id})">FINISH</button>
-                             <button class="btn-action btn-abort" onclick="window.opener.abortRoadmapTask(${task.id})">ABORT</button>
-                            `
-                        ) : `<div style="color:#4ade80; font-weight:bold; margin-top:10px;">COMPLETED @ ${task.doneTime}</div>`}
-                    </div>
+        const nodeWrap = roadmapWin.document.createElement("div");
+        nodeWrap.className = "node-wrapper";
+        nodeWrap.innerHTML = `
+            <div class="node-box ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
+                <div class="node-circle">${isDone ? '✔' : i + 1}</div>
+                <div style="font-weight:800; font-size:22px; margin-bottom:5px;">${task.topic}</div>
+                
+                ${isActive ? `<span id="activeTimer" class="timer-text">--:--</span>` : `<div style="font-size:12px; color:#38bdf8;">Allocated: ${Math.floor(task.allocatedTime/60000)}m</div>`}
+                
+                <div style="display:flex; margin-top:15px;">
+                    ${!isDone ? (
+                        !isActive ? 
+                        `<button class="btn-action btn-start" onclick="window.opener.startRoadmapTask(${task.id})">START SESSION</button>` :
+                        `
+                         <button class="btn-action btn-finish" onclick="window.opener.completeRoadmapTask(${task.id})">FINISH</button>
+                         <button class="btn-action btn-abort" onclick="window.opener.abortRoadmapTask(${task.id})">ABORT</button>
+                        `
+                    ) : `<div style="color:#4ade80; font-weight:bold; margin-top:10px;">COMPLETED @ ${task.doneTime}</div>`}
                 </div>
-                ${i < filteredTasks.length - 1 ? `<div class="connector"></div>` : ''}
-            `;
-            mapBody.appendChild(nodeWrap);
-        });
-
-        // Inside openRoadmapWindow -> onValue listener
-if (activeNode && activeNode.targetEndTime) {
-    if (roadmapInterval) clearInterval(roadmapInterval);
-
-    roadmapInterval = setInterval(() => {
-        const now = Date.now();
-        
-        // 🕒 REAL-TIME SYNC: 
-        // Remaining = [Fixed Database End Time] minus [Current System Clock]
-        const timeLeft = activeNode.targetEndTime - now;
-
-        const display = roadmapWin.document.getElementById("activeTimer");
-        if (display) {
-            if (timeLeft <= 0) {
-                const overTime = Math.abs(timeLeft);
-                const oMin = Math.floor(overTime / 60000);
-                const oSec = Math.floor((overTime % 60000) / 1000);
-                display.innerText = `LATE: ${oMin}:${String(oSec).padStart(2,'0')}`;
-                display.style.color = "#ef4444";
-            } else {
-                const min = Math.floor(timeLeft / 60000);
-                const sec = Math.floor((timeLeft % 60000) / 1000);
-                display.innerText = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-                display.style.color = "#facc15";
-            }
-        }
-    }, 1000);
-}
+            </div>
+            ${i < filteredTasks.length - 1 ? `<div class="connector"></div>` : ''}
+        `;
+        mapBody.appendChild(nodeWrap);
     });
+
+    // --- 🕒 TIMER SYNC ENGINE ---
+    if (activeNode && activeNode.targetEndTime) {
+        if (roadmapInterval) clearInterval(roadmapInterval);
+
+        roadmapInterval = setInterval(() => {
+            const now = Date.now();
+            const timeLeft = activeNode.targetEndTime - now;
+
+            const display = roadmapWin.document.getElementById("activeTimer");
+            if (display) {
+                if (timeLeft <= 0) {
+                    const overTime = Math.abs(timeLeft);
+                    const oMin = Math.floor(overTime / 60000);
+                    const oSec = Math.floor((overTime % 60000) / 1000);
+                    display.innerText = `LATE: ${oMin}:${String(oSec).padStart(2,'0')}`;
+                    display.style.color = "#ef4444";
+                } else {
+                    const min = Math.floor(timeLeft / 60000);
+                    const sec = Math.floor((timeLeft % 60000) / 1000);
+                    display.innerText = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+                    display.style.color = "#facc15";
+                }
+            }
+        }, 1000);
+    } else {
+        // Clear interval if no task is running
+        if (roadmapInterval) clearInterval(roadmapInterval);
+    }
+});
 };
 window.startRoadmapTask = async function(taskId) {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
@@ -3574,17 +3578,14 @@ window.recalculateAllocatedTime = async function() {
     if(!snap.exists()) return;
     const data = snap.val();
     
-    // Ensure we have a roadmap and time to work with
-    if(!data.ROADMAP || !data.SHIFT_REMAINING_TIME) return;
-
-    let roadmap = JSON.parse(data.ROADMAP);
+    // Use SHIFT_REMAINING_TIME if it exists, otherwise use SHIFT_TOTAL_TIME
     let remainingTime = parseFloat(data.SHIFT_REMAINING_TIME);
-    
-    // Find ALL subtopics that are not 'DONE' across ALL subjects
+    if (isNaN(remainingTime)) remainingTime = parseFloat(data.SHIFT_TOTAL_TIME);
+
+    let roadmap = JSON.parse(data.ROADMAP || "[]");
     let pendingTasks = roadmap.filter(t => t.status !== "DONE");
 
-    if(pendingTasks.length > 0) {
-        // FORMULA: Total Remaining Time / Total Pending Subtopics
+    if(pendingTasks.length > 0 && remainingTime > 0) {
         let perTaskTime = Math.floor(remainingTime / pendingTasks.length);
         
         roadmap = roadmap.map(t => {
@@ -3594,7 +3595,6 @@ window.recalculateAllocatedTime = async function() {
             return t;
         });
 
-        // Push to Firebase so all 4 devices update from 0m to the correct time
         await update(userRef, { ROADMAP: JSON.stringify(roadmap) });
     }
 };
