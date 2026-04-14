@@ -2672,34 +2672,35 @@ window.assignRoadmapTasks = async function(uid) {
         alert("Roadmap Assigned Successfully!");
     }
 };
-  // --- NEW: DYNAMIC TIME ALLOCATION ---
 window.initializeShift = async function() {
     const snap = await get(ref(db, `users/${currentUser.uid}/SHIFT_ACTIVE`));
     
-    if(!snap.exists()) {
-        const totalHours = prompt("FIRST LOGIN: Enter total shift for today (Hours):", "2");
-        if(!totalHours || isNaN(totalHours)) {
-            signOut(auth).then(() => location.reload());
-            return;
-        }
-
-        const totalMillis = parseFloat(totalHours) * 60 * 60 * 1000;
-        
-        await update(ref(db, `users/${currentUser.uid}`), {
-            SHIFT_TOTAL_TIME: totalMillis,
-            SHIFT_REMAINING_TIME: totalMillis,
-            SHIFT_ACTIVE: true,
-            SHIFT_START_TS: Date.now(), // Sets the "Zero" point for Time Consumed
-            TIME_CONSUMED: 0
-        });
-        
+    if(snap.exists() && snap.val() === true) {
+        // ✅ DATA EXISTS: Just log it and proceed to dashboard
+        console.log("Resuming active session from database...");
         localStorage.setItem(key("SHIFT_ACTIVE"), "true");
-
-        // 🔥 CRITICAL: Run the math immediately so '0m' becomes '120m' (or whatever)
-        await window.recalculateAllocatedTime();
-        
-        location.reload(); 
+        return; 
     }
+
+    // 🆕 NEW DAY: Only if SHIFT_ACTIVE is missing
+    const totalHours = prompt("ENTER SHIFT HOURS FOR TODAY:", "2");
+    if(!totalHours || isNaN(totalHours)) {
+        signOut(auth).then(() => location.reload());
+        return;
+    }
+
+    const totalMillis = parseFloat(totalHours) * 60 * 60 * 1000;
+    await update(ref(db, `users/${currentUser.uid}`), {
+        SHIFT_TOTAL_TIME: totalMillis,
+        SHIFT_REMAINING_TIME: totalMillis,
+        SHIFT_ACTIVE: true,
+        SHIFT_START_TS: Date.now(),
+        TIME_CONSUMED: 0
+    });
+    
+    localStorage.setItem(key("SHIFT_ACTIVE"), "true");
+    await window.recalculateAllocatedTime();
+    location.reload();
 };
 async function updateProgressiveTiming() {
     const snap = await get(ref(db, `users/${currentUser.uid}/ROADMAP`));
@@ -2825,30 +2826,30 @@ window.openRoadmapWindow = function(subjectFilter) {
             mapBody.appendChild(nodeWrap);
         });
 
-        // Live Countdown Logic
-        // ⏱ FIXED LIVE TICKING LOGIC (Anti-Lag Version)
-if (roadmapInterval) clearInterval(roadmapInterval);
-const activeNode = filteredTasks.find(t => t.status === "RUNNING");
-
-if (activeNode) {
-    // Calculate the exact moment this task should end
-    const startTime = data.SHIFT_START_TS || Date.now();
-    const taskEndTime = Date.now() + activeNode.allocatedTime;
+        // Inside openRoadmapWindow -> onValue listener
+if (activeNode && activeNode.targetEndTime) {
+    if (roadmapInterval) clearInterval(roadmapInterval);
 
     roadmapInterval = setInterval(() => {
         const now = Date.now();
-        const timeLeft = taskEndTime - now; // Always calculate based on real clock time
         
+        // 🕒 REAL-TIME SYNC: 
+        // Remaining = [Fixed Database End Time] minus [Current System Clock]
+        const timeLeft = activeNode.targetEndTime - now;
+
         const display = roadmapWin.document.getElementById("activeTimer");
         if (display) {
             if (timeLeft <= 0) {
-                display.innerText = "OVERTIME!";
+                const overTime = Math.abs(timeLeft);
+                const oMin = Math.floor(overTime / 60000);
+                const oSec = Math.floor((overTime % 60000) / 1000);
+                display.innerText = `LATE: ${oMin}:${String(oSec).padStart(2,'0')}`;
                 display.style.color = "#ef4444";
             } else {
                 const min = Math.floor(timeLeft / 60000);
                 const sec = Math.floor((timeLeft % 60000) / 1000);
                 display.innerText = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
-                display.style.color = "#facc15"; // Keep yellow if on time
+                display.style.color = "#facc15";
             }
         }
     }, 1000);
@@ -2857,23 +2858,25 @@ if (activeNode) {
 };
 window.startRoadmapTask = async function(taskId) {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
-    const data = snap.val();
-    let roadmap = JSON.parse(data.ROADMAP);
+    let roadmap = JSON.parse(snap.val().ROADMAP);
     
-    // Check if another task is already running
     if(roadmap.some(t => t.status === "RUNNING")) {
-        alert("A task is already in progress. Abort it first.");
+        alert("A task is already in progress!");
         return;
     }
 
     roadmap = roadmap.map(t => {
-        if(t.id === taskId) t.status = "RUNNING";
+        if(t.id === taskId) {
+            t.status = "RUNNING";
+            // 🎯 Fixed Calculation: Current Time + Allocated Minutes
+            // This 'targetEndTime' is now an absolute point in future history
+            t.targetEndTime = Date.now() + t.allocatedTime; 
+        }
         return t;
     });
 
     await update(ref(db, `users/${currentUser.uid}`), { ROADMAP: JSON.stringify(roadmap) });
 };
-
 window.abortRoadmapTask = async function(taskId) {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
     let roadmap = JSON.parse(snap.val().ROADMAP);
