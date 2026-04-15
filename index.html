@@ -717,30 +717,13 @@ async function handleLoginFlow() {
         document.getElementById("syncStatus").innerText = "Authenticating...";
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         currentUser = userCredential.user;  
-if (currentUser.email === "admin@study.com") {
-    // This creates the folder the Rules are looking for
-    await update(ref(db, `users/${currentUser.uid}/profile`), {
-        email: "admin@study.com",
-        role: "admin"
-    });
-}
-        
-        // --- 🧹 HARD RESET ON LOGIN ---
-        // Wipe all triggers and active shift flags to force the time prompt
-        await update(ref(db, `users/${currentUser.uid}`), {
-            forceLogoutTrigger: null,
-            LOCKED_REPORT_VIEW: null,
-            SHIFT_ACTIVE: null, // 🔥 This forces initializeShift to trigger
-            SHIFT_REMAINING_TIME: null
-        });
-        
-        localStorage.removeItem("LOCKED_REPORT_VIEW");
-        localStorage.removeItem(key("SHIFT_ACTIVE"));
 
         if (currentUser.email === ADMIN_EMAIL) {
             initAdminDashboard();
         } else {
-            initializeShift();
+            // ✅ We no longer wipe data here.
+            // initializeShift will now check the DB and resume the session.
+            initializeShift(); 
             initStudentDashboard();
         }
         
@@ -2765,7 +2748,7 @@ window.initializeShift = async function() {
     const data = snap.val() || {};
 
     if (data.SHIFT_ACTIVE === true) {
-        console.log("Welcome back! Resuming your saved session...");
+        console.log("Active Session Detected. Resuming...");
         
         localStorage.setItem(key("SHIFT_ACTIVE"), "true");
         
@@ -2777,16 +2760,13 @@ window.initializeShift = async function() {
         return; 
     }
 
-    console.log("No active shift found. Waiting for Admin to set time.");
     localStorage.removeItem(key("SHIFT_ACTIVE"));
-    
-    const taskBox = document.getElementById("taskBox");
-    if (taskBox) {
-        taskBox.innerHTML = `
-            <div style="text-align:center; padding:50px; border:1px dashed #334155; border-radius:20px; background:#0f172a;">
-                <div style="font-size:40px; margin-bottom:20px;">😴</div>
-                <h2 style="color:#7dd3fc">No Active Shift</h2>
-                <p style="color:#94a3b8">Please wait for Admin to assign today's roadmap and activate your timers.</p>
+    const tList = document.getElementById("taskList");
+    if (tList) {
+        tList.innerHTML = `
+            <div style="padding:40px; text-align:center; border:1px dashed #334155; border-radius:15px; background:#0f172a;">
+                <h3 style="color:#38bdf8">Waiting for Today's Schedule</h3>
+                <p style="color:#64748b; font-size:12px;">Admin has not activated your study shift yet.</p>
             </div>`;
     }
 };
