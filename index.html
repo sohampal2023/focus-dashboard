@@ -2526,14 +2526,11 @@ function autoLogout() {
 window.bioBreak = async function() {
     if(idleTimer) clearInterval(idleTimer);
 
-    // 1. Mark the session as ACTIVE in the cloud before leaving
-    // We save the current timestamp so we can calculate the gap later
     await update(ref(db, `users/${currentUser.uid}`), {
         SHIFT_ACTIVE: true, 
         BIO_PAUSE_TS: Date.now()
     });
 
-    // 2. Clear local session memory but keep the UID key
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if (logs.length) {
         const last = logs[logs.length - 1];
@@ -2541,7 +2538,6 @@ window.bioBreak = async function() {
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // 3. Final Sync & Logout
     uploadData();
     alert("BIO BREAK: You are being logged out for security. Login again to resume.");
     
@@ -2768,78 +2764,33 @@ window.initializeShift = async function() {
     const snap = await get(userRef);
     const data = snap.val() || {};
 
-    // ✅ THE MASTER CHECK: If a shift is already live in the database
     if (data.SHIFT_ACTIVE === true) {
         console.log("Welcome back! Resuming your saved session...");
         
-        // Restore the local flag so the speedometer works
         localStorage.setItem(key("SHIFT_ACTIVE"), "true");
         
         if (data.INITIAL_SHIFT_GOAL) {
             localStorage.setItem(key("INITIAL_SHIFT_GOAL"), data.INITIAL_SHIFT_GOAL);
         }
 
-        // Trigger a silent recalculation to ensure timers match the real world
         await window.recalculateAllocatedTime();
-        return; // EXIT HERE: Do not show any prompts!
+        return; 
     }
 
-    // 🛑 ONLY IF NO SHIFT EXISTS (Wait for Admin or First Start)
-    // If you want Admin to give time only, we stop here.
     console.log("No active shift found. Waiting for Admin to set time.");
     localStorage.removeItem(key("SHIFT_ACTIVE"));
+    
+    const taskBox = document.getElementById("taskBox");
+    if (taskBox) {
+        taskBox.innerHTML = `
+            <div style="text-align:center; padding:50px; border:1px dashed #334155; border-radius:20px; background:#0f172a;">
+                <div style="font-size:40px; margin-bottom:20px;">😴</div>
+                <h2 style="color:#7dd3fc">No Active Shift</h2>
+                <p style="color:#94a3b8">Please wait for Admin to assign today's roadmap and activate your timers.</p>
+            </div>`;
+    }
 };
 
-window.bioBreak = async function() {
-    if(idleTimer) {
-        clearInterval(idleTimer);
-    }
-
-    const idleBox = document.getElementById("idleBox");
-    if (idleBox) {
-        idleBox.classList.add("hidden");
-    }
-    
-    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    if (logs.length) {
-        const last = logs[logs.length - 1];
-        last.reason = "Bio Break - Timers Preserved";
-        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
-    }
-
-    const overlay = document.createElement("div");
-    overlay.id = "bioOverlay";
-    overlay.style.position = "fixed";
-    overlay.style.top = "0";
-    overlay.style.left = "0";
-    overlay.style.width = "100%";
-    overlay.style.height = "100%";
-    overlay.style.background = "rgba(2,6,23,0.98)";
-    overlay.style.zIndex = "9999";
-    overlay.style.display = "flex";
-    overlay.style.flexDirection = "column";
-    overlay.style.justifyContent = "center";
-    overlay.style.alignItems = "center";
-    
-    overlay.innerHTML = `
-        <h2 style="color:#7dd3fc; margin-bottom:10px;">☕ BIO BREAK ACTIVE</h2>
-        <p style="color:#94a3b8; margin-bottom:20px;">Watchdog is paused. Your session data is safe.</p>
-        <button onclick="resumeFromBio()" style="width:220px; background:#0ea5e9; padding:15px; border-radius:12px; font-weight:bold; color:white; border:none; cursor:pointer;">RESUME STUDYING</button>
-    `;
-    document.body.appendChild(overlay);
-
-    uploadData();
-};
-
-window.resumeFromBio = async function() {
-    // ✅ Remove the flag from Firebase
-    await update(ref(db, `users/${currentUser.uid}`), {
-        BIO_ACTIVE: false
-    });
-    
-    // The real-time listener below will handle removing the overlay 
-    // and restarting the watchdog on all devices.
-};
 window.startRoadmapTask = async function(taskId) {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
     const data = snap.val();
