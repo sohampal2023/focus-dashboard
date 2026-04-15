@@ -740,6 +740,7 @@ if (currentUser.email === "admin@study.com") {
         if (currentUser.email === ADMIN_EMAIL) {
             initAdminDashboard();
         } else {
+            initializeShift();
             initStudentDashboard();
         }
         
@@ -2525,23 +2526,28 @@ function autoLogout() {
 window.bioBreak = async function() {
     if(idleTimer) clearInterval(idleTimer);
 
-    const idleBox = document.getElementById("idleBox");
-    if (idleBox) idleBox.classList.add("hidden");
-    
+    // 1. Mark the session as ACTIVE in the cloud before leaving
+    // We save the current timestamp so we can calculate the gap later
+    await update(ref(db, `users/${currentUser.uid}`), {
+        SHIFT_ACTIVE: true, 
+        BIO_PAUSE_TS: Date.now()
+    });
+
+    // 2. Clear local session memory but keep the UID key
     const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
     if (logs.length) {
         const last = logs[logs.length - 1];
-        last.reason = "Universal Bio Break - Active";
+        last.reason = "Bio Break (Hard Logout)";
         localStorage.setItem(key("LOGS"), JSON.stringify(logs));
     }
 
-    // ✅ Sync to Firebase so all devices see the break
-    await update(ref(db, `users/${currentUser.uid}`), {
-        BIO_ACTIVE: true,
-        BIO_START_TS: Date.now()
-    });
-
+    // 3. Final Sync & Logout
     uploadData();
+    alert("BIO BREAK: You are being logged out for security. Login again to resume.");
+    
+    signOut(auth).then(() => {
+        location.reload();
+    });
 };
 // --- MOCK TEST LOGIC ---
 function startMockTestSetup() {
@@ -2762,31 +2768,26 @@ window.initializeShift = async function() {
     const snap = await get(userRef);
     const data = snap.val() || {};
 
-    // Check if you (Admin) have activated the shift from your dashboard
+    // ✅ THE MASTER CHECK: If a shift is already live in the database
     if (data.SHIFT_ACTIVE === true) {
-        console.log("Shift is active. Loading timers...");
+        console.log("Welcome back! Resuming your saved session...");
+        
+        // Restore the local flag so the speedometer works
         localStorage.setItem(key("SHIFT_ACTIVE"), "true");
         
-        // Sync the goal for the speedometer calculation
-        const roadmap = JSON.parse(data.ROADMAP || "[]");
-        if (roadmap.length > 0) {
-            localStorage.setItem(key("INITIAL_SHIFT_GOAL"), roadmap.length);
+        if (data.INITIAL_SHIFT_GOAL) {
+            localStorage.setItem(key("INITIAL_SHIFT_GOAL"), data.INITIAL_SHIFT_GOAL);
         }
 
-        // Fix timers if you added work while they were away
+        // Trigger a silent recalculation to ensure timers match the real world
         await window.recalculateAllocatedTime();
-    } else {
-        // Silent waiting mode
-        localStorage.removeItem(key("SHIFT_ACTIVE"));
-        const taskBox = document.getElementById("taskList");
-        if (taskBox) {
-            taskBox.innerHTML = `
-                <div style="padding:40px; text-align:center; border:1px dashed #334155; border-radius:15px;">
-                    <h3 style="color:#38bdf8">Waiting for Today's Schedule</h3>
-                    <p style="color:#64748b; font-size:12px;">Admin has not activated your study shift yet. Please check back soon.</p>
-                </div>`;
-        }
+        return; // EXIT HERE: Do not show any prompts!
     }
+
+    // 🛑 ONLY IF NO SHIFT EXISTS (Wait for Admin or First Start)
+    // If you want Admin to give time only, we stop here.
+    console.log("No active shift found. Waiting for Admin to set time.");
+    localStorage.removeItem(key("SHIFT_ACTIVE"));
 };
 
 window.bioBreak = async function() {
