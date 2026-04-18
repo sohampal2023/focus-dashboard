@@ -3307,7 +3307,7 @@ window.openDayEnd = function() {
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
 window.finalDayEnd = async function() {
-    if(!confirm("CONFIRM DAY END: This will sync all 4 devices and end the session.")) return;
+    if(!confirm("CONFIRM DAY END: This will sync all devices and store your detailed module progress.")) return;
 
     try {
         const snap = await get(ref(db, `users/${currentUser.uid}`));
@@ -3316,42 +3316,48 @@ window.finalDayEnd = async function() {
             return;
         }
 
-        const userData = snap.val(); // Use 'userData' consistently
+        const userData = snap.val();
         const roadmap = JSON.parse(userData.ROADMAP || "[]");
         
-        // 1. Group by Subject for Tracker
+        // 1. Group by Subject and include FULL Module + Topic details
         let summary = {};
         roadmap.forEach(t => {
             if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
-            if(t.status === "DONE") summary[t.subject].covered.push(t.topic);
-            else summary[t.subject].due.push(t.topic);
+            
+            // This combines "Mod 01: Name" with "Topic" for a complete record
+            const detailedInfo = `${t.module} > ${t.topic}`;
+            
+            if(t.status === "DONE") {
+                summary[t.subject].covered.push(detailedInfo);
+            } else {
+                summary[t.subject].due.push(detailedInfo);
+            }
         });
 
-        // 2. Save Automated Progress with Time Spent
+        // 2. Save to Subject Progress Table
         for (let sub in summary) {
-            // Calculate time spent in minutes from userData
             const timeSpentMinutes = Math.floor((userData.TIME_CONSUMED || 0) / 60000);
             
+            // We pass the full covered list (with modules) to the storage function
             await window.saveAutomatedSubjectProgress(
                 sub, 
-                `${summary[sub].covered.join(", ")} (Spent: ${timeSpentMinutes}m)`, 
-                summary[sub].due.join(", ") || "None"
+                `${summary[sub].covered.join(" | ")} (Time: ${timeSpentMinutes}m)`, 
+                summary[sub].due.join(" | ") || "Completed"
             );
         }
 
-        // 3. Generate Report HTML (Using the p calculation)
-        const p = calculate();
+        // 3. Generate Report Card
+        const p = calculate(roadmap);
         const reportHTML = `
             <div class="card" style="background:#1e1b4b; text-align:center; padding:30px; border:2px solid #38bdf8; border-radius:20px;">
                 <h2 style="color:#a5b4fc; margin-bottom:10px;">SESSION COMPLETED</h2>
                 <div style="font-size:64px; font-weight:900; color:#38bdf8; margin:20px 0;">${p.percent}%</div>
-                <div style="color:#facc15; font-size:18px; margin-bottom:20px;">Day Summary Generated</div>
                 <button onclick="dismissReportLock()" style="width:100%; background:#22c55e; padding:18px; color:white; border:none; border-radius:12px; font-weight:bold; cursor:pointer; font-size:16px;">
-                    START NEW DAY (LOGIN)
+                    START NEW DAY
                 </button>
             </div>`;
 
-        // 4. 📡 SIGNAL ALL 4 DEVICES TO RESET & LOCK
+        // 4. Wipe Session and Lock
         await update(ref(db, `users/${currentUser.uid}`), { 
             ROADMAP: null, 
             SHIFT_ACTIVE: null,
@@ -3361,19 +3367,15 @@ window.finalDayEnd = async function() {
             LOCKED_REPORT_VIEW: reportHTML
         });
 
-        // 5. Cleanup Local State
         localStorage.clear();
         sessionStorage.clear();
-        
-        signOut(auth).then(() => {
-            location.reload(); 
-        });
+        signOut(auth).then(() => location.reload());
         
     } catch (err) {
-        console.error("Day End Logic Error:", err);
-        alert("Day End Failed: " + err.message);
+        console.error("Day End Error:", err);
+        alert("Error saving progress: " + err.message);
     }
-  localStorage.removeItem(key("INITIAL_SHIFT_GOAL"));
+    localStorage.removeItem(key("INITIAL_SHIFT_GOAL"));
 };
 // --- NEW UNLOCK FUNCTION ---
 window.dismissReportLock = async function () {
@@ -3635,36 +3637,28 @@ window.resetWatchdog = function() {
         btn.style.background = "";
     }, 1000);
 };
-  window.saveAutomatedSubjectProgress = async (subject, covered, uncovered) => {
-    console.log("Saving Roadmap Progress for Subject:", subject);
-
+ window.saveAutomatedSubjectProgress = async (subject, covered, uncovered) => {
     try {
         const snap = await get(ref(db, `users/${currentUser.uid}/SUBJECT_WISE_TABLE`));
         let subjectData = snap.exists() ? JSON.parse(snap.val()) : {};
 
-        // If the subject folder doesn't exist, create it
-        if (!subjectData[subject]) {
-            subjectData[subject] = [];
-        }
+        if (!subjectData[subject]) subjectData[subject] = [];
 
-        // Add the new row
+        // Push new record with full Module info
         subjectData[subject].push({
             id: Date.now(),
             date: new Date().toLocaleDateString(),
-            covered: covered || "-",
-            uncovered: uncovered || "-"
+            covered: covered,     // Now contains Module + Topic
+            uncovered: uncovered  // Now contains Module + Topic
         });
 
-        // Save back to Firebase and LocalStorage
         const jsonStr = JSON.stringify(subjectData);
         await update(ref(db, `users/${currentUser.uid}`), {
             SUBJECT_WISE_TABLE: jsonStr
         });
         localStorage.setItem(SUBJECT_TABLE_KEY(), jsonStr);
-
-        console.log("Progress saved successfully.");
     } catch (e) {
-        console.error("Error saving subject progress:", e);
+        console.error("Storage Error:", e);
     }
 };
   window.listenForGlobalRequests = function() {
