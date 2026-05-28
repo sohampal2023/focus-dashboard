@@ -75,9 +75,50 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 
 /* --- MAIN LAYOUT --- */
 .main{padding:24px;overflow:auto; position: relative;}
-.card{
-  background:#020617;border:1px solid #334155;
-  border-radius:14px;padding:20px;margin-bottom:20px
+/* --- PREMIUM CYBER GLASSMORPHISM --- */
+.card {
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px 0 rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.5);
+}
+
+/* --- GAMIFICATION & XP --- */
+.level-badge {
+  background: linear-gradient(135deg, #38bdf8, #818cf8);
+  color: #020617;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-weight: 900;
+  font-size: 12px;
+  box-shadow: 0 0 15px rgba(56, 189, 248, 0.6);
+}
+
+/* --- DEEP FOCUS OVERLAY --- */
+.deep-focus-overlay {
+  position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+  background: #020617; z-index: 10000;
+  display: flex; flex-direction: column; justify-content: center; align-items: center;
+  transition: opacity 0.5s ease;
+}
+.breathing-glow {
+  font-size: 80px; font-weight: 900; color: #fff; font-family: monospace;
+  text-shadow: 0 0 20px #38bdf8, 0 0 40px #38bdf8;
+  animation: breathe 4s infinite alternate;
+}
+@keyframes breathe {
+  0% { text-shadow: 0 0 10px #38bdf8, 0 0 20px #38bdf8; transform: scale(1); }
+  100% { text-shadow: 0 0 30px #818cf8, 0 0 60px #818cf8; transform: scale(1.05); }
 }
 .hidden{display:none !important}
 
@@ -270,10 +311,18 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 .leave-status-rejected { border-color: #ef4444; background: #450a0a; color: #fee2e2; }
 
 </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 
 <body>
 <div class="app">
+  <div id="deepFocusMode" class="deep-focus-overlay hidden">
+    <div style="color: #38bdf8; font-size: 14px; letter-spacing: 4px; text-transform: uppercase; margin-bottom: 20px;">Deep Focus Protocol Active</div>
+    <div id="deepFocusClock" class="breathing-glow">00:00</div>
+    <div id="aiMotivation" style="color: #94a3b8; font-style: italic; margin-top: 40px; font-size: 18px; max-width: 600px; text-align: center;">"Discipline equals freedom."</div>
+    <button onclick="exitDeepFocus()" style="margin-top: 60px; background: transparent; border: 1px solid #ef4444; color: #ef4444; width: auto; padding: 10px 30px;">Abort Focus</button>
+</div>
 
 <div id="rejectedPopup" class="rejected-popup hidden">
     <h2>× REJECTED</h2>
@@ -320,6 +369,21 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         </div>
         <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
         <div id="timeoutCounter" class="timeout-display">Timeouts: 0</div>
+        <div style="margin-top:15px; display:flex; justify-content:space-between; align-items:center;">
+    <span class="level-badge" id="playerLevel">LVL 1</span>
+    <span style="font-size:11px; color:#a5b4fc; font-weight:bold;" id="playerXP">0 / 100 XP</span>
+</div>
+<div class="prog-bar" style="background:#1e293b; height:8px; margin-top:5px; border-radius:10px;">
+    <div id="xpFill" class="prog-fill" style="width:0%; background:linear-gradient(90deg, #38bdf8, #818cf8); box-shadow: 0 0 10px #38bdf8;"></div>
+</div>
+
+<div style="margin-top: 15px; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+    <button onclick="toggleAudio('rain')" style="font-size: 11px; padding: 8px;">🌧️ Rain</button>
+    <button onclick="toggleAudio('brownNoise')" style="font-size: 11px; padding: 8px;">🎧 Focus</button>
+</div>
+<button onclick="enterDeepFocus()" style="background: linear-gradient(90deg, #6366f1, #a855f7); color: white; border: none; box-shadow: 0 0 15px rgba(168,85,247,0.4); text-transform: uppercase; font-weight: 900; letter-spacing: 1px; margin-top: 10px;">
+    👁️ ENTER DEEP FOCUS
+</button>
       </div>
       <button id="noticeBtn" onclick="toggleNoticeBoard()">📢 Notice Board</button>
       <button onclick="softRefresh()">🔄 Refresh</button>
@@ -2378,7 +2442,40 @@ function toggleHistory() {
         }
     }
 }
+// --- ADVANCED TAB WATCHDOG ---
+document.addEventListener("visibilitychange", () => {
+    if (document.hidden && localStorage.getItem(key("SHIFT_ACTIVE")) === "true") {
+        // Tab switched! Punish immediately
+        let currentStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+        currentStrikes++;
+        localStorage.setItem(key("IDLE_STRIKES"), currentStrikes);
+        
+        // Flash screen red and play warning beep (using Web Audio API)
+        flashScreenRed();
+        playWarningBeep();
 
+        if(currentStrikes >= 2) {
+            autoLogout(); // Trigger existing auto-logout
+        }
+    }
+});
+
+function flashScreenRed() {
+    const flash = document.createElement("div");
+    flash.style.cssText = "position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(239,68,68,0.4);z-index:99999;pointer-events:none;animation:fadeOut 1s forwards;";
+    document.body.appendChild(flash);
+    setTimeout(() => flash.remove(), 1000);
+}
+
+function playWarningBeep() {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    osc.type = 'square';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.2);
+}
 // --- IDLE TIMER & WATCHDOG LOGIC ---
 function startIdle(customSeconds = 1800) {
   if(idleTimer) clearInterval(idleTimer);
@@ -2958,7 +3055,14 @@ window.completeRoadmapTask = async function(taskId) {
     // 1. Mark current task DONE
     roadmap[idx].status = "DONE";
     roadmap[idx].doneTime = new Date().toLocaleTimeString();
+    // --- GAMIFICATION INJECTION ---
+    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#38bdf8', '#818cf8', '#facc15'] });
     
+    // Add XP
+    let currentXP = parseInt(localStorage.getItem(key("TOTAL_XP")) || "0");
+    currentXP += 50; // 50 XP per task
+    localStorage.setItem(key("TOTAL_XP"), currentXP);
+    updateGamificationUI();
     // 2. CALCULATE REAL ELAPSED TIME
     // This is the "Truth". If 11 minutes passed, this will show 11m regardless of UI lag.
     let timeConsumedSoFar = Date.now() - shiftStart;
@@ -3695,6 +3799,126 @@ window.resetWatchdog = function() {
         });
     });
 };
+  // --- GAMIFICATION ENGINE ---
+function updateGamificationUI() {
+    if (!currentUser) return;
+    const xp = parseInt(localStorage.getItem(key("TOTAL_XP")) || "0");
+    const level = Math.floor(xp / 200) + 1;
+    const xpInLevel = xp % 200;
+    const xpPercent = (xpInLevel / 200) * 100;
+    
+    const lvlEl = document.getElementById("playerLevel");
+    const xpEl = document.getElementById("playerXP");
+    const fillEl = document.getElementById("xpFill");
+    
+    if (lvlEl) lvlEl.innerText = `LVL ${level} HACKER`;
+    if (xpEl) xpEl.innerText = `${xpInLevel} / 200 XP`;
+    if (fillEl) fillEl.style.width = `${xpPercent}%`;
+}
+
+// Ensure UI updates on load (Add this call inside initStudentDashboard())
+window.updateGamificationUI = updateGamificationUI;
+
+// --- AMBIENT AUDIO SYSTEM ---
+const audioSystem = { rain: null, brownNoise: null };
+window.toggleAudio = function(type) {
+    if (!audioSystem[type]) {
+        // Synthesize dynamic brown noise using Web Audio API so no external files are needed
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const bufferSize = 2 * ctx.sampleRate, noiseBuffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate), output = noiseBuffer.getChannelData(0);
+        let lastOut = 0;
+        for (let i = 0; i < bufferSize; i++) {
+            let white = Math.random() * 2 - 1;
+            output[i] = (lastOut + (0.02 * white)) / 1.02; // Brown noise approximation
+            lastOut = output[i];
+            output[i] *= 3.5; 
+        }
+        const noise = ctx.createBufferSource();
+        noise.buffer = noiseBuffer;
+        noise.loop = true;
+        
+        // Filtering based on type (rain vs deep focus)
+        const filter = ctx.createBiquadFilter();
+        filter.type = type === 'rain' ? 'lowpass' : 'bandpass';
+        filter.frequency.value = type === 'rain' ? 400 : 150;
+        
+        noise.connect(filter);
+        filter.connect(ctx.destination);
+        noise.start(0);
+        audioSystem[type] = { source: noise, ctx: ctx };
+    } else {
+        audioSystem[type].ctx.close();
+        audioSystem[type] = null;
+    }
+};
+
+// --- DEEP FOCUS PROTOCOL ---
+let focusInterval;
+window.enterDeepFocus = function() {
+    const overlay = document.getElementById("deepFocusMode");
+    overlay.classList.remove("hidden");
+    if(document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen();
+    }
+    
+    const quotes = ["System overriding distractions.", "Execute protocol: Unbroken Focus.", "Neural linking to study material...", "Dopamine detox active."];
+    document.getElementById("aiMotivation").innerText = quotes[Math.floor(Math.random() * quotes.length)];
+    
+    focusInterval = setInterval(() => {
+        const remaining = parseInt(localStorage.getItem(key("SHIFT_REMAINING_TIME")) || "0");
+        const min = Math.floor(remaining / 60000);
+        const sec = Math.floor((remaining % 60000) / 1000);
+        document.getElementById("deepFocusClock").innerText = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+    }, 1000);
+};
+
+window.exitDeepFocus = function() {
+    document.getElementById("deepFocusMode").classList.add("hidden");
+    if(document.exitFullscreen) document.exitFullscreen();
+    clearInterval(focusInterval);
+};
+
+// --- LIVE ANALYTICS (CHART.JS) ---
+// Call this function inside updateProgress() to refresh the chart
+window.renderAnalyticsChart = function() {
+    const container = document.getElementById("taskBox");
+    let canvas = document.getElementById("analyticsChart");
+    if (!canvas) {
+        canvas = document.createElement("canvas");
+        canvas.id = "analyticsChart";
+        canvas.style.marginTop = "20px";
+        canvas.style.maxHeight = "150px";
+        container.querySelector("div").appendChild(canvas);
+    }
+    
+    const ctx = canvas.getContext('2d');
+    const logs = JSON.parse(localStorage.getItem(key("HISTORY")) || "[]").slice(-5);
+    
+    if(window.studyChart) window.studyChart.destroy();
+    window.studyChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: logs.map(l => l.date.substring(0,5)),
+            datasets: [{
+                label: 'Focus Score %',
+                data: logs.map(l => parseInt(l.score)),
+                borderColor: '#38bdf8',
+                backgroundColor: 'rgba(56, 189, 248, 0.2)',
+                borderWidth: 2,
+                fill: true,
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { 
+                y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } },
+                x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+            }
+        }
+    });
+};
 // --- ATTACH TO WINDOW ---
 window.handleLoginFlow = handleLoginFlow;
 window.resetWatchdog = resetWatchdog; // Fixed for Watchdog Reset
@@ -3755,6 +3979,10 @@ window.handleExtraRequest = handleExtraRequest;
   window.startAdminListener = startAdminListener;
   window.resumeFromBio = resumeFromBio;
   window.adminSetShiftTime = adminSetShiftTime;
+  window.toggleAudio = toggleAudio;
+window.enterDeepFocus = enterDeepFocus;
+window.exitDeepFocus = exitDeepFocus;
+window.renderAnalyticsChart = renderAnalyticsChart;
   </script>
 
 </body>
