@@ -74,6 +74,35 @@ button:disabled{opacity:.4; cursor: not-allowed;}
 .watchdog-btn:hover { background: #0284c7; }
 
 /* --- MAIN LAYOUT --- */
+  /* --- CYBER BACKGROUND & HUD --- */
+body {
+  background-color: #020617;
+  background-image: 
+      linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px);
+  background-size: 30px 30px;
+}
+
+.player-hud {
+  display: flex; gap: 20px; align-items: center; 
+  background: linear-gradient(135deg, rgba(15,23,42,0.8), rgba(30,58,138,0.3));
+  border: 1px solid rgba(56, 189, 248, 0.4); border-left: 5px solid #facc15;
+  padding: 20px; border-radius: 16px; margin-bottom: 20px;
+  box-shadow: 0 0 25px rgba(56,189,248,0.15);
+  backdrop-filter: blur(10px);
+}
+.hud-avatar {
+  width: 75px; height: 75px; border-radius: 50%;
+  border: 3px solid #38bdf8; box-shadow: 0 0 15px #38bdf8;
+  background: url('https://api.dicebear.com/7.x/bottts/svg?seed=FocusHacker&backgroundColor=020617') center/cover;
+}
+.hud-stats { flex-grow: 1; }
+.master-clock {
+  font-family: monospace; font-size: 32px; font-weight: 900;
+  color: #facc15; text-shadow: 0 0 15px rgba(250, 204, 21, 0.5);
+  background: rgba(0,0,0,0.6); padding: 10px 20px; border-radius: 8px;
+  border: 1px solid #334155; letter-spacing: 2px;
+}
 .main{padding:24px;overflow:auto; position: relative;}
 /* --- PREMIUM CYBER GLASSMORPHISM --- */
 .card {
@@ -479,7 +508,25 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 </div>
 
 <div id="studentView">
-    
+  <!-- 🎮 GAMIFIED PLAYER HUD & MASTER CLOCK -->
+    <div id="playerHudBox" class="player-hud hidden">
+        <div class="hud-avatar"></div>
+        <div class="hud-stats">
+            <div style="color:#94a3b8; font-size:12px; text-transform:uppercase; letter-spacing:2px;">Operative Profile</div>
+            <div id="hudEmail" style="color:#fff; font-size:20px; font-weight:900; margin-bottom:5px; text-transform:uppercase;">HACKER_01</div>
+            <div style="display:flex; gap:12px; align-items:center;">
+                <span class="level-badge" id="hudLevel">LVL 1</span>
+                <div class="prog-bar" style="background:#1e293b; height:12px; border-radius:10px; width:250px;">
+                    <div id="hudXpFill" class="prog-fill" style="width:0%; background:linear-gradient(90deg, #38bdf8, #818cf8); box-shadow: 0 0 10px #38bdf8; border-radius:10px;"></div>
+                </div>
+                <span style="font-size:13px; color:#a5b4fc; font-weight:bold;" id="hudXpText">0 / 200 XP</span>
+            </div>
+        </div>
+        <div style="text-align:right;">
+            <div style="color:#94a3b8; font-size:11px; text-transform:uppercase; letter-spacing:1px; margin-bottom:5px; font-weight:bold;">Active Shift Time</div>
+            <div id="masterClockDisplay" class="master-clock">00:00:00</div>
+        </div>
+    </div>    
     <div id="adminFeedbackBox" class="feedback-box hidden">
         <h3 style="margin:0 0 5px 0; color:#fff">Admin Daily Review</h3>
         <div id="adminFeedbackText" style="font-style:italic"></div>
@@ -2839,6 +2886,10 @@ window.assignRoadmapTasks = async function(uid) {
         alert("Roadmap Assigned Successfully!");
     }
 };
+// --- GLOBAL TIMING VARIABLES ---
+let masterClockInterval = null;
+let localShiftRemaining = 0;
+
 window.initializeShift = async function() {
     const userRef = ref(db, `users/${currentUser.uid}`);
     const snap = await get(userRef);
@@ -2846,9 +2897,18 @@ window.initializeShift = async function() {
 
     if (data.SHIFT_ACTIVE === true) {
         console.log("Active Session Detected. Resuming...");
-        
         localStorage.setItem(key("SHIFT_ACTIVE"), "true");
         
+        // Show the Gamified HUD
+        document.getElementById("playerHudBox").classList.remove("hidden");
+        if (typeof updateGamificationUI === "function") updateGamificationUI();
+        
+        // Load the exact remaining time from the database
+        localShiftRemaining = parseFloat(data.SHIFT_REMAINING_TIME) || 0;
+        
+        // FIRE UP THE LIVE TICKING CLOCK
+        startMasterClock();
+
         if (data.INITIAL_SHIFT_GOAL) {
             localStorage.setItem(key("INITIAL_SHIFT_GOAL"), data.INITIAL_SHIFT_GOAL);
         }
@@ -2857,17 +2917,47 @@ window.initializeShift = async function() {
         return; 
     }
 
+    // Shift is not active
     localStorage.removeItem(key("SHIFT_ACTIVE"));
+    document.getElementById("playerHudBox").classList.add("hidden");
     const tList = document.getElementById("taskList");
     if (tList) {
-        tList.innerHTML = `
-            <div style="padding:40px; text-align:center; border:1px dashed #334155; border-radius:15px; background:#0f172a;">
-                <h3 style="color:#38bdf8">Waiting for Today's Schedule</h3>
-                <p style="color:#64748b; font-size:12px;">Admin has not activated your study shift yet.</p>
-            </div>`;
+        tList.innerHTML = `<div style="padding:40px; text-align:center; border:1px dashed #334155; border-radius:15px; background:#0f172a;"><h3 style="color:#38bdf8">Waiting for Today's Schedule</h3><p style="color:#64748b; font-size:12px;">Admin has not activated your study shift yet.</p></div>`;
     }
 };
 
+function startMasterClock() {
+    if(masterClockInterval) clearInterval(masterClockInterval);
+    
+    masterClockInterval = setInterval(() => {
+        if(localShiftRemaining <= 0) {
+            clearInterval(masterClockInterval);
+            document.getElementById("masterClockDisplay").innerText = "EXHAUSTED";
+            document.getElementById("masterClockDisplay").style.color = "#ef4444";
+            return;
+        }
+
+        // Deduct exactly 1 second of real-time logic while logged in
+        localShiftRemaining -= 1000; 
+        
+        // Format UI Clock HH:MM:SS
+        const h = Math.floor(localShiftRemaining / 3600000);
+        const m = Math.floor((localShiftRemaining % 3600000) / 60000);
+        const s = Math.floor((localShiftRemaining % 60000) / 1000);
+        
+        const disp = document.getElementById("masterClockDisplay");
+        if(disp) {
+            disp.innerText = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        }
+
+        // Auto-save to database every 30 seconds (Prevents losing time if tab is closed)
+        if(s % 30 === 0) {
+            update(ref(db, `users/${currentUser.uid}`), {
+                SHIFT_REMAINING_TIME: localShiftRemaining
+            });
+        }
+    }, 1000);
+}
 window.startRoadmapTask = async function(taskId) {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
     const data = snap.val();
@@ -3045,9 +3135,6 @@ window.completeRoadmapTask = async function(taskId) {
     if(!data || !data.ROADMAP) return;
 
     let roadmap = JSON.parse(data.ROADMAP);
-    const shiftTotal = data.SHIFT_TOTAL_TIME;
-    // Use the stored Start TS to ensure all 4 devices use the same "Zero Hour"
-    const shiftStart = data.SHIFT_START_TS;
     
     const idx = roadmap.findIndex(t => t.id === taskId);
     if(idx === -1) return;
@@ -3055,29 +3142,18 @@ window.completeRoadmapTask = async function(taskId) {
     // 1. Mark current task DONE
     roadmap[idx].status = "DONE";
     roadmap[idx].doneTime = new Date().toLocaleTimeString();
-    // --- GAMIFICATION INJECTION ---
-    confetti({ particleCount: 150, spread: 70, origin: { y: 0.6 }, colors: ['#38bdf8', '#818cf8', '#facc15'] });
     
-    // Add XP
-    let currentXP = parseInt(localStorage.getItem(key("TOTAL_XP")) || "0");
-    currentXP += 50; // 50 XP per task
-    localStorage.setItem(key("TOTAL_XP"), currentXP);
-    updateGamificationUI();
-    // 2. CALCULATE REAL ELAPSED TIME
-    // This is the "Truth". If 11 minutes passed, this will show 11m regardless of UI lag.
-    let timeConsumedSoFar = Date.now() - shiftStart;
-    let shiftRemaining = Math.max(0, shiftTotal - timeConsumedSoFar);
+    // 2. USE THE LIVE MASTER CLOCK REMAINING TIME! (Fixes the Logout Bug)
+    let shiftRemaining = localShiftRemaining;
 
-    // 3. APPLY FORMULA: Remaining Time / Remaining Subtopics
-    // We filter for PENDING (and any accidentally RUNNING tasks)
+    // 3. APPLY FORMULA: Divide remaining time over pending tasks
     const pendingTasks = roadmap.filter(t => t.status === "PENDING" || (t.status === "RUNNING" && t.id !== taskId));
     
     if(pendingTasks.length > 0) {
         let newAllocation = Math.floor(shiftRemaining / pendingTasks.length);
-        
         roadmap = roadmap.map(t => {
             if(t.status === "PENDING" || (t.status === "RUNNING" && t.id !== taskId)) {
-                t.status = "PENDING"; // Reset any stray running tasks to pending
+                t.status = "PENDING"; 
                 t.allocatedTime = newAllocation;
             }
             return t;
@@ -3085,14 +3161,49 @@ window.completeRoadmapTask = async function(taskId) {
     }
 
     // 4. SYNC TO FIREBASE
-    // This will trigger the 'onValue' on all other devices to update their maps
     await update(ref(db, `users/${currentUser.uid}`), { 
         ROADMAP: JSON.stringify(roadmap),
-        SHIFT_REMAINING_TIME: shiftRemaining,
-        TIME_CONSUMED: timeConsumedSoFar
+        SHIFT_REMAINING_TIME: shiftRemaining
     });
 
+    // 5. GAMIFICATION REWARDS
+    if (typeof confetti === "function") {
+        confetti({ particleCount: 200, spread: 80, origin: { y: 0.5 }, colors: ['#38bdf8', '#818cf8', '#facc15'] });
+    }
+    
+    let currentXP = parseInt(localStorage.getItem(key("TOTAL_XP")) || "0");
+    localStorage.setItem(key("TOTAL_XP"), currentXP + 50);
+    
+    if (typeof updateGamificationUI === "function") updateGamificationUI();
     if (typeof updateProgress === "function") updateProgress(); 
+};
+
+// Update HUD visually function
+window.updateGamificationUI = function() {
+    if (!currentUser) return;
+    const xp = parseInt(localStorage.getItem(key("TOTAL_XP")) || "0");
+    const level = Math.floor(xp / 200) + 1;
+    const xpInLevel = xp % 200;
+    const xpPercent = (xpInLevel / 200) * 100;
+    
+    // Update the Sidebar (if exists)
+    const lvlEl = document.getElementById("playerLevel");
+    const xpEl = document.getElementById("playerXP");
+    const fillEl = document.getElementById("xpFill");
+    if (lvlEl) lvlEl.innerText = `LVL ${level}`;
+    if (xpEl) xpEl.innerText = `${xpInLevel} / 200 XP`;
+    if (fillEl) fillEl.style.width = `${xpPercent}%`;
+
+    // Update the New Premium HUD
+    const hudLvl = document.getElementById("hudLevel");
+    const hudXp = document.getElementById("hudXpText");
+    const hudFill = document.getElementById("hudXpFill");
+    const hudEmail = document.getElementById("hudEmail");
+
+    if (hudLvl) hudLvl.innerText = `LVL ${level}`;
+    if (hudXp) hudXp.innerText = `${xpInLevel} / 200 XP`;
+    if (hudFill) hudFill.style.width = `${xpPercent}%`;
+    if (hudEmail) hudEmail.innerText = currentUser.email.split('@')[0] + " | SYSTEM OPERATIVE";
 };
 function renderMapNodes(win, roadmap) {
     let container = win.document.getElementById("mapContainer");
