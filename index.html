@@ -3851,33 +3851,91 @@ window.toggleAudio = function(type) {
         audioSystem[type] = null;
     }
 };
-
 // --- DEEP FOCUS PROTOCOL ---
 let focusInterval;
+
 window.enterDeepFocus = function() {
+    // 1. Ask user for time and validate (Max 25 mins)
+    let input = prompt("Enter Deep Focus duration in minutes (Max: 25):", "25");
+    if (!input) return; // User cancelled
+
+    let mins = parseInt(input);
+    if (isNaN(mins) || mins <= 0) {
+        alert("Please enter a valid number greater than 0.");
+        return;
+    }
+    if (mins > 25) {
+        alert("Deep Focus capped at 25 minutes to prevent burnout. Enforcing 25m limit.");
+        mins = 25;
+    }
+
+    // 2. Setup Fullscreen UI
     const overlay = document.getElementById("deepFocusMode");
     overlay.classList.remove("hidden");
     if(document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen();
+        document.documentElement.requestFullscreen().catch(err => console.log("Fullscreen blocked:", err));
     }
     
-    const quotes = ["System overriding distractions.", "Execute protocol: Unbroken Focus.", "Neural linking to study material...", "Dopamine detox active."];
+    const quotes = [
+        "System overriding distractions.", 
+        "Execute protocol: Unbroken Focus.", 
+        "Neural linking to study material...", 
+        "Dopamine detox active."
+    ];
     document.getElementById("aiMotivation").innerText = quotes[Math.floor(Math.random() * quotes.length)];
     
+    // 3. Start Standalone Timer Calculation
+    const targetTime = Date.now() + (mins * 60 * 1000);
+    
+    // Initial display update
+    updateDeepFocusClock(targetTime);
+    
+    // Run interval every second
     focusInterval = setInterval(() => {
-        const remaining = parseInt(localStorage.getItem(key("SHIFT_REMAINING_TIME")) || "0");
-        const min = Math.floor(remaining / 60000);
-        const sec = Math.floor((remaining % 60000) / 1000);
-        document.getElementById("deepFocusClock").innerText = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+        updateDeepFocusClock(targetTime);
     }, 1000);
 };
 
+function updateDeepFocusClock(targetTime) {
+    const remaining = targetTime - Date.now();
+
+    // 4. Time is UP!
+    if (remaining <= 0) {
+        clearInterval(focusInterval);
+        document.getElementById("deepFocusClock").innerText = "00:00";
+        exitDeepFocus();
+        
+        // Reward system
+        alert("Deep Focus Session Completed! +50 XP");
+        if (typeof confetti === "function") {
+            confetti({ particleCount: 200, spread: 90, origin: { y: 0.6 }, colors: ['#38bdf8', '#818cf8', '#facc15'] });
+        }
+        
+        if (currentUser) {
+            let currentXP = parseInt(localStorage.getItem(key("TOTAL_XP")) || "0");
+            localStorage.setItem(key("TOTAL_XP"), currentXP + 50);
+            if (typeof updateGamificationUI === "function") updateGamificationUI();
+        }
+        return;
+    }
+
+    // 5. Format and display time
+    const min = Math.floor(remaining / 60000);
+    const sec = Math.floor((remaining % 60000) / 1000);
+    document.getElementById("deepFocusClock").innerText = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+}
+
 window.exitDeepFocus = function() {
     document.getElementById("deepFocusMode").classList.add("hidden");
-    if(document.exitFullscreen) document.exitFullscreen();
+    
+    // Safely exit fullscreen if active
+    if(document.fullscreenElement && document.exitFullscreen) {
+        document.exitFullscreen().catch(err => console.log(err));
+    }
+    
     clearInterval(focusInterval);
+    document.getElementById("deepFocusClock").innerText = "00:00";
 };
-
 // --- LIVE ANALYTICS (CHART.JS) ---
 // Call this function inside updateProgress() to refresh the chart
 window.renderAnalyticsChart = function() {
