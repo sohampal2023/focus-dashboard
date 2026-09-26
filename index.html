@@ -3614,8 +3614,13 @@ window.openDayEnd = function() {
   document.getElementById("nextDayBox").classList.remove("hidden");
 }
 window.finalDayEnd = async function() {
-    if(!confirm("CONFIRM DAY END: This will sync all devices and store your detailed module progress.")) return;
+    if(!confirm("CONFIRM DAY END: This will sync all devices, submit your data, and clear today's notes.")) return;
 
+    // Wipe Canvas & Video Link on Day end
+    if(typeof ctx !== 'undefined' && canvas) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+    
     try {
         const snap = await get(ref(db, `users/${currentUser.uid}`));
         if (!snap.exists()) {
@@ -3631,7 +3636,6 @@ window.finalDayEnd = async function() {
         roadmap.forEach(t => {
             if(!summary[t.subject]) summary[t.subject] = { covered: [], due: [] };
             
-            // This combines "Mod 01: Name" with "Topic" for a complete record
             const detailedInfo = `${t.module} > ${t.topic}`;
             
             if(t.status === "DONE") {
@@ -3644,8 +3648,6 @@ window.finalDayEnd = async function() {
         // 2. Save to Subject Progress Table
         for (let sub in summary) {
             const timeSpentMinutes = Math.floor((userData.TIME_CONSUMED || 0) / 60000);
-            
-            // We pass the full covered list (with modules) to the storage function
             await window.saveAutomatedSubjectProgress(
                 sub, 
                 `${summary[sub].covered.join(" | ")} (Time: ${timeSpentMinutes}m)`, 
@@ -3664,18 +3666,20 @@ window.finalDayEnd = async function() {
                 </button>
             </div>`;
 
-        // 4. Wipe Session and Lock
+        // 4. Wipe Session, Lock, and RESET PENALTIES
         await update(ref(db, `users/${currentUser.uid}`), { 
             ROADMAP: null, 
             SHIFT_ACTIVE: null,
             SHIFT_REMAINING_TIME: null,
             TIME_CONSUMED: 0,
             forceLogoutTrigger: Date.now(), 
-            LOCKED_REPORT_VIEW: reportHTML
+            LOCKED_REPORT_VIEW: reportHTML,
+            assignedVideoId: null, // Clear video access
+            SEARCH_LOGS: null, // Clear AI search logs
+            PENALTY: 0, // 🔥 RESETS PENALTY TO 0
+            IDLE_STRIKES: 0, // 🔥 RESETS STRIKES TO 0
+            DAILY_TIMEOUTS: 0 // 🔥 RESETS TIMEOUTS TO 0
         });
-      // Wipe Canvas & Video Link on Day end
-    if(typeof ctx !== 'undefined' && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
-    await update(ref(db, `users/${currentUser.uid}`), { assignedVideoId: null });
 
         localStorage.clear();
         sessionStorage.clear();
@@ -3685,7 +3689,6 @@ window.finalDayEnd = async function() {
         console.error("Day End Error:", err);
         alert("Error saving progress: " + err.message);
     }
-    localStorage.removeItem(key("INITIAL_SHIFT_GOAL"));
 };
 // --- NEW UNLOCK FUNCTION ---
 window.dismissReportLock = async function () {
