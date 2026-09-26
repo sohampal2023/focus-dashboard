@@ -4153,23 +4153,34 @@ let isBoardFullscreen = false;
 
 if (canvas && ctx) {
     // Resize canvas correctly without losing drawing
+    // Resize canvas correctly without losing drawing
     const resizeCanvas = () => {
         const container = document.getElementById("boardContainer");
-        // Save current drawing
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = canvas.width;
-        tempCanvas.height = canvas.height;
-        const tempCtx = tempCanvas.getContext('2d');
-        tempCtx.drawImage(canvas, 0, 0);
+        const box = document.getElementById("canvasBox");
+        
+        // STRICT SAFETY CHECK: Abort completely if hidden or 0 size
+        if (!container || !box || box.classList.contains("hidden") || container.clientWidth === 0 || container.clientHeight === 0) {
+            return;
+        }
 
-        // Update real canvas size
+        // Save current drawing safely
+        let tempCanvas = document.createElement('canvas');
+        tempCanvas.width = Math.max(canvas.width, 1);   // Force at least 1px to prevent crash
+        tempCanvas.height = Math.max(canvas.height, 1); 
+        const tempCtx = tempCanvas.getContext('2d');
+        
+        // Only draw if the original canvas had actual size
+        if (canvas.width > 0 && canvas.height > 0) {
+            tempCtx.drawImage(canvas, 0, 0);
+        }
+
+        // Update real canvas size to match the container
         canvas.width = container.clientWidth;
         canvas.height = container.clientHeight;
 
-        // Restore drawing
+        // Restore the drawing
         ctx.drawImage(tempCanvas, 0, 0);
     };
-
     window.addEventListener("resize", resizeCanvas);
     // Initial size setup
     setTimeout(resizeCanvas, 500);
