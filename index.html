@@ -396,7 +396,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
                 <div class="timer-sub">Watchdog</div>
             </div>
         </div>
-        <button class="watchdog-btn" onclick="resetWatchdog()">I AM STUDYING</button>
+        <button class="watchdog-btn" onclick="openProofModal()">PROVIDE PROOF / RESET</button>
         <div id="timeoutCounter" class="timeout-display">Timeouts: 0</div>
         <div style="margin-top:15px; display:flex; justify-content:space-between; align-items:center;">
     <span class="level-badge" id="playerLevel">LVL 1</span>
@@ -414,6 +414,8 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     👁️ ENTER DEEP FOCUS
 </button>
       </div>
+    <button id="watchVideoBtn" class="hidden" onclick="openStudyVideoModal()" style="background:#eab308; color:#000; font-weight:bold;">🎥 Watch Assigned Video</button>
+<button onclick="toggleNotesCanvas()" style="background:#8b5cf6; color:#fff; font-weight:bold;">📝 Digital Notes Canvas</button>
       <button id="noticeBtn" onclick="toggleNoticeBoard()">📢 Notice Board</button>
       <button onclick="softRefresh()">🔄 Refresh</button>
       <button id="leaveBtn" onclick="requestLeave()">Request Leave</button>
@@ -547,7 +549,16 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     No notices available.
   </div>
 </div>
-
+<!-- NEW: CANVAS BOX -->
+<div id="canvasBox" class="card hidden" style="border-color: #8b5cf6;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+        <h3 style="color:#c4b5fd; margin:0;">📝 Digital Notes (Pen Tab Ready)</h3>
+        <button onclick="clearCanvas()" style="width:auto; padding:8px 20px; background:#7f1d1d; color:white;">Clear Canvas</button>
+    </div>
+    <div style="background:#fff; border-radius:12px; padding:10px;">
+        <canvas id="notesCanvas" width="800" height="600" style="background:#fff; width:100%; border:2px dashed #cbd5e1; border-radius:8px; cursor:crosshair; touch-action:none;"></canvas>
+    </div>
+</div>
     <div id="historyBox" class="card hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
             <h3 style="color:#7dd3fc">History (Last 4 Days)</h3>
@@ -685,7 +696,33 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 
     <div id="reportBox" class="card hidden"></div>
 </div>
+<!-- PROOF MODAL -->
+<div id="proofModal" class="modal-overlay hidden" style="z-index: 10000;">
+    <div class="modal-content" style="width: 450px; text-align:center; border:2px solid #38bdf8;">
+        <h2 style="color:#facc15; margin-top:0;">🛡️ PROOF REQUIRED</h2>
+        <p style="color:#94a3b8; font-size:13px; margin-bottom:20px;">Watchdog requires proof of study to reset.</p>
+        
+        <div style="background:#1e293b; padding:15px; border-radius:8px; margin-bottom:15px;">
+            <button onclick="submitCanvasProof()" style="background:#8b5cf6; color:white; font-weight:bold;">Submit Canvas Notes</button>
+        </div>
+        <div style="background:#1e293b; padding:15px; border-radius:8px;">
+            <input type="file" id="proofFileInput" accept=".pdf,image/*" style="width:100%; padding:10px; background:#020617; color:white; border:1px solid #334155; border-radius:6px; margin-bottom:10px;">
+            <button onclick="submitFileProof()" style="background:#22c55e; color:white; font-weight:bold;">Upload & Auto-Download Proof</button>
+        </div>
+        <button onclick="document.getElementById('proofModal').classList.add('hidden')" style="background:transparent; border:1px solid #ef4444; color:#ef4444; margin-top:15px;">Cancel</button>
+    </div>
+</div>
 
+<!-- CAPTIVE YOUTUBE MODAL -->
+<div id="videoModal" class="modal-overlay hidden" style="z-index: 10000;">
+    <div class="modal-content" style="width: 800px; max-width:95%; padding:0; overflow:hidden; border:2px solid #eab308;">
+        <div style="background:#0f172a; padding:15px; display:flex; justify-content:space-between; align-items:center;">
+            <h3 style="margin:0; color:#eab308;">🎥 Approved Study Video</h3>
+            <button onclick="closeStudyVideoModal()" style="width:auto; padding:6px 15px; background:#ef4444; margin:0;">Close Player</button>
+        </div>
+        <div id="videoIframeContainer" style="position:relative; padding-bottom:56.25%; height:0; background:#000;"></div>
+    </div>
+</div>
 </div>
 </div>
 
@@ -1098,6 +1135,7 @@ window.startAdminListener = function() {
                         <button style="background:#0ea5e9;" onclick="sendNotice('${uid}')">📢 Notice</button>
                         <button style="background:#1e40af;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
                         <button style="background:#991b1b;" onclick="clearSingleSubject('${uid}')">🗑 Delete Subject</button>
+                        <button style="background:#eab308; color:black; font-weight:bold;" onclick="adminAssignVideo('${uid}')">🎥 ASSIGN YT VIDEO</button>
                         
                         ${isLocked ? `<button style="background:#22c55e;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
                     </div>
@@ -2076,6 +2114,19 @@ onValue(ref(db, `users/${currentUser.uid}/SHIFT_REMAINING_TIME`), async (snap) =
         }
     }
 });
+  // Listen for Assigned Video
+    onValue(ref(db, `users/${currentUser.uid}/assignedVideoId`), (snap) => {
+        const vid = snap.val();
+        const btn = document.getElementById("watchVideoBtn");
+        const container = document.getElementById("videoIframeContainer");
+        if(vid) {
+            btn.classList.remove("hidden");
+            container.innerHTML = `<iframe src="https://www.youtube.com/embed/${vid}?rel=0&modestbranding=1" style="position:absolute; top:0; left:0; width:100%; height:100%; border:none;" allowfullscreen></iframe>`;
+        } else {
+            btn.classList.add("hidden");
+            container.innerHTML = "";
+        }
+    });
   // Add this inside initStudentDashboard()
 onValue(ref(db, `users/${currentUser.uid}/BIO_ACTIVE`), (snap) => {
     const isBioActive = snap.val();
@@ -3581,6 +3632,9 @@ window.finalDayEnd = async function() {
             forceLogoutTrigger: Date.now(), 
             LOCKED_REPORT_VIEW: reportHTML
         });
+      // Wipe Canvas & Video Link on Day end
+    if(typeof ctx !== 'undefined' && canvas) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    await update(ref(db, `users/${currentUser.uid}`), { assignedVideoId: null });
 
         localStorage.clear();
         sessionStorage.clear();
@@ -4047,6 +4101,113 @@ window.exitDeepFocus = function() {
     clearInterval(focusInterval);
     document.getElementById("deepFocusClock").innerText = "00:00";
 };
+  // ==========================================
+// CANVAS SYSTEM & PROOF LOGIC
+// ==========================================
+let canvas = document.getElementById("notesCanvas");
+let ctx = canvas ? canvas.getContext("2d") : null;
+let drawing = false;
+
+if(canvas && ctx) {
+    const startDraw = (e) => { drawing = true; draw(e); };
+    const stopDraw = () => { drawing = false; ctx.beginPath(); };
+    const draw = (e) => {
+        if(!drawing) return;
+        e.preventDefault(); 
+        const rect = canvas.getBoundingClientRect();
+        const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+        const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+        const x = (clientX - rect.left) * (canvas.width / rect.width);
+        const y = (clientY - rect.top) * (canvas.height / rect.height);
+        
+        ctx.lineWidth = 2;
+        ctx.lineCap = "round";
+        ctx.strokeStyle = "#000";
+        ctx.lineTo(x, y);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+    };
+    canvas.addEventListener("mousedown", startDraw); canvas.addEventListener("mouseup", stopDraw); canvas.addEventListener("mousemove", draw);
+    canvas.addEventListener("touchstart", startDraw, {passive: false}); canvas.addEventListener("touchend", stopDraw); canvas.addEventListener("touchmove", draw, {passive: false});
+}
+
+window.clearCanvas = function() {
+    if(ctx && canvas && confirm("Clear notes?")) ctx.clearRect(0, 0, canvas.width, canvas.height);
+};
+
+window.toggleNotesCanvas = function() {
+    const box = document.getElementById("canvasBox");
+    const taskBox = document.getElementById("taskBox");
+    box.classList.toggle("hidden");
+    if(taskBox) taskBox.classList.toggle("hidden");
+};
+
+window.openProofModal = function() {
+    // Block reset if mock test is running
+    const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
+    if(activeTest && activeTest.status === "RUNNING") {
+        alert("No resets during Mock Test!");
+        return;
+    }
+    document.getElementById("proofModal").classList.remove("hidden");
+};
+
+window.submitCanvasProof = function() {
+    alert("Canvas notes accepted! Watchdog timer reset.");
+    document.getElementById("proofModal").classList.add("hidden");
+    executeWatchdogReset();
+};
+
+window.submitFileProof = function() {
+    const input = document.getElementById("proofFileInput");
+    if(input.files.length === 0) return alert("Select a PDF/Image first.");
+    
+    // Auto Download
+    const file = input.files[0];
+    const url = URL.createObjectURL(file);
+    const a = document.createElement("a");
+    a.href = url; a.download = `StudyProof_${file.name}`;
+    document.body.appendChild(a); a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+    
+    input.value = ""; 
+    alert("Proof accepted and auto-downloaded! Timer reset.");
+    document.getElementById("proofModal").classList.add("hidden");
+    executeWatchdogReset();
+};
+
+function executeWatchdogReset() {
+    startIdle(1800); // Reset 30 mins
+    const btn = document.querySelector('.watchdog-btn');
+    btn.innerText = "VERIFIED / RESET";
+    btn.style.background = "#22c55e"; 
+    setTimeout(() => { btn.innerText = "PROVIDE PROOF / RESET"; btn.style.background = ""; }, 1500);
+}
+  // ==========================================
+// CAPTIVE YOUTUBE SYSTEM
+// ==========================================
+window.adminAssignVideo = async function(uid) {
+    const url = prompt("Enter YouTube URL for this student:");
+    if(!url) return;
+    
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    if (match && match[2].length === 11) {
+        await update(ref(db, `users/${uid}`), { assignedVideoId: match[2] });
+        alert("Video locked and assigned!");
+    } else {
+        alert("Invalid YouTube URL.");
+    }
+};
+
+window.openStudyVideoModal = function() { document.getElementById("videoModal").classList.remove("hidden"); };
+window.closeStudyVideoModal = function() {
+    document.getElementById("videoModal").classList.add("hidden");
+    const iframe = document.querySelector("#videoIframeContainer iframe");
+    if(iframe) iframe.src = iframe.src; // Stops video from playing in background
+};
+  
 // --- LIVE ANALYTICS (CHART.JS) ---
 // Call this function inside updateProgress() to refresh the chart
 window.renderAnalyticsChart = function() {
