@@ -587,6 +587,9 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
             <button id="eraserBtn" style="background:#475569; color:white;" onclick="setTool('eraser')">🧽 Eraser</button>
             <button onclick="clearCanvas()" style="background:#7f1d1d; color:white;">🗑️ Clear</button>
             <button id="fullscreenBtn" onclick="toggleBoardFullscreen()" style="background:#8b5cf6; color:white;">⛶ Full Screen</button>
+            
+            <!-- NEW CLOSE BUTTON -->
+            <button onclick="closeCanvasBox()" style="background:#dc2626; color:white; border:1px solid #7f1d1d; font-weight:bold;">✖ Close</button>
         </div>
     </div>
     
@@ -4377,6 +4380,34 @@ window.renderAnalyticsChart = function() {
             }
         }
     });
+};
+  // --- CLOSES THE CANVAS (Exits fullscreen automatically if needed) ---
+window.closeCanvasBox = function() {
+    const box = document.getElementById("canvasBox");
+    const taskBox = document.getElementById("taskBox");
+    
+    // If it's currently in fullscreen, shrink it back to normal first
+    if (typeof isBoardFullscreen !== 'undefined' && isBoardFullscreen) {
+        window.toggleBoardFullscreen();
+    }
+    
+    // Hide the canvas and show the task box
+    box.classList.add("hidden");
+    if(taskBox) taskBox.classList.remove("hidden");
+};
+
+// --- FIX FOR MISSING BIO BREAK RESUME FUNCTION ---
+window.resumeFromBio = async function() {
+    if (!currentUser) return;
+    try {
+        // Removes the active bio break flag from the database
+        await remove(ref(db, `users/${currentUser.uid}/BIO_ACTIVE`));
+        
+        // Note: The existing Firebase listener will automatically detect this change,
+        // remove the black overlay, and restart your watchdog timer.
+    } catch (e) {
+        alert("Error resuming session: " + e.message);
+    }
 };
 // --- ATTACH TO WINDOW ---
 window.handleLoginFlow = handleLoginFlow;
