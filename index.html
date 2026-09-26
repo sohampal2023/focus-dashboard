@@ -338,7 +338,30 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 .leave-status-approved { border-color: #22c55e; background: #064e3b; color: #dcfce7; }
 .leave-status-half { border-color: #eab308; background: #422006; color: #fef08a; }
 .leave-status-rejected { border-color: #ef4444; background: #450a0a; color: #fee2e2; }
+/* --- SMART BOARD FULLSCREEN STYLES --- */
+.board-fullscreen {
+    position: fixed !important;
+    top: 0;
+    left: 0;
+    width: 100vw !important;
+    height: 100vh !important;
+    z-index: 999999 !important;
+    margin: 0 !important;
+    border-radius: 0 !important;
+    background: #020617 !important;
+    display: flex;
+    flex-direction: column;
+}
 
+.canvas-toolbar {
+    display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+    background: #0f172a; padding: 10px; border-radius: 8px; border: 1px solid #334155;
+}
+
+.canvas-toolbar button { width: auto; margin: 0; padding: 6px 12px; font-size: 12px; }
+.canvas-toolbar input[type="color"] { cursor: pointer; height: 30px; border: none; background: transparent; }
+.canvas-toolbar input[type="range"] { cursor: pointer; }
+.active-tool { border-color: #38bdf8 !important; box-shadow: 0 0 10px rgba(56, 189, 248, 0.5); }
 </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
@@ -550,13 +573,28 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
   </div>
 </div>
 <!-- NEW: CANVAS BOX -->
-<div id="canvasBox" class="card hidden" style="border-color: #8b5cf6;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
-        <h3 style="color:#c4b5fd; margin:0;">📝 Digital Notes (Pen Tab Ready)</h3>
-        <button onclick="clearCanvas()" style="width:auto; padding:8px 20px; background:#7f1d1d; color:white;">Clear Canvas</button>
+<!-- NEW: UPGRADED SMART TOUCH BOARD -->
+<div id="canvasBox" class="card hidden" style="border-color: #8b5cf6; display:flex; flex-direction:column; min-height: 70vh;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+        <h3 style="color:#c4b5fd; margin:0;">📝 Smart Touch Board</h3>
+        
+        <!-- TOOLBAR -->
+        <div class="canvas-toolbar">
+            <input type="color" id="penColor" value="#38bdf8" title="Pen Color">
+            <span style="color:#94a3b8; font-size:12px;">Size:</span>
+            <input type="range" id="penSize" min="1" max="30" value="3" title="Pen Thickness">
+            <button id="penBtn" class="active-tool" style="background:#0ea5e9; color:white;" onclick="setTool('pen')">🖌️ Pen</button>
+            <button id="eraserBtn" style="background:#475569; color:white;" onclick="setTool('eraser')">🧽 Eraser</button>
+            <button onclick="clearCanvas()" style="background:#7f1d1d; color:white;">🗑️ Clear</button>
+            <button id="fullscreenBtn" onclick="toggleBoardFullscreen()" style="background:#8b5cf6; color:white;">⛶ Full Screen</button>
+        </div>
     </div>
-    <div style="background:#fff; border-radius:12px; padding:10px;">
-        <canvas id="notesCanvas" width="800" height="600" style="background:#fff; width:100%; border:2px dashed #cbd5e1; border-radius:8px; cursor:crosshair; touch-action:none;"></canvas>
+    
+    <p style="font-size:12px; color:#94a3b8; margin-top:0;">Use your mouse or pen tab. This board auto-scales to your screen.</p>
+    
+    <!-- CANVAS CONTAINER -->
+    <div id="boardContainer" style="flex-grow:1; width:100%; position:relative; background:#0f172a; border:2px dashed #475569; border-radius:8px; overflow:hidden;">
+        <canvas id="notesCanvas" style="position:absolute; top:0; left:0; width:100%; height:100%; cursor:crosshair; touch-action:none;"></canvas>
     </div>
 </div>
     <div id="historyBox" class="card hidden">
@@ -4102,38 +4140,125 @@ window.exitDeepFocus = function() {
     document.getElementById("deepFocusClock").innerText = "00:00";
 };
   // ==========================================
-// CANVAS SYSTEM & PROOF LOGIC
+// ADVANCED SMART BOARD SYSTEM & PROOF LOGIC
 // ==========================================
 let canvas = document.getElementById("notesCanvas");
-let ctx = canvas ? canvas.getContext("2d") : null;
+let ctx = canvas ? canvas.getContext("2d", { willReadFrequently: true }) : null;
 let drawing = false;
+let currentTool = 'pen';
+let isBoardFullscreen = false;
 
-if(canvas && ctx) {
-    const startDraw = (e) => { drawing = true; draw(e); };
-    const stopDraw = () => { drawing = false; ctx.beginPath(); };
+if (canvas && ctx) {
+    // Resize canvas correctly without losing drawing
+    const resizeCanvas = () => {
+        const container = document.getElementById("boardContainer");
+        // Save current drawing
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width;
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d');
+        tempCtx.drawImage(canvas, 0, 0);
+
+        // Update real canvas size
+        canvas.width = container.clientWidth;
+        canvas.height = container.clientHeight;
+
+        // Restore drawing
+        ctx.drawImage(tempCanvas, 0, 0);
+    };
+
+    window.addEventListener("resize", resizeCanvas);
+    // Initial size setup
+    setTimeout(resizeCanvas, 500);
+
+    // Drawing Logic
+    const startDraw = (e) => { 
+        drawing = true; 
+        draw(e); 
+    };
+    
+    const stopDraw = () => { 
+        drawing = false; 
+        ctx.beginPath(); 
+    };
+    
     const draw = (e) => {
-        if(!drawing) return;
+        if (!drawing) return;
         e.preventDefault(); 
+        
         const rect = canvas.getBoundingClientRect();
         const clientX = e.clientX || (e.touches && e.touches[0].clientX);
         const clientY = e.clientY || (e.touches && e.touches[0].clientY);
+        
+        // Exact coordinate mapping
         const x = (clientX - rect.left) * (canvas.width / rect.width);
         const y = (clientY - rect.top) * (canvas.height / rect.height);
         
-        ctx.lineWidth = 2;
+        ctx.lineWidth = document.getElementById("penSize").value;
         ctx.lineCap = "round";
-        ctx.strokeStyle = "#000";
+        ctx.lineJoin = "round";
+
+        if (currentTool === 'eraser') {
+            ctx.globalCompositeOperation = "destination-out"; // Deletes drawing making it transparent
+            ctx.strokeStyle = "rgba(0,0,0,1)";
+        } else {
+            ctx.globalCompositeOperation = "source-over"; // Normal drawing
+            ctx.strokeStyle = document.getElementById("penColor").value;
+        }
+        
         ctx.lineTo(x, y);
         ctx.stroke();
         ctx.beginPath();
         ctx.moveTo(x, y);
     };
-    canvas.addEventListener("mousedown", startDraw); canvas.addEventListener("mouseup", stopDraw); canvas.addEventListener("mousemove", draw);
-    canvas.addEventListener("touchstart", startDraw, {passive: false}); canvas.addEventListener("touchend", stopDraw); canvas.addEventListener("touchmove", draw, {passive: false});
+
+    canvas.addEventListener("mousedown", startDraw); 
+    canvas.addEventListener("mouseup", stopDraw); 
+    canvas.addEventListener("mousemove", draw);
+    canvas.addEventListener("mouseout", stopDraw);
+
+    canvas.addEventListener("touchstart", startDraw, {passive: false}); 
+    canvas.addEventListener("touchend", stopDraw); 
+    canvas.addEventListener("touchmove", draw, {passive: false});
+    canvas.addEventListener("touchcancel", stopDraw);
 }
 
+// Tool Switcher
+window.setTool = function(tool) {
+    currentTool = tool;
+    document.getElementById("penBtn").classList.remove("active-tool");
+    document.getElementById("eraserBtn").classList.remove("active-tool");
+    
+    if(tool === 'pen') document.getElementById("penBtn").classList.add("active-tool");
+    if(tool === 'eraser') document.getElementById("eraserBtn").classList.add("active-tool");
+};
+
 window.clearCanvas = function() {
-    if(ctx && canvas && confirm("Clear notes?")) ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if(ctx && canvas && confirm("Clear all notes?")) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+    }
+};
+
+window.toggleBoardFullscreen = function() {
+    const box = document.getElementById("canvasBox");
+    const btn = document.getElementById("fullscreenBtn");
+    
+    isBoardFullscreen = !isBoardFullscreen;
+    
+    if (isBoardFullscreen) {
+        box.classList.add("board-fullscreen");
+        btn.innerText = "✖ Exit Full Screen";
+        btn.style.background = "#ef4444";
+    } else {
+        box.classList.remove("board-fullscreen");
+        btn.innerText = "⛶ Full Screen";
+        btn.style.background = "#8b5cf6";
+    }
+    
+    // Force canvas to recalibrate size to new window bounds
+    setTimeout(() => {
+        window.dispatchEvent(new Event('resize'));
+    }, 50);
 };
 
 window.toggleNotesCanvas = function() {
@@ -4141,10 +4266,14 @@ window.toggleNotesCanvas = function() {
     const taskBox = document.getElementById("taskBox");
     box.classList.toggle("hidden");
     if(taskBox) taskBox.classList.toggle("hidden");
+    
+    // Recalibrate size when opened
+    if(!box.classList.contains("hidden")) {
+        setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 50);
+    }
 };
 
 window.openProofModal = function() {
-    // Block reset if mock test is running
     const activeTest = JSON.parse(localStorage.getItem(key("TEST_STATE")));
     if(activeTest && activeTest.status === "RUNNING") {
         alert("No resets during Mock Test!");
@@ -4163,7 +4292,6 @@ window.submitFileProof = function() {
     const input = document.getElementById("proofFileInput");
     if(input.files.length === 0) return alert("Select a PDF/Image first.");
     
-    // Auto Download
     const file = input.files[0];
     const url = URL.createObjectURL(file);
     const a = document.createElement("a");
@@ -4178,8 +4306,9 @@ window.submitFileProof = function() {
 };
 
 function executeWatchdogReset() {
-    startIdle(1800); // Reset 30 mins
+    startIdle(1800); // 30 mins
     const btn = document.querySelector('.watchdog-btn');
+    const prevText = btn.innerText;
     btn.innerText = "VERIFIED / RESET";
     btn.style.background = "#22c55e"; 
     setTimeout(() => { btn.innerText = "PROVIDE PROOF / RESET"; btn.style.background = ""; }, 1500);
