@@ -741,14 +741,21 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
             <button onclick="clearCanvas()" style="background:#7f1d1d; color:white;">🗑️ Clear</button>
             
             <!-- NEW: PDF UPLOAD CONTROLS -->
-            <div style="border-left: 2px solid #334155; padding-left:10px; display:flex; gap:5px; align-items:center;">
-                <label for="pdfUploader" style="background:#10b981; color:white; padding:6px 12px; border-radius:8px; font-size:12px; cursor:pointer; font-weight:bold;">📄 Load PDF/PPT</label>
+           <!-- MULTI-PAGE & PDF CONTROLS -->
+            <div style="border-left: 2px solid #334155; padding-left:10px; display:flex; gap:5px; align-items:center; flex-wrap: wrap;">
+                <label for="pdfUploader" style="background:#10b981; color:white; padding:6px 12px; border-radius:8px; font-size:12px; cursor:pointer; font-weight:bold; margin:0;">📄 Load PDF</label>
                 <input type="file" id="pdfUploader" accept="application/pdf" style="display:none;" onchange="handlePDFUpload(event)">
                 
-                <div id="pdfControls" style="display:none; gap:5px; align-items:center;">
-                    <button onclick="changePDFPage(-1)" style="background:#334155; padding:6px 10px;">◀</button>
-                    <span id="pdfPageNum" style="color:#e2e8f0; font-size:12px; font-weight:bold; min-width:40px; text-align:center;">1/1</span>
-                    <button onclick="changePDFPage(1)" style="background:#334155; padding:6px 10px;">▶</button>
+                <div id="pageControls" style="display:flex; gap:5px; align-items:center; background:#1e293b; padding:4px 8px; border-radius:8px;">
+                    <button onclick="changePage(-1)" style="background:#334155; padding:6px 10px; margin:0;">◀</button>
+                    <span id="pageNumDisplay" style="color:#e2e8f0; font-size:12px; font-weight:bold; min-width:40px; text-align:center;">1/1</span>
+                    <button onclick="changePage(1)" style="background:#334155; padding:6px 10px; margin:0;">▶</button>
+                    
+                    <div style="width:1px; height:20px; background:#475569; margin:0 5px;"></div>
+                    
+                    <button onclick="addNewPage()" style="background:#0ea5e9; padding:6px 10px; margin:0; font-size:12px; font-weight:bold;" title="Add Blank Page">➕ New</button>
+                    <button onclick="movePage(-1)" style="background:#f59e0b; padding:6px 8px; margin:0; font-size:12px; color:black;" title="Move Current Page Left">⏪</button>
+                    <button onclick="movePage(1)" style="background:#f59e0b; padding:6px 8px; margin:0; font-size:12px; color:black;" title="Move Current Page Right">⏩</button>
                 </div>
             </div>
 
@@ -4184,32 +4191,6 @@ if (canvas && ctx) {
     // Resize canvas correctly without losing drawing
     // Resize canvas correctly without losing drawing
     const resizeCanvas = () => {
-        const container = document.getElementById("boardContainer");
-        const box = document.getElementById("canvasBox");
-        
-        // STRICT SAFETY CHECK: Abort completely if hidden or 0 size
-        if (!container || !box || box.classList.contains("hidden") || container.clientWidth === 0 || container.clientHeight === 0) {
-            return;
-        }
-
-        // Save current drawing safely
-        let tempCanvas = document.createElement('canvas');
-        tempCanvas.width = Math.max(canvas.width, 1);   // Force at least 1px to prevent crash
-        tempCanvas.height = Math.max(canvas.height, 1); 
-        const tempCtx = tempCanvas.getContext('2d');
-        
-        // Only draw if the original canvas had actual size
-        if (canvas.width > 0 && canvas.height > 0) {
-            tempCtx.drawImage(canvas, 0, 0);
-        }
-
-        // Update real canvas size to match the container
-        canvas.width = container.clientWidth;
-        canvas.height = container.clientHeight;
-
-        // Restore the drawing
-        ctx.drawImage(tempCanvas, 0, 0);
-    };
     window.addEventListener("resize", resizeCanvas);
     // Initial size setup
     setTimeout(resizeCanvas, 500);
@@ -4449,18 +4430,111 @@ window.resumeFromBio = async function() {
         alert("Error resuming session: " + e.message);
     }
 };
-  // ==========================================
-// YOUTUBE SPLIT-SCREEN & PDF ANNOTATION ENGINE
 // ==========================================
-
-// Setup PDF.js Worker
+// MULTI-PAGE ENGINE & PDF ANNOTATION
+// ==========================================
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
 
 let pdfDoc = null;
-let currentPdfPage = 1;
-let pageStrokes = {}; // Saves your notes per PDF page
+let boardPages = [{ id: 'blank_init', type: 'blank' }]; // Start with 1 blank page
+let currentPageIndex = 0;
+let pageStrokes = {}; // Saves drawings per page ID
 
-// --- PDF UPLOAD & RENDER ---
+// --- 1. SUPER SECURE RESIZE ENGINE ---
+const resizeCanvas = () => {
+    const container = document.getElementById("boardContainer");
+    const box = document.getElementById("canvasBox");
+    if (!container || !box || box.classList.contains("hidden") || container.clientWidth === 0 || container.clientHeight === 0) return;
+
+    saveCurrentCanvas(); // Save drawing before resize
+    canvas.width = container.clientWidth;
+    canvas.height = container.clientHeight;
+    renderCurrentPage(); // Redraws everything perfectly
+};
+window.addEventListener("resize", resizeCanvas);
+
+// --- 2. SAVE CURRENT DRAWING ---
+function saveCurrentCanvas() {
+    const topCanvas = document.getElementById("notesCanvas");
+    if(topCanvas && topCanvas.width > 0 && boardPages[currentPageIndex]) {
+        pageStrokes[boardPages[currentPageIndex].id] = topCanvas.toDataURL();
+    }
+}
+
+// --- 3. MASTER RENDER LOGIC ---
+window.renderCurrentPage = function() {
+    const topCanvas = document.getElementById("notesCanvas");
+    const pdfCanvas = document.getElementById("pdfCanvas");
+    const pdfCtx = pdfCanvas.getContext("2d");
+    const drawCtx = topCanvas.getContext("2d");
+    const container = document.getElementById("boardContainer");
+
+    const pageData = boardPages[currentPageIndex];
+    
+    // Clear both layers
+    pdfCtx.clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+    drawCtx.clearRect(0, 0, topCanvas.width, topCanvas.height);
+    
+    // Update Text
+    document.getElementById("pageNumDisplay").innerText = `${currentPageIndex + 1} / ${boardPages.length}`;
+
+    // Render PDF or Blank Background
+    if (pageData.type === 'pdf' && pdfDoc) {
+        pdfDoc.getPage(pageData.pdfPageNum).then(page => {
+            const viewport = page.getViewport({ scale: container.clientHeight / page.getViewport({scale:1}).height });
+            pdfCanvas.width = viewport.width;
+            pdfCanvas.height = viewport.height;
+            pdfCanvas.style.left = `calc(50% - ${viewport.width/2}px)`;
+            page.render({ canvasContext: pdfCtx, viewport: viewport });
+        });
+    } else {
+        pdfCanvas.width = container.clientWidth;
+        pdfCanvas.height = container.clientHeight;
+        pdfCanvas.style.left = '0';
+    }
+
+    // Restore Drawing Layer
+    if(pageStrokes[pageData.id]) {
+        let img = new Image();
+        img.onload = () => drawCtx.drawImage(img, 0, 0);
+        img.src = pageStrokes[pageData.id];
+    }
+};
+
+// --- 4. NAVIGATION & REARRANGING ---
+window.changePage = function(offset) {
+    let newIndex = currentPageIndex + offset;
+    if(newIndex >= 0 && newIndex < boardPages.length) {
+        saveCurrentCanvas();
+        currentPageIndex = newIndex;
+        renderCurrentPage();
+    }
+};
+
+window.addNewPage = function() {
+    saveCurrentCanvas();
+    // Add a new blank page exactly after the current one
+    const newPage = { id: 'blank_' + Date.now(), type: 'blank' };
+    boardPages.splice(currentPageIndex + 1, 0, newPage);
+    currentPageIndex++; 
+    renderCurrentPage();
+};
+
+window.movePage = function(direction) {
+    let swapIndex = currentPageIndex + direction;
+    if(swapIndex >= 0 && swapIndex < boardPages.length) {
+        saveCurrentCanvas();
+        // Swap the pages in the array
+        let temp = boardPages[currentPageIndex];
+        boardPages[currentPageIndex] = boardPages[swapIndex];
+        boardPages[swapIndex] = temp;
+        
+        currentPageIndex = swapIndex; // Follow the moved page
+        renderCurrentPage();
+    }
+};
+
+// --- 5. PDF UPLOAD ---
 window.handlePDFUpload = function(event) {
     const file = event.target.files[0];
     if(!file) return;
@@ -4470,60 +4544,21 @@ window.handlePDFUpload = function(event) {
         const typedarray = new Uint8Array(this.result);
         pdfjsLib.getDocument(typedarray).promise.then(pdf => {
             pdfDoc = pdf;
-            document.getElementById("pdfControls").style.display = "flex";
-            pageStrokes = {}; // Clear old notes
-            currentPdfPage = 1;
-            renderPDFPage(currentPdfPage);
+            
+            saveCurrentCanvas(); // Save any whiteboard notes before loading
+            
+            // Overwrite array with PDF pages
+            boardPages = [];
+            for(let i = 1; i <= pdf.numPages; i++) {
+                boardPages.push({ id: 'pdf_' + i + '_' + Date.now(), type: 'pdf', pdfPageNum: i });
+            }
+            
+            currentPageIndex = 0;
+            renderCurrentPage();
         });
     };
     fileReader.readAsArrayBuffer(file);
 };
-
-window.renderPDFPage = function(num) {
-    if(!pdfDoc) return;
-    
-    // Save current strokes before changing page
-    const topCanvas = document.getElementById("notesCanvas");
-    if(topCanvas.width > 0) pageStrokes[currentPdfPage] = topCanvas.toDataURL();
-
-    currentPdfPage = num;
-    pdfDoc.getPage(num).then(page => {
-        const pdfCanvas = document.getElementById("pdfCanvas");
-        const pdfCtx = pdfCanvas.getContext("2d");
-        const container = document.getElementById("boardContainer");
-        
-        // Scale PDF to fit container height
-        const viewport = page.getViewport({ scale: container.clientHeight / page.getViewport({scale:1}).height });
-        
-        pdfCanvas.width = viewport.width;
-        pdfCanvas.height = viewport.height;
-        // Center the PDF canvas
-        pdfCanvas.style.left = `calc(50% - ${viewport.width/2}px)`;
-
-        // Render PDF
-        page.render({ canvasContext: pdfCtx, viewport: viewport });
-        document.getElementById("pdfPageNum").innerText = `${num} / ${pdfDoc.numPages}`;
-
-        // Restore strokes for this page if they exist
-        const drawCtx = topCanvas.getContext("2d");
-        drawCtx.clearRect(0, 0, topCanvas.width, topCanvas.height);
-        
-        if(pageStrokes[num]) {
-            let img = new Image();
-            img.onload = () => drawCtx.drawImage(img, 0, 0);
-            img.src = pageStrokes[num];
-        }
-    });
-};
-
-window.changePDFPage = function(offset) {
-    if(!pdfDoc) return;
-    let newPage = currentPdfPage + offset;
-    if(newPage >= 1 && newPage <= pdfDoc.numPages) {
-        renderPDFPage(newPage);
-    }
-};
-
 // --- SPLIT SCREEN LOGIC ---
 window.openStudyVideoModal = function() {
     // 1. Show the Modal
