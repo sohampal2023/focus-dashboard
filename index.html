@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <title>Focus Watchdog Advance Pro Version</title>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
 <style>
 /* --- BASE STYLES --- */
 *{box-sizing:border-box}
@@ -574,32 +574,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 </div>
 <!-- NEW: CANVAS BOX -->
 <!-- NEW: UPGRADED SMART TOUCH BOARD -->
-<div id="canvasBox" class="card hidden" style="border-color: #8b5cf6; display:flex; flex-direction:column; min-height: 70vh;">
-    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
-        <h3 style="color:#c4b5fd; margin:0;">📝 Smart Touch Board</h3>
-        
-        <!-- TOOLBAR -->
-        <div class="canvas-toolbar">
-            <input type="color" id="penColor" value="#38bdf8" title="Pen Color">
-            <span style="color:#94a3b8; font-size:12px;">Size:</span>
-            <input type="range" id="penSize" min="1" max="30" value="3" title="Pen Thickness">
-            <button id="penBtn" class="active-tool" style="background:#0ea5e9; color:white;" onclick="setTool('pen')">🖌️ Pen</button>
-            <button id="eraserBtn" style="background:#475569; color:white;" onclick="setTool('eraser')">🧽 Eraser</button>
-            <button onclick="clearCanvas()" style="background:#7f1d1d; color:white;">🗑️ Clear</button>
-            <button id="fullscreenBtn" onclick="toggleBoardFullscreen()" style="background:#8b5cf6; color:white;">⛶ Full Screen</button>
-            
-            <!-- NEW CLOSE BUTTON -->
-            <button onclick="closeCanvasBox()" style="background:#dc2626; color:white; border:1px solid #7f1d1d; font-weight:bold;">✖ Close</button>
-        </div>
-    </div>
-    
-    <p style="font-size:12px; color:#94a3b8; margin-top:0;">Use your mouse or pen tab. This board auto-scales to your screen.</p>
-    
-    <!-- CANVAS CONTAINER -->
-    <div id="boardContainer" style="flex-grow:1; width:100%; position:relative; background:#0f172a; border:2px dashed #475569; border-radius:8px; overflow:hidden;">
-        <canvas id="notesCanvas" style="position:absolute; top:0; left:0; width:100%; height:100%; cursor:crosshair; touch-action:none;"></canvas>
-    </div>
-</div>
     <div id="historyBox" class="card hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
             <h3 style="color:#7dd3fc">History (Last 4 Days)</h3>
@@ -753,15 +727,69 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         <button onclick="document.getElementById('proofModal').classList.add('hidden')" style="background:transparent; border:1px solid #ef4444; color:#ef4444; margin-top:15px;">Cancel</button>
     </div>
 </div>
+<!-- NEW: ADVANCED SMART TOUCH BOARD -->
+<div id="canvasBox" class="card hidden" style="border-color: #8b5cf6; display:flex; flex-direction:column; min-height: 70vh;">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px; flex-wrap:wrap; gap:10px;">
+        <h3 style="color:#c4b5fd; margin:0;">📝 Smart Touch Board</h3>
+        
+        <!-- TOOLBAR -->
+        <div class="canvas-toolbar">
+            <input type="color" id="penColor" value="#38bdf8" title="Pen Color">
+            <input type="range" id="penSize" min="1" max="30" value="3" title="Pen Thickness">
+            <button id="penBtn" class="active-tool" style="background:#0ea5e9; color:white;" onclick="setTool('pen')">🖌️ Pen</button>
+            <button id="eraserBtn" style="background:#475569; color:white;" onclick="setTool('eraser')">🧽 Eraser</button>
+            <button onclick="clearCanvas()" style="background:#7f1d1d; color:white;">🗑️ Clear</button>
+            
+            <!-- NEW: PDF UPLOAD CONTROLS -->
+            <div style="border-left: 2px solid #334155; padding-left:10px; display:flex; gap:5px; align-items:center;">
+                <label for="pdfUploader" style="background:#10b981; color:white; padding:6px 12px; border-radius:8px; font-size:12px; cursor:pointer; font-weight:bold;">📄 Load PDF/PPT</label>
+                <input type="file" id="pdfUploader" accept="application/pdf" style="display:none;" onchange="handlePDFUpload(event)">
+                
+                <div id="pdfControls" style="display:none; gap:5px; align-items:center;">
+                    <button onclick="changePDFPage(-1)" style="background:#334155; padding:6px 10px;">◀</button>
+                    <span id="pdfPageNum" style="color:#e2e8f0; font-size:12px; font-weight:bold; min-width:40px; text-align:center;">1/1</span>
+                    <button onclick="changePDFPage(1)" style="background:#334155; padding:6px 10px;">▶</button>
+                </div>
+            </div>
 
-<!-- CAPTIVE YOUTUBE MODAL -->
-<div id="videoModal" class="modal-overlay hidden" style="z-index: 10000;">
-    <div class="modal-content" style="width: 800px; max-width:95%; padding:0; overflow:hidden; border:2px solid #eab308;">
-        <div style="background:#0f172a; padding:15px; display:flex; justify-content:space-between; align-items:center;">
-            <h3 style="margin:0; color:#eab308;">🎥 Approved Study Video</h3>
-            <button onclick="closeStudyVideoModal()" style="width:auto; padding:6px 15px; background:#ef4444; margin:0;">Close Player</button>
+            <button id="fullscreenBtn" onclick="toggleBoardFullscreen()" style="background:#8b5cf6; color:white; margin-left:10px;">⛶ Full Screen</button>
+            <button id="closeCanvasBtn" onclick="closeCanvasBox()" style="background:#dc2626; color:white; border:1px solid #7f1d1d; font-weight:bold;">✖ Close</button>
         </div>
-        <div id="videoIframeContainer" style="position:relative; padding-bottom:56.25%; height:0; background:#000;"></div>
+    </div>
+    
+    <!-- CANVAS CONTAINER (Dual Layer System) -->
+    <div id="boardContainer" style="flex-grow:1; width:100%; position:relative; background:#0f172a; border:2px dashed #475569; border-radius:8px; overflow:hidden;">
+        <!-- Bottom Layer: Renders the PDF -->
+        <canvas id="pdfCanvas" style="position:absolute; top:0; left:0; width:100%; height:100%;"></canvas>
+        <!-- Top Layer: Transparent Drawing Canvas -->
+        <canvas id="notesCanvas" style="position:absolute; top:0; left:0; width:100%; height:100%; cursor:crosshair; touch-action:none;"></canvas>
+    </div>
+</div>
+
+<!-- CAPTIVE YOUTUBE + NOTES SPLIT-SCREEN MODAL -->
+<div id="videoModal" class="modal-overlay hidden" style="z-index: 10000; background:#020617;">
+    <div style="display:flex; flex-direction:column; width:100vw; height:100vh;">
+        
+        <!-- HUB HEADER -->
+        <div style="background:#0f172a; padding:10px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #eab308;">
+            <h3 style="margin:0; color:#eab308; display:flex; align-items:center; gap:10px;">
+                🎥 Smart Study Hub (50% Video | 50% Notes)
+            </h3>
+            <div style="color:#ef4444; font-size:12px; font-weight:bold;">DO NOT SWITCH TABS!</div>
+            <button onclick="closeStudyVideoModal()" style="width:auto; padding:8px 25px; background:#ef4444; color:white; font-weight:bold; margin:0;">Exit Hub</button>
+        </div>
+        
+        <!-- 50/50 SPLIT SCREEN -->
+        <div style="display:flex; flex-grow:1; overflow:hidden; width:100vw;">
+            <!-- Left Side: YouTube -->
+            <div id="videoSplitLeft" style="flex:1; background:#000; border-right:2px solid #334155; position:relative;">
+                <div id="videoIframeContainer" style="width:100%; height:100%;"></div>
+            </div>
+            <!-- Right Side: Moved Canvas Box -->
+            <div id="videoSplitRight" style="flex:1; background:#020617; display:flex; flex-direction:column; padding:10px;">
+                <!-- JavaScript will dynamically inject the canvas here -->
+            </div>
+        </div>
     </div>
 </div>
 </div>
@@ -2981,40 +3009,38 @@ window.assignRoadmapTasks = async function(uid) {
 // --- GLOBAL TIMING VARIABLES ---
 let masterClockInterval = null;
 let localShiftRemaining = 0;
-
 window.initializeShift = async function() {
     const userRef = ref(db, `users/${currentUser.uid}`);
     const snap = await get(userRef);
     const data = snap.val() || {};
 
+    // Force HUD to show immediately
+    document.getElementById("playerHudBox").classList.remove("hidden");
+    if (typeof updateGamificationUI === "function") updateGamificationUI();
+
+    // Check time, fallback to 2 hours (7200000ms) if admin forgot to set it
     if (data.SHIFT_ACTIVE === true) {
-        console.log("Active Session Detected. Resuming...");
-        localStorage.setItem(key("SHIFT_ACTIVE"), "true");
-        
-        // Show the Gamified HUD
-        document.getElementById("playerHudBox").classList.remove("hidden");
-        if (typeof updateGamificationUI === "function") updateGamificationUI();
-        
-        // Load the exact remaining time from the database
-        localShiftRemaining = parseFloat(data.SHIFT_REMAINING_TIME) || 0;
-        
-        // FIRE UP THE LIVE TICKING CLOCK
-        startMasterClock();
-
-        if (data.INITIAL_SHIFT_GOAL) {
-            localStorage.setItem(key("INITIAL_SHIFT_GOAL"), data.INITIAL_SHIFT_GOAL);
-        }
-
-        await window.recalculateAllocatedTime();
-        return; 
+        localShiftRemaining = parseFloat(data.SHIFT_REMAINING_TIME) || 7200000;
+    } else {
+        // Automatically start a shift if one isn't active
+        localShiftRemaining = 7200000; 
+        await update(userRef, {
+            SHIFT_TOTAL_TIME: 7200000,
+            SHIFT_REMAINING_TIME: 7200000,
+            SHIFT_ACTIVE: true,
+            SHIFT_START_TS: Date.now()
+        });
     }
 
-    // Shift is not active
-    localStorage.removeItem(key("SHIFT_ACTIVE"));
-    document.getElementById("playerHudBox").classList.add("hidden");
-    const tList = document.getElementById("taskList");
-    if (tList) {
-        tList.innerHTML = `<div style="padding:40px; text-align:center; border:1px dashed #334155; border-radius:15px; background:#0f172a;"><h3 style="color:#38bdf8">Waiting for Today's Schedule</h3><p style="color:#64748b; font-size:12px;">Admin has not activated your study shift yet.</p></div>`;
+    // Start ticking!
+    startMasterClock();
+
+    if (data.INITIAL_SHIFT_GOAL) {
+        localStorage.setItem(key("INITIAL_SHIFT_GOAL"), data.INITIAL_SHIFT_GOAL);
+    }
+    
+    if (typeof window.recalculateAllocatedTime === "function") {
+        await window.recalculateAllocatedTime();
     }
 };
 
@@ -4422,6 +4448,120 @@ window.resumeFromBio = async function() {
     } catch (e) {
         alert("Error resuming session: " + e.message);
     }
+};
+  // ==========================================
+// YOUTUBE SPLIT-SCREEN & PDF ANNOTATION ENGINE
+// ==========================================
+
+// Setup PDF.js Worker
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+
+let pdfDoc = null;
+let currentPdfPage = 1;
+let pageStrokes = {}; // Saves your notes per PDF page
+
+// --- PDF UPLOAD & RENDER ---
+window.handlePDFUpload = function(event) {
+    const file = event.target.files[0];
+    if(!file) return;
+    
+    const fileReader = new FileReader();
+    fileReader.onload = function() {
+        const typedarray = new Uint8Array(this.result);
+        pdfjsLib.getDocument(typedarray).promise.then(pdf => {
+            pdfDoc = pdf;
+            document.getElementById("pdfControls").style.display = "flex";
+            pageStrokes = {}; // Clear old notes
+            currentPdfPage = 1;
+            renderPDFPage(currentPdfPage);
+        });
+    };
+    fileReader.readAsArrayBuffer(file);
+};
+
+window.renderPDFPage = function(num) {
+    if(!pdfDoc) return;
+    
+    // Save current strokes before changing page
+    const topCanvas = document.getElementById("notesCanvas");
+    if(topCanvas.width > 0) pageStrokes[currentPdfPage] = topCanvas.toDataURL();
+
+    currentPdfPage = num;
+    pdfDoc.getPage(num).then(page => {
+        const pdfCanvas = document.getElementById("pdfCanvas");
+        const pdfCtx = pdfCanvas.getContext("2d");
+        const container = document.getElementById("boardContainer");
+        
+        // Scale PDF to fit container height
+        const viewport = page.getViewport({ scale: container.clientHeight / page.getViewport({scale:1}).height });
+        
+        pdfCanvas.width = viewport.width;
+        pdfCanvas.height = viewport.height;
+        // Center the PDF canvas
+        pdfCanvas.style.left = `calc(50% - ${viewport.width/2}px)`;
+
+        // Render PDF
+        page.render({ canvasContext: pdfCtx, viewport: viewport });
+        document.getElementById("pdfPageNum").innerText = `${num} / ${pdfDoc.numPages}`;
+
+        // Restore strokes for this page if they exist
+        const drawCtx = topCanvas.getContext("2d");
+        drawCtx.clearRect(0, 0, topCanvas.width, topCanvas.height);
+        
+        if(pageStrokes[num]) {
+            let img = new Image();
+            img.onload = () => drawCtx.drawImage(img, 0, 0);
+            img.src = pageStrokes[num];
+        }
+    });
+};
+
+window.changePDFPage = function(offset) {
+    if(!pdfDoc) return;
+    let newPage = currentPdfPage + offset;
+    if(newPage >= 1 && newPage <= pdfDoc.numPages) {
+        renderPDFPage(newPage);
+    }
+};
+
+// --- SPLIT SCREEN LOGIC ---
+window.openStudyVideoModal = function() {
+    // 1. Show the Modal
+    document.getElementById("videoModal").classList.remove("hidden");
+    
+    // 2. Move the Canvas Box into the Right 50% Panel
+    const rightPane = document.getElementById("videoSplitRight");
+    const canvasBox = document.getElementById("canvasBox");
+    rightPane.appendChild(canvasBox);
+    canvasBox.classList.remove("hidden", "board-fullscreen");
+    canvasBox.style.minHeight = "100%"; 
+    
+    // 3. Hide redundant UI buttons since they are in a locked hub
+    document.getElementById("fullscreenBtn").style.display = "none";
+    document.getElementById("closeCanvasBtn").style.display = "none";
+    
+    // 4. Force a resize so the canvas fits the 50% width perfectly
+    setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 100);
+};
+
+window.closeStudyVideoModal = function() {
+    document.getElementById("videoModal").classList.add("hidden");
+    
+    // 1. Pause video
+    const container = document.getElementById("videoIframeContainer");
+    const iframe = container.querySelector("iframe");
+    if(iframe) iframe.src = iframe.src; 
+    
+    // 2. Move Canvas Box back to normal dashboard
+    const studentView = document.getElementById("studentView");
+    const canvasBox = document.getElementById("canvasBox");
+    studentView.appendChild(canvasBox);
+    canvasBox.classList.add("hidden"); // Hide it until they manually click Notes button
+    canvasBox.style.minHeight = "70vh";
+    
+    // 3. Restore buttons
+    document.getElementById("fullscreenBtn").style.display = "inline-block";
+    document.getElementById("closeCanvasBtn").style.display = "inline-block";
 };
 // --- ATTACH TO WINDOW ---
 window.handleLoginFlow = handleLoginFlow;
