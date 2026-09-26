@@ -4185,67 +4185,7 @@ let canvas = document.getElementById("notesCanvas");
 let ctx = canvas ? canvas.getContext("2d", { willReadFrequently: true }) : null;
 let drawing = false;
 let currentTool = 'pen';
-let isBoardFullscreen = false;
-
-if (canvas && ctx) {
-    // Resize canvas correctly without losing drawing
-    // Resize canvas correctly without losing drawing
-    const resizeCanvas = () => {
-    window.addEventListener("resize", resizeCanvas);
-    // Initial size setup
-    setTimeout(resizeCanvas, 500);
-
-    // Drawing Logic
-    const startDraw = (e) => { 
-        drawing = true; 
-        draw(e); 
-    };
-    
-    const stopDraw = () => { 
-        drawing = false; 
-        ctx.beginPath(); 
-    };
-    
-    const draw = (e) => {
-        if (!drawing) return;
-        e.preventDefault(); 
-        
-        const rect = canvas.getBoundingClientRect();
-        const clientX = e.clientX || (e.touches && e.touches[0].clientX);
-        const clientY = e.clientY || (e.touches && e.touches[0].clientY);
-        
-        // Exact coordinate mapping
-        const x = (clientX - rect.left) * (canvas.width / rect.width);
-        const y = (clientY - rect.top) * (canvas.height / rect.height);
-        
-        ctx.lineWidth = document.getElementById("penSize").value;
-        ctx.lineCap = "round";
-        ctx.lineJoin = "round";
-
-        if (currentTool === 'eraser') {
-            ctx.globalCompositeOperation = "destination-out"; // Deletes drawing making it transparent
-            ctx.strokeStyle = "rgba(0,0,0,1)";
-        } else {
-            ctx.globalCompositeOperation = "source-over"; // Normal drawing
-            ctx.strokeStyle = document.getElementById("penColor").value;
-        }
-        
-        ctx.lineTo(x, y);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-    };
-
-    canvas.addEventListener("mousedown", startDraw); 
-    canvas.addEventListener("mouseup", stopDraw); 
-    canvas.addEventListener("mousemove", draw);
-    canvas.addEventListener("mouseout", stopDraw);
-
-    canvas.addEventListener("touchstart", startDraw, {passive: false}); 
-    canvas.addEventListener("touchend", stopDraw); 
-    canvas.addEventListener("touchmove", draw, {passive: false});
-    canvas.addEventListener("touchcancel", stopDraw);
-}
+let isBoardFullscreen = false; 
 
 // Tool Switcher
 window.setTool = function(tool) {
