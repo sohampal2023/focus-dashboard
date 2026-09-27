@@ -788,10 +788,7 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     </div>
 </div>
 
-<!-- CAPTIVE YOUTUBE + NOTES SPLIT-SCREEN MODAL -->
-<div id="videoModal" class="modal-overlay hidden" style="z-index: 10000; background:#020617;">
-    <div style="display:flex; flex-direction:column; width:100vw; height:100vh;">
-        
+      
         <!-- HUB HEADER -->
         <!-- CAPTIVE YOUTUBE + NOTES SPLIT-SCREEN MODAL -->
 <div id="videoModal" class="modal-overlay hidden" style="z-index: 10000; background:#020617;">
@@ -825,8 +822,6 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
                 <!-- JavaScript will dynamically inject the canvas here -->
             </div>
         </div>
-    </div>
-</div>
     </div>
 </div>
   <!-- IN-PAGE ROADMAP OVERLAY -->
@@ -2893,11 +2888,31 @@ function resetWatchdog() {
     }, 1000);
 }
 
+// NEW CHIME FUNCTION
+window.playWatchdogWarningChime = function() {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime); // High pitch alert
+        osc.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.8);
+        flashScreenRed(); // Visually flash the screen too
+    } catch(e) { console.log("Audio warning failed:", e); }
+};
+
+// UPDATED IDLE FUNCTION
 function updateIdle(seconds) {
   if (seconds === undefined && targetTime) {
       seconds = Math.ceil((targetTime - Date.now()) / 1000);
   }
   let displaySeconds = seconds > 0 ? seconds : 0;
+  
+  // 🔥 THE 2 MINUTE WARNING CHIME 🔥
+  if (displaySeconds === 120) {
+      window.playWatchdogWarningChime();
+  }
   
   const h = Math.floor(displaySeconds / 3600);
   const m = Math.floor((displaySeconds % 3600) / 60);
@@ -3243,10 +3258,26 @@ window.initializeShift = async function() {
         await window.recalculateAllocatedTime();
     }
 };
-let continuousStudyTime = 0; // Tracks 30 mins
+window.continuousStudyTime = 0;
+
 function startMasterClock() {
     if(masterClockInterval) clearInterval(masterClockInterval);
     
+    // FOOLPROOF HTML INJECTION: Auto-creates the Break Screen if missing
+    if (!document.getElementById("mandatoryBreakOverlay")) {
+        const overlay = document.createElement("div");
+        overlay.id = "mandatoryBreakOverlay";
+        overlay.className = "hidden";
+        overlay.style.cssText = "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2,6,23,0.98); z-index: 999999; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 5px solid #38bdf8; backdrop-filter: blur(10px);";
+        overlay.innerHTML = `
+            <h1 style="color:#38bdf8; font-size: 50px; text-transform: uppercase; text-shadow: 0 0 20px #38bdf8;">🛑 Mandatory Break 🛑</h1>
+            <p style="color:#94a3b8; font-size: 22px; max-width: 600px;">You've studied for 30 minutes straight. Stand up, drink some water, and walk around. System is temporarily locked.</p>
+            <div id="breakTimerDisplay" style="font-size: 80px; font-weight: 900; color: #facc15; margin: 30px 0; font-family: monospace;">05:00</div>
+            <p style="color:#ef4444; font-weight: bold; font-size: 18px;">Videos, Tasks, and Watchdog are PAUSED.</p>
+        `;
+        document.body.appendChild(overlay);
+    }
+
     masterClockInterval = setInterval(() => {
         if(localShiftRemaining <= 0) {
             clearInterval(masterClockInterval);
@@ -3254,34 +3285,52 @@ function startMasterClock() {
             document.getElementById("masterClockDisplay").style.color = "#ef4444";
             return;
         }
-        localShiftRemaining -= 1000; 
 
-        // 30 MINUTE MANDATORY BREAK LOGIC
-        if (localStorage.getItem(key("SHIFT_ACTIVE")) === "true" && document.getElementById("mandatoryBreakOverlay").classList.contains("hidden")) {
-            continuousStudyTime++;
-            if (continuousStudyTime >= 1800) { // 1800 seconds = 30 mins
-                triggerMandatoryBreak();
-                continuousStudyTime = 0; // reset for next cycle
+        // Deduct exactly 1 second of real-time logic while logged in
+        localShiftRemaining -= 1000;
+        
+        // --- 🔥 30 MINUTE MANDATORY BREAK LOGIC 🔥 ---
+        const breakOverlay = document.getElementById("mandatoryBreakOverlay");
+        if (localStorage.getItem(key("SHIFT_ACTIVE")) === "true" && breakOverlay.classList.contains("hidden")) {
+            window.continuousStudyTime++;
+            if (window.continuousStudyTime >= 1800) { // 1800 seconds = exactly 30 minutes
+                window.triggerMandatoryBreak();
+                window.continuousStudyTime = 0; // reset for next cycle
             }
         }
 
+        // Format UI Clock HH:MM:SS
         const h = Math.floor(localShiftRemaining / 3600000);
         const m = Math.floor((localShiftRemaining % 3600000) / 60000);
         const s = Math.floor((localShiftRemaining % 60000) / 1000);
+        
         const disp = document.getElementById("masterClockDisplay");
-        if(disp) disp.innerText = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        if(disp) {
+            disp.innerText = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        }
 
         if(s % 30 === 0) {
-            update(ref(db, `users/${currentUser.uid}`), { SHIFT_REMAINING_TIME: localShiftRemaining });
+            update(ref(db, `users/${currentUser.uid}`), {
+                SHIFT_REMAINING_TIME: localShiftRemaining
+            });
         }
     }, 1000);
 }
 
-// THE BREAK FUNCTIONS & CHIME
-function triggerMandatoryBreak() {
-    if(typeof ytPlayer !== 'undefined' && ytPlayer && typeof ytPlayer.pauseVideo === 'function') ytPlayer.pauseVideo();
-    document.getElementById("mandatoryBreakOverlay").classList.remove("hidden");
-    
+// FORCE BREAK EXECUTION
+window.triggerMandatoryBreak = function() {
+    // 1. Pause video perfectly
+    if(window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
+        window.ytPlayer.pauseVideo(); 
+    }
+
+    // 2. Pause Watchdog Timer
+    if (idleTimer) clearInterval(idleTimer);
+
+    // 3. Show Break Screen
+    const overlay = document.getElementById("mandatoryBreakOverlay");
+    overlay.classList.remove("hidden");
+
     let breakSeconds = 300; // 5 mins
     let breakInt = setInterval(() => {
         breakSeconds--;
@@ -3289,15 +3338,16 @@ function triggerMandatoryBreak() {
         let s = breakSeconds % 60;
         document.getElementById("breakTimerDisplay").innerText = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
         
-        if (breakSeconds === 120) playTwoMinuteWarning(); // CHIME AT 2 MINS LEFT
-        
         if (breakSeconds <= 0) {
             clearInterval(breakInt);
-            document.getElementById("mandatoryBreakOverlay").classList.add("hidden");
+            overlay.classList.add("hidden");
             alert("Break is over! Time to get back to deep focus.");
+            
+            // Restart Watchdog after break automatically
+            startIdle(1800); 
         }
     }, 1000);
-}
+};
 
 function playTwoMinuteWarning() {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
