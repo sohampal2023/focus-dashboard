@@ -3847,13 +3847,14 @@ function stopBreakLast10SecSiren() {
         console.error("Break siren stop error:", e);
     }
 }
-
-
 window.triggerMandatoryBreak = function() {
 
     console.log("🛑 MANDATORY 5-MINUTE BREAK STARTED");
 
-    // Stop watchdog
+    // =====================================================
+    // STOP WATCHDOG
+    // =====================================================
+
     if (typeof idleTimer !== "undefined" && idleTimer) {
         clearInterval(idleTimer);
         idleTimer = null;
@@ -3864,12 +3865,41 @@ window.triggerMandatoryBreak = function() {
         stopContinuousWatchdogSiren();
     }
 
-    // Stop study video
+    // =====================================================
+    // ⏸️ PAUSE YOUTUBE VIDEO
+    // =====================================================
+
+    if (
+        window.ytPlayer &&
+        typeof window.ytPlayer.pauseVideo === "function"
+    ) {
+        try {
+            window.ytPlayer.pauseVideo();
+
+            console.log(
+                "⏸️ YouTube video automatically paused for mandatory break"
+            );
+        } catch (e) {
+            console.warn(
+                "Could not pause YouTube video:",
+                e
+            );
+        }
+    }
+
+    // =====================================================
+    // STOP STUDY VIDEO MODAL
+    // =====================================================
+
     if (typeof window.closeStudyVideoModal === "function") {
         try {
             window.closeStudyVideoModal();
         } catch (e) {}
     }
+
+    // =====================================================
+    // CREATE / GET BREAK OVERLAY
+    // =====================================================
 
     let overlay =
         document.getElementById("mandatoryBreakOverlay");
@@ -3991,10 +4021,16 @@ window.triggerMandatoryBreak = function() {
         </div>
     `;
 
-    // Lock system
+    // =====================================================
+    // LOCK SYSTEM
+    // =====================================================
+
     document.body.style.overflow = "hidden";
 
-    // Stop old break timer
+    // =====================================================
+    // STOP OLD BREAK TIMER
+    // =====================================================
+
     if (window.activeBreakInterval) {
         clearInterval(window.activeBreakInterval);
         window.activeBreakInterval = null;
@@ -4002,6 +4038,10 @@ window.triggerMandatoryBreak = function() {
 
     // Stop any previous 10-second siren
     stopBreakLast10SecSiren();
+
+    // =====================================================
+    // BREAK TIMER
+    // =====================================================
 
     let breakSeconds = 300;
     let warningSirenStarted = false;
@@ -4020,23 +4060,34 @@ window.triggerMandatoryBreak = function() {
         if (display) {
 
             display.innerText =
-                `${String(minutes).padStart(2,"0")}:${String(seconds).padStart(2,"0")}`;
+                `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 
-            // Last 10 seconds = red warning
-            if (breakSeconds <= 10 && breakSeconds > 0) {
+            // =============================================
+            // LAST 10 SECONDS = RED WARNING
+            // =============================================
+
+            if (
+                breakSeconds <= 10 &&
+                breakSeconds > 0
+            ) {
 
                 display.style.color = "#ef4444";
+
                 display.style.textShadow =
                     "0 0 30px rgba(239,68,68,.9)";
 
                 const warning =
-                    document.getElementById("breakWarningText");
+                    document.getElementById(
+                        "breakWarningText"
+                    );
 
                 if (warning) {
+
                     warning.innerText =
                         "🚨 BREAK ENDING - GET READY TO STUDY 🚨";
 
-                    warning.style.color = "#ef4444";
+                    warning.style.color =
+                        "#ef4444";
                 }
             }
         }
@@ -4044,15 +4095,19 @@ window.triggerMandatoryBreak = function() {
 
     updateBreakDisplay();
 
+    // =====================================================
+    // START BREAK TIMER
+    // =====================================================
+
     window.activeBreakInterval = setInterval(() => {
 
         breakSeconds--;
 
         updateBreakDisplay();
 
-        // =====================================
+        // =================================================
         // 🔊 LAST 10 SECOND SIREN
-        // =====================================
+        // =================================================
 
         if (
             breakSeconds <= 10 &&
@@ -4069,56 +4124,64 @@ window.triggerMandatoryBreak = function() {
             startBreakLast10SecSiren();
         }
 
-        // =====================================
+        // =================================================
         // BREAK FINISHED
-        // =====================================
+        // =================================================
 
-        // =====================================
-// BREAK FINISHED
-// =====================================
+        if (breakSeconds <= 0) {
 
-if (breakSeconds <= 0) {
+            clearInterval(
+                window.activeBreakInterval
+            );
 
-    clearInterval(window.activeBreakInterval);
+            window.activeBreakInterval = null;
 
-    window.activeBreakInterval = null;
+            // =============================================
+            // STOP BREAK SIREN
+            // =============================================
 
-    // STOP LAST 10 SECOND SIREN
-    stopBreakLast10SecSiren();
+            stopBreakLast10SecSiren();
 
-    console.log(
-        "✅ BREAK COMPLETE - SYSTEM UNLOCKED"
-    );
+            console.log(
+                "✅ BREAK COMPLETE - SYSTEM UNLOCKED"
+            );
 
-    // =====================================
-    // REMOVE BREAK SCREEN COMPLETELY
-    // =====================================
+            // =============================================
+            // REMOVE BREAK SCREEN COMPLETELY
+            // =============================================
 
-    if (overlay) {
-        overlay.remove();
-    }
+            if (overlay) {
+                overlay.remove();
+            }
 
-    // Restore scrolling
-    document.body.style.overflow = "";
+            // =============================================
+            // RESTORE PAGE
+            // =============================================
 
-    // Reset continuous study counter
-    window.continuousStudyTime = 0;
+            document.body.style.overflow = "";
 
-    // Reset inactivity counter
-    window.idleInactivityCounter = 0;
+            // =============================================
+            // RESET STUDY COUNTERS
+            // =============================================
 
-    // =====================================
-    // START FRESH 2-MINUTE WATCHDOG
-    // =====================================
+            window.continuousStudyTime = 0;
 
-    if (typeof startIdle === "function") {
-        startIdle(18);
-    }
+            window.idleInactivityCounter = 0;
 
-    console.log(
-        "🟢 NEW 2-MINUTE WATCHDOG STARTED"
-    );
-}
+            // =============================================
+            // START FRESH 2-MINUTE WATCHDOG
+            // =============================================
+
+            if (typeof startIdle === "function") {
+
+                startIdle(125);
+
+            }
+
+            console.log(
+                "🟢 NEW 2-MINUTE WATCHDOG STARTED"
+            );
+        }
 
     }, 1000);
 };
