@@ -2414,10 +2414,23 @@ window.currentMcqSession = { correct: 0, total: 0 };
 window.currentVideoRewarded = false;
 
 // 1. PLAY OR RESUME THE VIDEO IN THE HUB
+// 1. PLAY OR RESUME THE VIDEO IN THE HUB
 window.playSpecificVideo = function(videoKey, ytId, startAt, oldScore, oldTotal, rewardGiven) {
-    window.currentPlayingVideoKey = videoKey;
-    window.currentVideoRewarded = rewardGiven === true || rewardGiven === 'true'; // Checks if already completed
     
+    // 🔥 HANDLE CUMULATIVE MCQ LIST VISUALLY
+    const resultList = document.getElementById("mcqResultList");
+    if (window.currentPlayingVideoKey !== videoKey) {
+        // You clicked a DIFFERENT video. Reset the list, but show past cumulative score!
+        if(resultList) {
+            let pastScoreText = oldTotal > 0 ? `Past Cumulative Score: ${oldScore} / ${oldTotal}` : "Results will appear here...";
+            resultList.innerHTML = `<div style='color:#64748b; text-align:center; font-style:italic; padding-top:10px;'>${pastScoreText}</div>`;
+        }
+    }
+    
+    window.currentPlayingVideoKey = videoKey;
+    window.currentVideoRewarded = rewardGiven === true || rewardGiven === 'true';
+    
+    // Load the Cumulative Score Mathematically
     window.currentMcqSession = { 
         correct: oldScore ? parseInt(oldScore) : 0, 
         total: oldTotal ? parseInt(oldTotal) : 0 
@@ -2431,10 +2444,10 @@ window.playSpecificVideo = function(videoKey, ytId, startAt, oldScore, oldTotal,
     modal.classList.remove("hidden");
     
     const rightPane = document.getElementById("videoSplitRight");
-    if(rightPane) rightPane.style.display = "none"; 
+    if(rightPane) rightPane.style.display = "none"; // Default to full screen video
 
     if (typeof YT === 'undefined' || !YT.Player) {
-        alert("YouTube system is still connecting to the server. Please wait 2 seconds and click Play again.");
+        alert("YouTube API is connecting... Please click Play again in 2 seconds.");
         return;
     }
 
@@ -2449,7 +2462,7 @@ window.playSpecificVideo = function(videoKey, ytId, startAt, oldScore, oldTotal,
         try { currentLoadedId = window.ytPlayer.getVideoData().video_id; } catch(e){}
 
         if (currentLoadedId === ytId) {
-            window.ytPlayer.playVideo(); 
+            window.ytPlayer.playVideo(); // Unpause if it's the exact same video
         } else {
             window.ytPlayer.loadVideoById({videoId: ytId, startSeconds: startAt});
         }
@@ -2564,8 +2577,8 @@ window.submitMcqAnswer = function() {
     window.currentMcqSession.total++;
     const resultList = document.getElementById("mcqResultList");
     
-    // Remove placeholder text if it's the first question
-    if (window.currentMcqSession.total === 1 && resultList.innerHTML.includes("Results will appear here")) {
+    // Remove placeholder texts when they answer their first live question
+    if (resultList.innerHTML.includes("Results will appear here") || resultList.innerHTML.includes("Past Cumulative Score")) {
         resultList.innerHTML = "";
     }
     
@@ -2575,12 +2588,11 @@ window.submitMcqAnswer = function() {
         window.currentMcqSession.correct++;
         alert(`✅ CORRECT! (+1 Point)\nTime taken: ${timeTaken}`);
         
-        // Add to live screen list
+        // Add to live screen list (Uses the cumulative total for Question Number)
         resultList.innerHTML += `<div style="background:rgba(34, 197, 94, 0.1); border-left:3px solid #22c55e; padding:8px; margin-bottom:5px; color:#4ade80;">Q${window.currentMcqSession.total}: Correct! (${timeTaken})</div>`;
     } else {
         alert(`❌ INCORRECT.\nYou chose: ${window.mcqSelected}\nCorrect was: ${actualCorrect}`);
         
-        // Add to live screen list
         resultList.innerHTML += `<div style="background:rgba(239, 68, 68, 0.1); border-left:3px solid #ef4444; padding:8px; margin-bottom:5px; color:#fca5a5;">Q${window.currentMcqSession.total}: Wrong [Chose ${window.mcqSelected}, was ${actualCorrect}]</div>`;
     }
     
@@ -2599,20 +2611,18 @@ window.submitMcqAnswer = function() {
     });
 };
 
-// 3. EXIT THE HUB (AUTOSAVES PROGRESS + MCQ SCORE)
+// 3. EXIT THE HUB (AUTOMATIC PAUSE & SAVE)
 window.closeStudyVideoModal = function() {
-    document.getElementById("videoModal").classList.add("hidden");
     
-    if(window.mcqInterval) clearInterval(window.mcqInterval);
-    
+    // 1. Force Auto-Pause Immediately!
     if(window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
         window.ytPlayer.pauseVideo(); 
         
+        // Save the exact millisecond and the cumulative MCQ score to Firebase
         if(window.currentPlayingVideoKey && currentUser) {
             let cTime = window.ytPlayer.getCurrentTime();
             let dur = window.ytPlayer.getDuration();
             
-            // Save Video time AND MCQ Score to database
             update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
                 progress: cTime, 
                 duration: dur,
@@ -2621,6 +2631,10 @@ window.closeStudyVideoModal = function() {
             });
         }
     }
+
+    // 2. Hide Modal
+    document.getElementById("videoModal").classList.add("hidden");
+    if(window.mcqInterval) clearInterval(window.mcqInterval);
 };
 // 3. TRACK PROGRESS EVERY 5 SECONDS
 function onPlayerStateChange(event) {
