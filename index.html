@@ -3531,11 +3531,11 @@ function startMasterClock() {
         
         // --- 🔥 30 MINUTE MANDATORY BREAK LOGIC 🔥 ---
         const breakOverlay = document.getElementById("mandatoryBreakOverlay");
-        if (localStorage.getItem(key("SHIFT_ACTIVE")) === "true" && breakOverlay.classList.contains("hidden")) {
+        if (localStorage.getItem(key("SHIFT_ACTIVE")) === "true" && (!breakOverlay || breakOverlay.classList.contains("hidden"))) {
             window.continuousStudyTime++;
-            if (window.continuousStudyTime >= 1800) { 
+            if (window.continuousStudyTime >= 1800) { // 1800 seconds = 30 minutes
                 window.triggerMandatoryBreak();
-                window.continuousStudyTime = 0; 
+                window.continuousStudyTime = 0; // Reset for the next 30-min cycle
             }
         }
 
@@ -3564,35 +3564,64 @@ function startMasterClock() {
         }
     }, 1000);
 }
-
-// FORCE BREAK EXECUTION
+// UNIVERSAL COMPULSORY BREAK TRIGGER & LOOP RESET
 window.triggerMandatoryBreak = function() {
-    // 1. Pause video perfectly
-    if(window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
-        window.ytPlayer.pauseVideo(); 
+    // 1. If YouTube Video Hub is open, force close it immediately!
+    if (typeof window.closeStudyVideoModal === 'function') {
+        window.closeStudyVideoModal();
     }
 
     // 2. Pause Watchdog Timer
-    if (idleTimer) clearInterval(idleTimer);
+    if (typeof idleTimer !== 'undefined' && idleTimer) {
+        clearInterval(idleTimer);
+    }
 
-    // 3. Show Break Screen
-    const overlay = document.getElementById("mandatoryBreakOverlay");
+    // 3. Ensure the compulsory break overlay exists on the screen
+    let overlay = document.getElementById("mandatoryBreakOverlay");
+    if (!overlay) {
+        overlay = document.createElement("div");
+        overlay.id = "mandatoryBreakOverlay";
+        overlay.style.cssText = "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2,6,23,0.99); z-index: 9999999; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 6px solid #38bdf8; backdrop-filter: blur(15px);";
+        document.body.appendChild(overlay);
+    }
+
+    overlay.innerHTML = `
+        <h1 style="color:#38bdf8; font-size: 55px; text-transform: uppercase; text-shadow: 0 0 25px #38bdf8; margin-bottom: 10px;">🛑 Compulsory 5-Min Break 🛑</h1>
+        <p style="color:#94a3b8; font-size: 22px; max-width: 600px; line-height: 1.5;">You've hit your focus limit. Stand up, rest your eyes, stretch, and step away from the screen.</p>
+        <div id="breakTimerDisplay" style="font-size: 90px; font-weight: 900; color: #facc15; margin: 30px 0; font-family: monospace; letter-spacing: 2px;">05:00</div>
+        <div style="background: rgba(239, 68, 68, 0.1); border: 2px solid #ef4444; padding: 15px 30px; border-radius: 8px; color:#ef4444; font-weight: bold; font-size: 16px; text-transform: uppercase;">
+            🔒 System Locked Until Break Timer Expires
+        </div>
+    `;
     overlay.classList.remove("hidden");
 
-    let breakSeconds = 300; // 5 mins
-    let breakInt = setInterval(() => {
+    // 4. Run the 5-minute (300 seconds) strict countdown
+    let breakSeconds = 300; 
+    if (window.activeBreakInterval) clearInterval(window.activeBreakInterval);
+
+    window.activeBreakInterval = setInterval(() => {
         breakSeconds--;
         let m = Math.floor(breakSeconds / 60);
         let s = breakSeconds % 60;
-        document.getElementById("breakTimerDisplay").innerText = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        
+        const disp = document.getElementById("breakTimerDisplay");
+        if (disp) {
+            disp.innerText = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+        }
         
         if (breakSeconds <= 0) {
-            clearInterval(breakInt);
+            clearInterval(window.activeBreakInterval);
             overlay.classList.add("hidden");
-            alert("Break is over! Time to get back to deep focus.");
+            
+            // 🔥 RESET STUDY TIMER FOR THE NEXT NEW 30-MINUTE BLOCK 🔥
+            window.continuousStudyTime = 0; 
+            
+            alert("Break is over! System unlocked. Your brand new 30-minute focus session has started.");
             
             // Restart Watchdog after break automatically
-            startIdle(1800); 
+            if (typeof startIdle === 'function') {
+                startIdle(1800); 
+            }
         }
     }, 1000);
 };
