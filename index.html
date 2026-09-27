@@ -2218,19 +2218,7 @@ onValue(ref(db, `users/${currentUser.uid}/SHIFT_REMAINING_TIME`), async (snap) =
         }
     }
 });
-  // Listen for Assigned Video
-    onValue(ref(db, `users/${currentUser.uid}/assignedVideoId`), (snap) => {
-        const vid = snap.val();
-        const btn = document.getElementById("watchVideoBtn");
-        const container = document.getElementById("videoIframeContainer");
-        if(vid) {
-            btn.classList.remove("hidden");
-            container.innerHTML = `<iframe src="https://www.youtube.com/embed/${vid}?rel=0&modestbranding=1" style="position:absolute; top:0; left:0; width:100%; height:100%; border:none;" allowfullscreen></iframe>`;
-        } else {
-            btn.classList.add("hidden");
-            container.innerHTML = "";
-        }
-    });
+  
   // Add this inside initStudentDashboard()
 onValue(ref(db, `users/${currentUser.uid}/BIO_ACTIVE`), (snap) => {
     const isBioActive = snap.val();
@@ -2273,7 +2261,56 @@ window.dismissFeedback = async function() {
     }
 };
 
+let ytPlayer;
+let currentVideoData = null;
+let videoSaveInterval = null;
 
+window.onYouTubeIframeAPIReady = function() {
+    onValue(ref(db, `users/${currentUser.uid}/assignedVideoId`), (snap) => {
+        const vidData = snap.val();
+        const btn = document.getElementById("watchVideoBtn");
+        
+        if(vidData && vidData.id) {
+            currentVideoData = vidData;
+            btn.classList.remove("hidden");
+            let startAt = vidData.progress || 0;
+            
+            // Check gamification status for button
+            let progressPct = (vidData.duration > 0) ? Math.floor((vidData.progress / vidData.duration) * 100) : 0;
+            btn.innerText = `🎥 Assigned Video (${progressPct}% Done)`;
+            
+            if(!ytPlayer) {
+                ytPlayer = new YT.Player('ytPlayer', {
+                    height: '100%', width: '100%', videoId: vidData.id,
+                    playerVars: { 'start': Math.floor(startAt), 'rel': 0 },
+                    events: { 'onStateChange': onPlayerStateChange }
+                });
+            } else {
+                ytPlayer.loadVideoById({videoId: vidData.id, startSeconds: startAt});
+            }
+        } else {
+            btn.classList.add("hidden");
+            if(ytPlayer && typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
+        }
+    });
+}
+
+function onPlayerStateChange(event) {
+    if (event.data == YT.PlayerState.PLAYING) {
+        // Save progress every 5 seconds
+        videoSaveInterval = setInterval(() => {
+            if(ytPlayer && currentVideoData) {
+                let cTime = ytPlayer.getCurrentTime();
+                let dur = ytPlayer.getDuration();
+                update(ref(db, `users/${currentUser.uid}/assignedVideoId`), { 
+                    id: currentVideoData.id, progress: cTime, duration: dur 
+                });
+            }
+        }, 5000);
+    } else {
+        clearInterval(videoSaveInterval);
+    }
+}
 // --- ALERT DISMISS ---
 window.dismissRejected = async function() {
     if(!currentUser) return;
@@ -3168,53 +3205,10 @@ window.startRoadmapTask = async function(taskId) {
     await update(ref(db, `users/${currentUser.uid}`), { ROADMAP: JSON.stringify(roadmap) });
 };
 
+let roadmapInterval = null;
 window.openRoadmapWindow = function(subjectFilter) {
-    const roadmapWin = window.open("", "StudyMap", "width=1100,height=850");
-    roadmapWin.document.write(`
-        <style>
-            body { background: #020617; color: white; font-family: 'Segoe UI', sans-serif; margin: 0; padding: 0; }
-            .header-bar { 
-                position: sticky; top: 0; background: #0f172a; padding: 20px; 
-                border-bottom: 2px solid #38bdf8; z-index: 100; text-align: center;
-                display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;
-            }
-            .stat-box { background: #020617; padding: 10px; border-radius: 10px; border: 1px solid #1e293b; }
-            .stat-val { font-family: monospace; font-size: 20px; color: #facc15; font-weight: bold; }
-            .map-container { display: flex; flex-direction: column; align-items: center; padding: 60px 40px; }
-            .node-wrapper { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
-            .node-box { 
-                width: 450px; padding: 25px; background: #0f172a; 
-                border: 2px solid #1e293b; border-radius: 24px; 
-                position: relative; margin-left: 60px; transition: all 0.3s ease;
-            }
-            .node-box.active { border-color: #facc15; box-shadow: 0 0 25px rgba(250, 204, 21, 0.2); }
-            .node-box.done { border-color: #22c55e; background: #064e3b; opacity: 0.8; }
-            .node-circle { 
-                width: 65px; height: 65px; border-radius: 50%; 
-                background: #1e293b; border: 4px solid #38bdf8; 
-                position: absolute; left: -95px; top: 50%; transform: translateY(-50%); 
-                display: flex; align-items: center; justify-content: center; 
-                font-weight: 900; font-size: 22px; color: #38bdf8; z-index: 5;
-            }
-            .connector { width: 4px; height: 50px; background: #1e293b; margin-left: -35px; }
-            .btn-action { 
-                padding: 15px; border-radius: 12px; border: none; cursor: pointer; 
-                font-weight: 800; font-size: 14px; text-transform: uppercase; flex: 1;
-            }
-            .btn-start { background: #38bdf8; color: #020617; width: 100%; margin-top: 15px; }
-            .btn-finish { background: #22c55e; color: white; }
-            .btn-abort { background: #ef4444; color: white; margin-left: 10px; }
-            .timer-text { font-family: monospace; font-size: 32px; color: #facc15; margin: 10px 0; display: block; }
-        </style>
-        <div class="header-bar">
-            <div class="stat-box"><div>TIME CONSUMED</div><div id="headConsumed" class="stat-val">00m</div></div>
-            <div id="subjectTitle" style="font-weight: 800; font-size: 20px; color: #38bdf8; display:flex; align-items:center; justify-content:center;">--</div>
-            <div class="stat-box"><div>TIME REMAINING</div><div id="headRemaining" class="stat-val">00m</div></div>
-        </div>
-        <div id="mapBody" class="map-container"></div>
-    `);
-
-    let roadmapInterval = null;
+    const modal = document.getElementById("inPageMapModal");
+    modal.classList.remove("hidden");
 
     onValue(ref(db, `users/${currentUser.uid}`), (snap) => {
         const data = snap.val();
@@ -3225,54 +3219,62 @@ window.openRoadmapWindow = function(subjectFilter) {
         const consumed = data.TIME_CONSUMED || 0;
         const remaining = data.SHIFT_REMAINING_TIME || 0;
         
-        roadmapWin.document.getElementById("headConsumed").innerText = Math.floor(consumed/60000) + "m";
-        roadmapWin.document.getElementById("headRemaining").innerText = Math.floor(remaining/60000) + "m";
-        roadmapWin.document.getElementById("subjectTitle").innerText = subjectFilter;
-
-        const mapBody = roadmapWin.document.getElementById("mapBody");
-        mapBody.innerHTML = "";
+        // Video gamification stats
+        const vData = data.assignedVideoId;
+        let vHtml = `<div class="map-stat-box"><div style="font-size:12px; color:#94a3b8">VIDEO PROGRESS</div><div class="map-stat-val">NO VIDEO</div></div>`;
+        if(vData && vData.id) {
+            let p = (vData.duration > 0) ? Math.floor((vData.progress / vData.duration) * 100) : 0;
+            vHtml = `<div class="map-stat-box"><div style="font-size:12px; color:#94a3b8">VIDEO PROGRESS</div>
+                     <div class="map-stat-val" style="color:${p > 90 ? '#4ade80' : '#38bdf8'}">${p}% COMPLETED</div></div>`;
+        }
+        
+        let html = `
+            <div class="map-header-bar">
+                <div class="map-stat-box"><div style="font-size:12px; color:#94a3b8">TIME CONSUMED</div><div class="map-stat-val">${Math.floor(consumed/60000)}m</div></div>
+                <div style="font-weight: 900; font-size: 24px; color: #38bdf8; text-align:center;">${subjectFilter.toUpperCase()}</div>
+                ${vHtml}
+            </div>
+            <div style="text-align:center; padding:10px;"><button onclick="closeInPageMap()" style="width:200px; background:#ef4444; border:none; padding:10px; border-radius:8px; color:white; font-weight:bold;">CLOSE MAP</button></div>
+            <div class="map-container-inner">
+        `;
 
         filteredTasks.forEach((task, i) => {
             const isDone = task.status === 'DONE';
             const isActive = task.status === 'RUNNING';
-            const nodeWrap = roadmapWin.document.createElement("div");
-            nodeWrap.className = "node-wrapper";
-            nodeWrap.innerHTML = `
-                <div class="node-box ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
-                    <div class="node-circle">${isDone ? '✔' : i + 1}</div>
-                    <div style="font-weight:800; font-size:22px; margin-bottom:5px;">${task.topic}</div>
-                    ${isActive ? `<span id="activeTimer" class="timer-text">--:--</span>` : `<div style="font-size:12px; color:#38bdf8;">Allocated: ${Math.floor(task.allocatedTime/60000)}m</div>`}
-                    <div style="display:flex; margin-top:15px;">
-                        ${!isDone ? (
-                            !isActive ? 
-                            `<button class="btn-action btn-start" onclick="window.opener.startRoadmapTask(${task.id})">START SESSION</button>` :
-                            `<button class="btn-action btn-finish" onclick="window.opener.completeRoadmapTask(${task.id})">FINISH</button>
-                             <button class="btn-action btn-abort" onclick="window.opener.abortRoadmapTask(${task.id})">ABORT</button>`
-                        ) : `<div style="color:#4ade80; font-weight:bold; margin-top:10px;">COMPLETED @ ${task.doneTime}</div>`}
+            html += `
+                <div class="node-wrapper">
+                    <div class="node-box ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
+                        <div class="node-circle">${isDone ? '✔' : i + 1}</div>
+                        <div style="font-weight:800; font-size:22px; margin-bottom:5px;">${task.topic}</div>
+                        ${isActive ? `<span id="activeTimer_${task.id}" style="font-family:monospace; font-size:32px; color:#facc15; display:block;">--:--</span>` : `<div style="font-size:12px; color:#38bdf8;">Allocated: ${Math.floor(task.allocatedTime/60000)}m</div>`}
+                        <div style="display:flex; margin-top:15px;">
+                            ${!isDone ? (!isActive ? 
+                                `<button class="btn-map" style="background:#38bdf8; color:#020617; width:100%;" onclick="startRoadmapTask(${task.id})">START</button>` :
+                                `<button class="btn-map" style="background:#22c55e; color:white;" onclick="completeRoadmapTask(${task.id})">FINISH</button>
+                                 <button class="btn-map" style="background:#ef4444; color:white;" onclick="abortRoadmapTask(${task.id})">ABORT</button>`) 
+                            : `<div style="color:#4ade80; font-weight:bold; margin-top:10px;">COMPLETED @ ${task.doneTime}</div>`}
+                        </div>
                     </div>
+                    ${i < filteredTasks.length - 1 ? `<div class="map-connector"></div>` : ''}
                 </div>
-                ${i < filteredTasks.length - 1 ? `<div class="connector"></div>` : ''}
             `;
-            mapBody.appendChild(nodeWrap);
         });
+        html += `</div>`;
+        document.getElementById("mapContentContainer").innerHTML = html;
 
+        // Timer Interval for active node
         if (activeNode && activeNode.targetEndTime) {
             if (roadmapInterval) clearInterval(roadmapInterval);
             roadmapInterval = setInterval(() => {
-                const now = Date.now();
-                const timeLeft = activeNode.targetEndTime - now;
-                const display = roadmapWin.document.getElementById("activeTimer");
+                const timeLeft = activeNode.targetEndTime - Date.now();
+                const display = document.getElementById(`activeTimer_${activeNode.id}`);
                 if (display) {
                     if (timeLeft <= 0) {
-                        const overTime = Math.abs(timeLeft);
-                        const oMin = Math.floor(overTime / 60000);
-                        const oSec = Math.floor((overTime % 60000) / 1000);
-                        display.innerText = `LATE: ${oMin}:${String(oSec).padStart(2,'0')}`;
+                        const over = Math.abs(timeLeft);
+                        display.innerText = `LATE: ${Math.floor(over / 60000)}:${String(Math.floor((over % 60000) / 1000)).padStart(2,'0')}`;
                         display.style.color = "#ef4444";
                     } else {
-                        const min = Math.floor(timeLeft / 60000);
-                        const sec = Math.floor((timeLeft % 60000) / 1000);
-                        display.innerText = `${String(min).padStart(2,'0')}:${String(sec).padStart(2,'0')}`;
+                        display.innerText = `${Math.floor(timeLeft / 60000)}:${String(Math.floor((timeLeft % 60000) / 1000)).padStart(2,'0')}`;
                         display.style.color = "#facc15";
                     }
                 }
@@ -3281,6 +3283,11 @@ window.openRoadmapWindow = function(subjectFilter) {
             if (roadmapInterval) clearInterval(roadmapInterval);
         }
     });
+};
+
+window.closeInPageMap = function() {
+    if (roadmapInterval) clearInterval(roadmapInterval);
+    document.getElementById("inPageMapModal").classList.add("hidden");
 };
 async function updateProgressiveTiming() {
     const snap = await get(ref(db, `users/${currentUser.uid}/ROADMAP`));
@@ -3767,11 +3774,11 @@ window.finalDayEnd = async function() {
         await update(ref(db, `users/${currentUser.uid}`), { 
             ROADMAP: null, 
             SHIFT_ACTIVE: null,
+          
             SHIFT_REMAINING_TIME: null,
             TIME_CONSUMED: 0,
             forceLogoutTrigger: Date.now(), 
             LOCKED_REPORT_VIEW: reportHTML,
-            assignedVideoId: null, // Clear video access
             SEARCH_LOGS: null, // Clear AI search logs
             PENALTY: 0, // 🔥 RESETS PENALTY TO 0
             IDLE_STRIKES: 0, // 🔥 RESETS STRIKES TO 0
@@ -4345,17 +4352,20 @@ function executeWatchdogReset() {
 // CAPTIVE YOUTUBE SYSTEM
 // ==========================================
 window.adminAssignVideo = async function(uid) {
-    const url = prompt("Enter YouTube URL for this student:");
+    const url = prompt("Enter YouTube URL (Progress carries forward automatically until you remove it):");
     if(!url) return;
-    
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     if (match && match[2].length === 11) {
-        await update(ref(db, `users/${uid}`), { assignedVideoId: match[2] });
+        await update(ref(db, `users/${uid}`), { assignedVideoId: { id: match[2], progress: 0, duration: 0 } });
         alert("Video locked and assigned!");
-    } else {
-        alert("Invalid YouTube URL.");
-    }
+    } else { alert("Invalid YouTube URL."); }
+};
+
+window.adminRemoveVideo = async function(uid) {
+    if(!confirm("Remove current assigned video?")) return;
+    await update(ref(db, `users/${uid}`), { assignedVideoId: null });
+    alert("Video removed.");
 };
 
 window.openStudyVideoModal = function() { document.getElementById("videoModal").classList.remove("hidden"); };
