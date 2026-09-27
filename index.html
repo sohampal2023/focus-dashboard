@@ -813,17 +813,20 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
             </div>
         </div>
         
-        <!-- 50/50 SPLIT SCREEN -->
+        <!-- SPLIT SCREEN CONTAINER -->
         <div style="display:flex; flex-grow:1; overflow:hidden; width:100vw;">
-            <!-- Left Side: YouTube -->
-            <div id="videoSplitLeft" style="flex:1; background:#000; border-right:2px solid #334155; position:relative;">
+            <!-- Left Side: YouTube (Defaults to 100% width) -->
+            <div id="videoSplitLeft" style="flex:1; background:#000; position:relative; transition: all 0.3s ease;">
                 <div id="ytPlayer" style="width:100%; height:100%;"></div>
             </div>
-            <!-- Right Side: Moved Canvas Box -->
-            <div id="videoSplitRight" style="flex:1; background:#020617; display:flex; flex-direction:column; padding:10px;">
+            
+            <!-- Right Side: Moved Canvas Box (HIDDEN BY DEFAULT) -->
+            <div id="videoSplitRight" style="flex:1; background:#020617; display:none; flex-direction:column; padding:10px; border-left:2px solid #334155; transition: all 0.3s ease;">
                 <!-- JavaScript will dynamically inject the canvas here -->
             </div>
         </div>
+    </div>
+</div>
     </div>
 </div>
   <!-- IN-PAGE ROADMAP OVERLAY -->
@@ -2363,20 +2366,27 @@ window.loadAssignedVideos = function() {
     });
 };
 
-// 2. PLAY THE VIDEO IN THE HUB
+// 2. PLAY THE VIDEO IN THE HUB (FULL SCREEN DEFAULT)
 window.playSpecificVideo = function(videoKey, ytId, startAt) {
     window.currentPlayingVideoKey = videoKey;
     
-    // Open the Split-Screen Hub
+    // Open the Hub
     document.getElementById("videoModal").classList.remove("hidden");
     const rightPane = document.getElementById("videoSplitRight");
+    const leftPane = document.getElementById("videoSplitLeft");
+    
+    // Reset to full screen video by default
+    rightPane.style.display = "none";
+    
+    // Prepare canvas quietly in the background
     const canvasBox = document.getElementById("canvasBox");
     rightPane.appendChild(canvasBox);
     canvasBox.classList.remove("hidden", "board-fullscreen");
     canvasBox.style.minHeight = "100%"; 
+    
+    // Hide standard canvas buttons since we are in the hub
     document.getElementById("fullscreenBtn").style.display = "none";
     document.getElementById("closeCanvasBtn").style.display = "none";
-    setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 100);
 
     // Load video into player safely
     if(!window.ytPlayer) {
@@ -2387,6 +2397,20 @@ window.playSpecificVideo = function(videoKey, ytId, startAt) {
         });
     } else {
         window.ytPlayer.loadVideoById({videoId: ytId, startSeconds: startAt});
+    }
+};
+  // TOGGLES BETWEEN 100% VIDEO AND 50/50 SPLIT SCREEN
+window.toggleHubNotes = function() {
+    const rightPane = document.getElementById("videoSplitRight");
+    
+    if (rightPane.style.display === "none") {
+        // Turn ON 50/50 Split Screen
+        rightPane.style.display = "flex";
+        // Force canvas to resize to fit the new 50% window perfectly
+        setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 100);
+    } else {
+        // Turn OFF Notes (Go back to Full Screen Video)
+        rightPane.style.display = "none";
     }
 };
 
