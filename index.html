@@ -2389,11 +2389,7 @@ window.loadAssignedVideos = function() {
             let color = p > 90 ? "#4ade80" : "#38bdf8";
             
             html += `
-                <button onclick="playSpecificVideo('${key}', '${v.id}', ${v.progress})" 
-                        style="background:#0f172a; color:white; border:1px solid ${color}; font-size:12px; padding:12px; text-align:left; border-radius:8px; cursor:pointer; width:100%; margin-bottom:6px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: 0.2s;">
-                    ▶ Play Video <span style="float:right; color:${color}; font-weight:bold;">${p}%</span>
-                    <div style="font-size:10px; color:#ef4444; margin-top:6px; font-weight:bold;">Due: ${v.deadline}</div>
-                </button>
+                <button onclick="window.playSpecificVideo('${key}', '${v.id}', ${v.progress}, '${v.mcqScore || 0}', '${v.mcqTotal || 0}', ${v.rewardGiven || false})"
             `;
         });
         videoListDiv.innerHTML = html;
@@ -2409,23 +2405,27 @@ window.mcqSeconds = 0;
 window.mcqSelected = null;
 window.currentMcqSession = { correct: 0, total: 0 };
 
+window.currentVideoRewarded = false;
+
 // 1. PLAY OR RESUME THE VIDEO IN THE HUB
-window.playSpecificVideo = function(videoKey, ytId, startAt, oldScore, oldTotal) {
+window.playSpecificVideo = function(videoKey, ytId, startAt, oldScore, oldTotal, rewardGiven) {
     window.currentPlayingVideoKey = videoKey;
+    window.currentVideoRewarded = rewardGiven === true || rewardGiven === 'true'; // Checks if already completed
     
-    // Reset MCQ Session for this video
     window.currentMcqSession = { 
         correct: oldScore ? parseInt(oldScore) : 0, 
         total: oldTotal ? parseInt(oldTotal) : 0 
     };
-    document.getElementById("mcqScoreDisplay").innerText = `${window.currentMcqSession.correct} / ${window.currentMcqSession.total}`;
+    
+    const mcqScoreDisp = document.getElementById("mcqScoreDisplay");
+    if(mcqScoreDisp) mcqScoreDisp.innerText = `${window.currentMcqSession.correct} / ${window.currentMcqSession.total}`;
     
     const modal = document.getElementById("videoModal");
     if(!modal) return alert("Error: Video modal missing from HTML!");
     modal.classList.remove("hidden");
     
-    // Default to Full Screen Video (Hide MCQ panel)
-    document.getElementById("videoSplitRight").style.display = "none"; 
+    const rightPane = document.getElementById("videoSplitRight");
+    if(rightPane) rightPane.style.display = "none"; 
 
     if (typeof YT === 'undefined' || !YT.Player) {
         alert("YouTube system is still connecting to the server. Please wait 2 seconds and click Play again.");
@@ -2447,6 +2447,46 @@ window.playSpecificVideo = function(videoKey, ytId, startAt, oldScore, oldTotal)
         } else {
             window.ytPlayer.loadVideoById({videoId: ytId, startSeconds: startAt});
         }
+    }
+};
+
+// 2. 🔥 AUTOMATIC TRACKING & MARKING DONE ENGINE 🔥
+window.onPlayerStateChange = function(event) {
+    if (event.data == YT.PlayerState.PLAYING) {
+        // Runs every 5 seconds while playing
+        window.videoSaveInterval = setInterval(() => {
+            if(window.ytPlayer && window.currentPlayingVideoKey) {
+                let cTime = window.ytPlayer.getCurrentTime();
+                let dur = window.ytPlayer.getDuration();
+                
+                let updates = { progress: cTime, duration: dur };
+                
+                // AUTOMATICALLY MARK AS DONE (At 90% Watched)
+                if (dur > 0 && (cTime / dur) >= 0.90 && !window.currentVideoRewarded) {
+                    window.currentVideoRewarded = true;
+                    updates.rewardGiven = true;
+                    
+                    // Grant Gamification XP
+                    let currentXP = parseInt(localStorage.getItem(currentUser.uid + "_TOTAL_XP") || "0");
+                    localStorage.setItem(currentUser.uid + "_TOTAL_XP", currentXP + 50);
+                    if (typeof window.updateGamificationUI === "function") window.updateGamificationUI();
+                    
+                    // Show unobtrusive success popup
+                    const toast = document.createElement("div");
+                    toast.style.cssText = "position:fixed; top:20px; right:20px; background:#22c55e; color:white; padding:15px; border-radius:8px; z-index:999999; font-weight:bold; box-shadow:0 4px 10px rgba(0,0,0,0.5); border: 2px solid #166534;";
+                    toast.innerText = "✅ Video Target Reached! Marked as DONE.";
+                    document.body.appendChild(toast);
+                    setTimeout(() => toast.remove(), 4000);
+                }
+                
+                // Save to database instantly
+                if(currentUser) {
+                    update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), updates);
+                }
+            }
+        }, 5000);
+    } else {
+        if(window.videoSaveInterval) clearInterval(window.videoSaveInterval);
     }
 };
 
@@ -3635,12 +3675,21 @@ window.openRoadmapWindow = function(subjectFilter) {
         }
 
         // 2. GENERATE VIDEO NODES (ONLY IF "YT Video" IS CLICKED)
+        // 2. GENERATE VIDEO NODES (ONLY IF "YT Video" IS CLICKED)
         if (isVideoMap && vData) {
+            // Get actual remaining shift time in minutes
+            const shiftRemainingMins = data.SHIFT_REMAINING_TIME ? Math.floor(data.SHIFT_REMAINING_TIME / 60000) : 0;
+
             Object.keys(vData).forEach((key, i) => {
                 const v = vData[key];
                 let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
-                const isDone = p > 90;
+                const isDone = p >= 90;
                 
+                // 🔥 AUTO-TIME CALCULATION LOGIC
+                let videoRemainingMins = v.duration > 0 ? Math.ceil((v.duration - v.progress) / 60) : 0;
+                let allocatedToday = Math.min(videoRemainingMins, shiftRemainingMins); // Caps video time to whatever shift time is left!
+                let allocatedStr = isDone ? `Completed` : `Allocated Time (Today): ${allocatedToday}m`;
+
                 const scoreStr = v.mcqTotal > 0 ? `<div style="font-size:14px; font-weight:bold; color:#a855f7; margin-top:5px; background:rgba(168, 85, 247, 0.1); padding:4px 8px; border-radius:4px; display:inline-block;">🎯 MCQ Score: ${v.mcqScore} / ${v.mcqTotal}</div>` : "";
 
                 nodesArray.push(`
@@ -3648,12 +3697,15 @@ window.openRoadmapWindow = function(subjectFilter) {
                         <div class="simple-badge" style="border-color:${isDone ? '#22c55e' : '#eab308'}; color:${isDone ? '#22c55e' : '#eab308'}; font-size:18px;">🎥</div>
                         
                         <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#eab308;">Assigned Video ${i+1}</div>
+                        
+                        <!-- Shows Dynamic Time -->
+                        <div style="font-size:12px; color:#94a3b8; margin-bottom:5px;">${allocatedStr}</div>
                         <div style="font-size:12px; color:#94a3b8;">Due: ${v.deadline} | Progress: <span style="color:${isDone ? '#22c55e' : '#eab308'}; font-weight:bold;">${p}%</span></div>
                         
                         ${scoreStr}
                         
                         <div style="display:flex; margin-top:10px;">
-                            <button class="btn-simple start" style="background:#eab308; border-color:#eab308; color:black;" onclick="window.closeInPageMap(); window.playSpecificVideo('${key}', '${v.id}', ${v.progress}, '${v.mcqScore || 0}', '${v.mcqTotal || 0}')">▶ Play & Solve</button>
+                            <button class="btn-simple start" style="background:#eab308; border-color:#eab308; color:black;" onclick="window.closeInPageMap(); window.playSpecificVideo('${key}', '${v.id}', ${v.progress}, '${v.mcqScore || 0}', '${v.mcqTotal || 0}', ${v.rewardGiven || false})">▶ Play & Solve</button>
                         </div>
                     </div>
                 `);
