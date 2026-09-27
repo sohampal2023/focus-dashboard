@@ -3739,11 +3739,8 @@ window.openRoadmapWindow = function(subjectFilter) {
                 `);
             });
         }
-
-        // 2. GENERATE VIDEO NODES (ONLY IF "YT Video" IS CLICKED)
-        // 2. GENERATE VIDEO NODES (ONLY IF "YT Video" IS CLICKED)
+      // 2. GENERATE VIDEO NODES (ONLY IF "YT Video" IS CLICKED)
         if (isVideoMap && vData) {
-            // Get actual remaining shift time in minutes
             const shiftRemainingMins = data.SHIFT_REMAINING_TIME ? Math.floor(data.SHIFT_REMAINING_TIME / 60000) : 0;
 
             Object.keys(vData).forEach((key, i) => {
@@ -3751,12 +3748,15 @@ window.openRoadmapWindow = function(subjectFilter) {
                 let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
                 const isDone = p >= 90;
                 
-                // 🔥 AUTO-TIME CALCULATION LOGIC
                 let videoRemainingMins = v.duration > 0 ? Math.ceil((v.duration - v.progress) / 60) : 0;
-                let allocatedToday = Math.min(videoRemainingMins, shiftRemainingMins); // Caps video time to whatever shift time is left!
+                let allocatedToday = Math.min(videoRemainingMins, shiftRemainingMins);
                 let allocatedStr = isDone ? `Completed` : `Allocated Time (Today): ${allocatedToday}m`;
 
-                const scoreStr = v.mcqTotal > 0 ? `<div style="font-size:14px; font-weight:bold; color:#a855f7; margin-top:5px; background:rgba(168, 85, 247, 0.1); padding:4px 8px; border-radius:4px; display:inline-block;">🎯 MCQ Score: ${parseFloat(v.mcqScore).toFixed(2)} / ${v.mcqTotal}</div>` : "";
+                // 🔥 ENSURES THE LATEST CUMULATIVE SCORE SHOWS ON THE MAP
+                let scoreVal = v.mcqScore !== undefined ? parseFloat(v.mcqScore).toFixed(2) : "0.00";
+                let totalVal = v.mcqTotal !== undefined ? v.mcqTotal : 0;
+                
+                const scoreStr = totalVal > 0 ? `<div style="font-size:14px; font-weight:bold; color:#a855f7; margin-top:5px; background:rgba(168, 85, 247, 0.1); padding:4px 8px; border-radius:4px; display:inline-block;">🎯 MCQ Score: ${scoreVal} / ${totalVal}</div>` : "";
 
                 nodesArray.push(`
                     <div class="simple-node ${isDone ? 'done' : ''}" style="border-color:${isDone ? '#22c55e' : '#eab308'};">
@@ -3764,7 +3764,6 @@ window.openRoadmapWindow = function(subjectFilter) {
                         
                         <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#eab308;">Assigned Video ${i+1}</div>
                         
-                        <!-- Shows Dynamic Time -->
                         <div style="font-size:12px; color:#94a3b8; margin-bottom:5px;">${allocatedStr}</div>
                         <div style="font-size:12px; color:#94a3b8;">Due: ${v.deadline} | Progress: <span style="color:${isDone ? '#22c55e' : '#eab308'}; font-weight:bold;">${p}%</span></div>
                         
