@@ -3760,25 +3760,119 @@ window.handleIdleTimeoutPenalty = function() {
         });
     }
 };
+window.breakWarningAudio = null;
+window.breakWarningOsc = null;
+window.breakWarningGain = null;
+window.breakWarningInterval = null;
+
+function startBreakLast10SecSiren() {
+    try {
+        // Prevent duplicate sirens
+        if (window.breakWarningAudio) return;
+
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        window.breakWarningAudio = new AudioCtx();
+
+        if (window.breakWarningAudio.state === "suspended") {
+            window.breakWarningAudio.resume();
+        }
+
+        window.breakWarningOsc = window.breakWarningAudio.createOscillator();
+        window.breakWarningGain = window.breakWarningAudio.createGain();
+
+        window.breakWarningOsc.type = "square";
+        window.breakWarningOsc.frequency.value = 1000;
+
+        window.breakWarningGain.gain.value = 0.20;
+
+        window.breakWarningOsc.connect(window.breakWarningGain);
+        window.breakWarningGain.connect(
+            window.breakWarningAudio.destination
+        );
+
+        window.breakWarningOsc.start();
+
+        // Alternating warning siren
+        let high = false;
+
+        window.breakWarningInterval = setInterval(() => {
+
+            if (!window.breakWarningOsc ||
+                !window.breakWarningAudio) return;
+
+            high = !high;
+
+            window.breakWarningOsc.frequency.setValueAtTime(
+                high ? 1300 : 800,
+                window.breakWarningAudio.currentTime
+            );
+
+        }, 300);
+
+    } catch (e) {
+        console.error("Break warning siren failed:", e);
+    }
+}
+
+
+function stopBreakLast10SecSiren() {
+
+    try {
+
+        if (window.breakWarningInterval) {
+            clearInterval(window.breakWarningInterval);
+            window.breakWarningInterval = null;
+        }
+
+        if (window.breakWarningOsc) {
+            try {
+                window.breakWarningOsc.stop();
+            } catch (e) {}
+
+            window.breakWarningOsc.disconnect();
+            window.breakWarningOsc = null;
+        }
+
+        if (window.breakWarningGain) {
+            window.breakWarningGain.disconnect();
+            window.breakWarningGain = null;
+        }
+
+        if (window.breakWarningAudio) {
+            window.breakWarningAudio.close();
+            window.breakWarningAudio = null;
+        }
+
+    } catch (e) {
+        console.error("Break siren stop error:", e);
+    }
+}
+
+
 window.triggerMandatoryBreak = function() {
 
     console.log("🛑 MANDATORY 5-MINUTE BREAK STARTED");
 
-    // Stop watchdog timer
+    // Stop watchdog
     if (typeof idleTimer !== "undefined" && idleTimer) {
         clearInterval(idleTimer);
         idleTimer = null;
     }
 
-    // Stop study video if running
+    // Stop watchdog siren if somehow still running
+    if (typeof stopContinuousWatchdogSiren === "function") {
+        stopContinuousWatchdogSiren();
+    }
+
+    // Stop study video
     if (typeof window.closeStudyVideoModal === "function") {
         try {
             window.closeStudyVideoModal();
         } catch (e) {}
     }
 
-    // Get existing overlay
-    let overlay = document.getElementById("mandatoryBreakOverlay");
+    let overlay =
+        document.getElementById("mandatoryBreakOverlay");
 
     if (!overlay) {
         overlay = document.createElement("div");
@@ -3786,7 +3880,6 @@ window.triggerMandatoryBreak = function() {
         document.body.appendChild(overlay);
     }
 
-    // Make absolutely sure it is visible
     overlay.classList.remove("hidden");
 
     overlay.style.cssText = `
@@ -3797,12 +3890,10 @@ window.triggerMandatoryBreak = function() {
         height:100vh !important;
         background:#020617 !important;
         z-index:999999999 !important;
-
         display:flex !important;
         flex-direction:column !important;
         justify-content:center !important;
         align-items:center !important;
-
         text-align:center;
         border:6px solid #38bdf8;
         box-sizing:border-box;
@@ -3870,6 +3961,15 @@ window.triggerMandatoryBreak = function() {
             05:00
         </div>
 
+        <div id="breakWarningText" style="
+            color:#64748b;
+            font-size:17px;
+            font-weight:bold;
+            margin-bottom:15px;
+        ">
+            Break time remaining
+        </div>
+
         <div style="
             color:#ef4444;
             font-size:17px;
@@ -3891,29 +3991,56 @@ window.triggerMandatoryBreak = function() {
         </div>
     `;
 
-    // Lock page
+    // Lock system
     document.body.style.overflow = "hidden";
 
-    // Clear previous countdown
+    // Stop old break timer
     if (window.activeBreakInterval) {
         clearInterval(window.activeBreakInterval);
+        window.activeBreakInterval = null;
     }
 
+    // Stop any previous 10-second siren
+    stopBreakLast10SecSiren();
+
     let breakSeconds = 300;
+    let warningSirenStarted = false;
 
-    const updateBreakDisplay = () => {
+    function updateBreakDisplay() {
 
-        const minutes = Math.floor(breakSeconds / 60);
-        const seconds = breakSeconds % 60;
+        const minutes =
+            Math.floor(breakSeconds / 60);
+
+        const seconds =
+            breakSeconds % 60;
 
         const display =
             document.getElementById("breakTimerDisplay");
 
         if (display) {
+
             display.innerText =
                 `${String(minutes).padStart(2,"0")}:${String(seconds).padStart(2,"0")}`;
+
+            // Last 10 seconds = red warning
+            if (breakSeconds <= 10 && breakSeconds > 0) {
+
+                display.style.color = "#ef4444";
+                display.style.textShadow =
+                    "0 0 30px rgba(239,68,68,.9)";
+
+                const warning =
+                    document.getElementById("breakWarningText");
+
+                if (warning) {
+                    warning.innerText =
+                        "🚨 BREAK ENDING - GET READY TO STUDY 🚨";
+
+                    warning.style.color = "#ef4444";
+                }
+            }
         }
-    };
+    }
 
     updateBreakDisplay();
 
@@ -3923,24 +4050,61 @@ window.triggerMandatoryBreak = function() {
 
         updateBreakDisplay();
 
+        // =====================================
+        // 🔊 LAST 10 SECOND SIREN
+        // =====================================
+
+        if (
+            breakSeconds <= 10 &&
+            breakSeconds > 0 &&
+            !warningSirenStarted
+        ) {
+
+            warningSirenStarted = true;
+
+            console.log(
+                "🔊 BREAK WARNING SIREN STARTED - LAST 10 SECONDS"
+            );
+
+            startBreakLast10SecSiren();
+        }
+
+        // =====================================
+        // BREAK FINISHED
+        // =====================================
+
         if (breakSeconds <= 0) {
 
             clearInterval(window.activeBreakInterval);
+
             window.activeBreakInterval = null;
 
+            // STOP SIREN
+            stopBreakLast10SecSiren();
+
+            console.log(
+                "✅ BREAK COMPLETE - SYSTEM UNLOCKED"
+            );
+
+            // Hide overlay
             overlay.classList.add("hidden");
 
+            // Restore scrolling
             document.body.style.overflow = "";
 
-            console.log("✅ MANDATORY BREAK COMPLETED");
+            // Reset continuous study counter
+            window.continuousStudyTime = 0;
+
+            // Reset inactivity counter
+            window.idleInactivityCounter = 0;
 
             // Start fresh 2-minute watchdog
-            startIdle(120);
+            if (typeof startIdle === "function") {
+                startIdle(125);
+            }
 
-            alert(
-                "✅ Break completed!\n\n" +
-                "You may continue studying.\n" +
-                "New 2-minute watchdog started."
+            console.log(
+                "🟢 NEW 2-MINUTE WATCHDOG STARTED"
             );
         }
 
