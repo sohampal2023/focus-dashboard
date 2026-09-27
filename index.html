@@ -3561,7 +3561,7 @@ function startMasterClock() {
             window.continuousStudyTime++;
             
             // 🔥 FORCE BREAK AT EXACTLY 1800 SECONDS (30 MINUTES) 🔥
-            if (window.continuousStudyTime >= 1800) { 
+            if (window.continuousStudyTime >= 125) { 
                 window.continuousStudyTime = 0; // Reset counter immediately
                 window.triggerMandatoryBreak();
                 return;
