@@ -2264,6 +2264,13 @@ onValue(ref(db, `users/${currentUser.uid}/BIO_ACTIVE`), (snap) => {
         }
     }
 });
+  onValue(ref(db, `users/${currentUser.uid}/leaveBalance`), (snap) => {
+        const bal = snap.exists() ? snap.val() : 6; 
+        const balDisplay = document.getElementById("leaveBalanceDisplay");
+        if(balDisplay) {
+            balDisplay.innerText = `Leave Bal: ${bal}`;
+        }
+    });
     loadNotices();
     checkLeaveStatus(serverData);
     startIdle(1800);
