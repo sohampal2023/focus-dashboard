@@ -2328,7 +2328,7 @@ onValue(ref(db, `users/${currentUser.uid}/BIO_ACTIVE`), (snap) => {
     } else {
         if (existingOverlay) {
             existingOverlay.remove();
-            startIdle(1800);
+            startIdle(125);
             document.getElementById("idleBox")?.classList.remove("hidden");
         }
     }
@@ -2343,7 +2343,7 @@ onValue(ref(db, `users/${currentUser.uid}/BIO_ACTIVE`), (snap) => {
     loadNotices();
     window.loadAssignedVideos();
     checkLeaveStatus(serverData);
-    startIdle(1800);
+    startIdle(125);
     renderLogs();
     loadSubjectList();
 }
@@ -3085,7 +3085,7 @@ function playWarningBeep() {
     osc.stop(ctx.currentTime + 0.2);
 }
 // --- IDLE TIMER & WATCHDOG LOGIC ---
-function startIdle(customSeconds = 1800) {
+function startIdle(customSeconds = 125) {
   if(idleTimer) clearInterval(idleTimer);
   
   totalDuration = customSeconds;
@@ -3124,7 +3124,7 @@ function resetWatchdog() {
         }, 1500);
         return;
     }
-    startIdle(1800); 
+    startIdle(125); 
     const originalText = "I AM STUDYING";
     btn.innerText = "WATCHDOG RESET";
     btn.style.background = "#22c55e"; 
@@ -3554,7 +3554,7 @@ function startMasterClock() {
             window.continuousStudyTime++;
             
             // --- ⏱️ 30-MINUTE STUDY LIMIT REACHED ---
-            if (window.continuousStudyTime >= 1800) { 
+            if (window.continuousStudyTime >= 125) { 
                 window.triggerMandatoryBreak();
                 window.continuousStudyTime = 0; 
             }
@@ -3671,7 +3671,7 @@ window.triggerMandatoryBreak = function() {
             
             // Restart your existing Watchdog after break automatically
             if (typeof startIdle === 'function') {
-                startIdle(1800); 
+                startIdle(125); 
             }
         }
     }, 1000);
@@ -4711,7 +4711,7 @@ window.resetWatchdog = function() {
     }
 
     // Reset the timer to 30 minutes
-    startIdle(1800); 
+    startIdle(125); 
     
     // UI Feedback
     const originalText = "I AM STUDYING";
@@ -5009,7 +5009,7 @@ window.submitFileProof = function() {
 };
 
 function executeWatchdogReset() {
-    startIdle(1800); // 30 mins
+    startIdle(125); // 30 mins
     const btn = document.querySelector('.watchdog-btn');
     const prevText = btn.innerText;
     btn.innerText = "VERIFIED / RESET";
