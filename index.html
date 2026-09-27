@@ -449,7 +449,8 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     👁️ ENTER DEEP FOCUS
 </button>
       </div>
-    <button id="watchVideoBtn" class="hidden" onclick="openStudyVideoModal()" style="background:#eab308; color:#000; font-weight:bold;">🎥 Watch Assigned Video</button>
+    <!-- DYNAMIC VIDEO LIST (MULTIPLE VIDEOS) -->
+<div id="studentVideoList" style="display:flex; flex-direction:column; gap:8px; margin: 10px 0;"></div>
 <button onclick="toggleNotesCanvas()" style="background:#8b5cf6; color:#fff; font-weight:bold;">📝 Digital Notes Canvas</button>
       <button id="noticeBtn" onclick="toggleNoticeBoard()">📢 Notice Board</button>
       <button onclick="softRefresh()">🔄 Refresh</button>
@@ -1239,7 +1240,8 @@ window.startAdminListener = function() {
                         <button style="background:#0ea5e9;" onclick="sendNotice('${uid}')">📢 Notice</button>
                         <button style="background:#1e40af;" onclick="setExamSchedule('${uid}')">📘 Exams</button>
                         <button style="background:#991b1b;" onclick="clearSingleSubject('${uid}')">🗑 Delete Subject</button>
-                        <button style="background:#eab308; color:black; font-weight:bold;" onclick="adminAssignVideo('${uid}')">🎥 ASSIGN YT VIDEO</button>
+                        <button style="background:#eab308; color:black; font-weight:bold;" onclick="adminAssignVideo('${uid}')">🎥 ADD YT VIDEO</button>
+<button style="background:#450a0a; color:white; font-weight:bold;" onclick="adminManageVideos('${uid}')">🗑️ MANAGE VIDEOS</button>
                         
                         ${isLocked ? `<button style="background:#22c55e;" onclick="unlockStudent('${uid}')">Unlock</button>` : ''}
                     </div>
@@ -2260,50 +2262,80 @@ window.dismissFeedback = async function() {
         await remove(ref(db, `users/${currentUser.uid}/newFeedback`));
     }
 };
-
 let ytPlayer;
+let currentPlayingVideoKey = null;
 let currentVideoData = null;
 let videoSaveInterval = null;
 
 window.onYouTubeIframeAPIReady = function() {
-    onValue(ref(db, `users/${currentUser.uid}/assignedVideoId`), (snap) => {
-        const vidData = snap.val();
-        const btn = document.getElementById("watchVideoBtn");
+    onValue(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS`), (snap) => {
+        const videoListDiv = document.getElementById("studentVideoList");
+        if(!videoListDiv) return;
         
-        if(vidData && vidData.id) {
-            currentVideoData = vidData;
-            btn.classList.remove("hidden");
-            let startAt = vidData.progress || 0;
-            
-            // Check gamification status for button
-            let progressPct = (vidData.duration > 0) ? Math.floor((vidData.progress / vidData.duration) * 100) : 0;
-            btn.innerText = `🎥 Assigned Video (${progressPct}% Done)`;
-            
-            if(!ytPlayer) {
-                ytPlayer = new YT.Player('ytPlayer', {
-                    height: '100%', width: '100%', videoId: vidData.id,
-                    playerVars: { 'start': Math.floor(startAt), 'rel': 0 },
-                    events: { 'onStateChange': onPlayerStateChange }
-                });
-            } else {
-                ytPlayer.loadVideoById({videoId: vidData.id, startSeconds: startAt});
-            }
-        } else {
-            btn.classList.add("hidden");
+        if(!snap.exists()) {
+            videoListDiv.innerHTML = "";
             if(ytPlayer && typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
+            return;
+        }
+
+        const videos = snap.val();
+        let html = `<div style="font-size:11px; color:#facc15; font-weight:bold; margin-bottom:5px; text-transform:uppercase;">🎥 Assigned Videos</div>`;
+        
+        Object.keys(videos).forEach(key => {
+            const v = videos[key];
+            let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
+            let color = p > 90 ? "#4ade80" : "#38bdf8";
+            
+            html += `
+                <button onclick="playSpecificVideo('${key}', '${v.id}', ${v.progress})" 
+                        style="background:#0f172a; color:white; border:1px solid ${color}; font-size:12px; padding:10px; text-align:left; border-radius:8px;">
+                    ▶ Play Video <span style="float:right; color:${color}; font-weight:bold;">${p}%</span>
+                    <div style="font-size:10px; color:#ef4444; margin-top:5px; font-weight:bold;">Deadline: ${v.deadline}</div>
+                </button>
+            `;
+        });
+        videoListDiv.innerHTML = html;
+        
+        if (currentPlayingVideoKey && videos[currentPlayingVideoKey]) {
+            currentVideoData = videos[currentPlayingVideoKey];
         }
     });
-}
+};
+
+window.playSpecificVideo = function(videoKey, ytId, startAt) {
+    currentPlayingVideoKey = videoKey;
+    
+    // Forces video to open in the internal smart hub (No New Screen)
+    document.getElementById("videoModal").classList.remove("hidden");
+    const rightPane = document.getElementById("videoSplitRight");
+    const canvasBox = document.getElementById("canvasBox");
+    rightPane.appendChild(canvasBox);
+    canvasBox.classList.remove("hidden", "board-fullscreen");
+    canvasBox.style.minHeight = "100%"; 
+    document.getElementById("fullscreenBtn").style.display = "none";
+    document.getElementById("closeCanvasBtn").style.display = "none";
+    setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 100);
+
+    // Load video into player
+    if(!ytPlayer) {
+        ytPlayer = new YT.Player('ytPlayer', {
+            height: '100%', width: '100%', videoId: ytId,
+            playerVars: { 'start': Math.floor(startAt), 'rel': 0 },
+            events: { 'onStateChange': onPlayerStateChange }
+        });
+    } else {
+        ytPlayer.loadVideoById({videoId: ytId, startSeconds: startAt});
+    }
+};
 
 function onPlayerStateChange(event) {
     if (event.data == YT.PlayerState.PLAYING) {
-        // Save progress every 5 seconds
         videoSaveInterval = setInterval(() => {
-            if(ytPlayer && currentVideoData) {
+            if(ytPlayer && currentPlayingVideoKey) {
                 let cTime = ytPlayer.getCurrentTime();
                 let dur = ytPlayer.getDuration();
-                update(ref(db, `users/${currentUser.uid}/assignedVideoId`), { 
-                    id: currentVideoData.id, progress: cTime, duration: dur 
+                update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${currentPlayingVideoKey}`), { 
+                    progress: cTime, duration: dur 
                 });
             }
         }, 5000);
@@ -3220,12 +3252,16 @@ window.openRoadmapWindow = function(subjectFilter) {
         const remaining = data.SHIFT_REMAINING_TIME || 0;
         
         // Video gamification stats
-        const vData = data.assignedVideoId;
-        let vHtml = `<div class="map-stat-box"><div style="font-size:12px; color:#94a3b8">VIDEO PROGRESS</div><div class="map-stat-val">NO VIDEO</div></div>`;
-        if(vData && vData.id) {
-            let p = (vData.duration > 0) ? Math.floor((vData.progress / vData.duration) * 100) : 0;
-            vHtml = `<div class="map-stat-box"><div style="font-size:12px; color:#94a3b8">VIDEO PROGRESS</div>
-                     <div class="map-stat-val" style="color:${p > 90 ? '#4ade80' : '#38bdf8'}">${p}% COMPLETED</div></div>`;
+        const vData = data.ASSIGNED_VIDEOS;
+        let vHtml = `<div class="map-stat-box"><div style="font-size:12px; color:#94a3b8">VIDEO PROGRESS</div><div class="map-stat-val" style="font-size:14px; color:#64748b;">NO VIDEOS</div></div>`;
+        
+        if (vData) {
+            let totalVids = Object.keys(vData).length;
+            let doneVids = Object.values(vData).filter(v => v.duration > 0 && (v.progress / v.duration) > 0.9).length;
+            vHtml = `<div class="map-stat-box">
+                        <div style="font-size:12px; color:#94a3b8">VIDEO LIST</div>
+                        <div class="map-stat-val" style="color:${doneVids === totalVids ? '#4ade80' : '#facc15'}">${doneVids} / ${totalVids} DONE</div>
+                     </div>`;
         }
         
         let html = `
@@ -4352,14 +4388,53 @@ function executeWatchdogReset() {
 // CAPTIVE YOUTUBE SYSTEM
 // ==========================================
 window.adminAssignVideo = async function(uid) {
-    const url = prompt("Enter YouTube URL (Progress carries forward automatically until you remove it):");
+    const url = prompt("Enter YouTube URL:");
     if(!url) return;
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
-    if (match && match[2].length === 11) {
-        await update(ref(db, `users/${uid}`), { assignedVideoId: { id: match[2], progress: 0, duration: 0 } });
-        alert("Video locked and assigned!");
-    } else { alert("Invalid YouTube URL."); }
+    if (!match || match[2].length !== 11) return alert("Invalid YouTube URL.");
+
+    const deadline = prompt("Enter Target Deadline (e.g., 'Oct 15' or 'Tomorrow'):", "YYYY-MM-DD");
+    if(!deadline) return;
+
+    const videoId = match[2];
+    const videoKey = "vid_" + Date.now(); // Allows multiple videos
+    
+    const videoPayload = { 
+        id: videoId, 
+        progress: 0, 
+        duration: 0, 
+        deadline: deadline,
+        addedAt: Date.now()
+    };
+
+    await update(ref(db, `users/${uid}/ASSIGNED_VIDEOS/${videoKey}`), videoPayload);
+    alert("Video added to student's list with deadline!");
+};
+
+window.adminManageVideos = async function(uid) {
+    const snap = await get(ref(db, `users/${uid}/ASSIGNED_VIDEOS`));
+    if (!snap.exists()) return alert("No videos assigned to this student.");
+    
+    const videos = snap.val();
+    let menu = "Select video to delete (enter number):\n\n";
+    const keys = Object.keys(videos);
+    
+    keys.forEach((k, i) => {
+        let v = videos[k];
+        let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
+        menu += `${i + 1}. ID: ${v.id} | ${p}% Done | Due: ${v.deadline}\n`;
+    });
+    
+    const choice = prompt(menu);
+    if (!choice) return;
+    const idx = parseInt(choice) - 1;
+    if (idx >= 0 && idx < keys.length) {
+        if(confirm("Remove this video?")) {
+            await remove(ref(db, `users/${uid}/ASSIGNED_VIDEOS/${keys[idx]}`));
+            alert("Video removed!");
+        }
+    }
 };
 
 window.adminRemoveVideo = async function(uid) {
