@@ -2522,7 +2522,11 @@ window.loadSubjectList = function() {
   // Keep first option
   select.innerHTML = `<option value="">Select Subject</option>`;
 
-  Object.keys(data).forEach(sub => {
+  // Combine FIXED_SUBJECTS with any existing subjects in the DB (like "Mock Test")
+  // Using Set automatically removes any duplicates
+  const allSubjects = new Set([...FIXED_SUBJECTS, ...Object.keys(data)]);
+
+  allSubjects.forEach(sub => {
     const opt = document.createElement("option");
     opt.value = sub;
     opt.innerText = sub;
