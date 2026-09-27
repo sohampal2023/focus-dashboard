@@ -450,8 +450,35 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 </button>
       </div>
     <!-- DYNAMIC VIDEO LIST (MULTIPLE VIDEOS) -->
-<div id="videoSplitLeft" style="flex:1; background:#000; border-right:2px solid #334155; position:relative;">
-    <div id="ytPlayer" style="width:100%; height:100%;"></div>
+<!-- FOOLPROOF CAPTIVE YOUTUBE + NOTES HUB -->
+<div id="videoModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #020617; z-index: 100000; display: flex; flex-direction: column;">
+    
+    <!-- HUB HEADER -->
+    <div style="background:#0f172a; padding:15px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #eab308; height: 70px; box-sizing: border-box;">
+        <h3 style="margin:0; color:#eab308; display:flex; align-items:center; gap:10px;">
+            🎥 Smart Study Hub
+        </h3>
+        <div style="display:flex; gap:15px; align-items:center;">
+            <div style="color:#ef4444; font-size:12px; font-weight:bold;">DO NOT SWITCH TABS!</div>
+            <button onclick="window.toggleHubNotes()" style="padding:8px 20px; background:#8b5cf6; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">📝 Toggle Notes</button>
+            <button onclick="window.closeStudyVideoModal()" style="padding:8px 25px; background:#ef4444; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">Exit Hub</button>
+        </div>
+    </div>
+
+    <!-- SPLIT SCREEN BODY -->
+    <div style="display:flex; width:100vw; height: calc(100vh - 70px);">
+        
+        <!-- Left Side: YouTube -->
+        <div id="videoSplitLeft" style="flex:1; background:#000; position:relative; transition: all 0.3s ease;">
+            <!-- This Absolute Positioning Forces 100% Full Screen -->
+            <div id="ytPlayer" style="position:absolute; top:0; left:0; width:100%; height:100%;"></div>
+        </div>
+        
+        <!-- Right Side: Notes Canvas (Hidden by default) -->
+        <div id="videoSplitRight" style="flex:1; background:#020617; display:none; flex-direction:column; padding:10px; border-left:2px solid #334155; transition: all 0.3s ease;">
+            <!-- Canvas injects here -->
+        </div>
+    </div>
 </div>
 <button onclick="toggleNotesCanvas()" style="background:#8b5cf6; color:#fff; font-weight:bold;">📝 Digital Notes Canvas</button>
       <button id="noticeBtn" onclick="toggleNoticeBoard()">📢 Notice Board</button>
@@ -3435,17 +3462,8 @@ window.openRoadmapWindow = function(subjectFilter) {
         const activeNode = filteredTasks.find(t => t.status === 'RUNNING');
         const consumed = data.TIME_CONSUMED || 0;
         
-        // Plain Video Stats Section
+        // Fetch Video Data
         const vData = data.ASSIGNED_VIDEOS;
-        let vHtml = `<div><div style="font-size:12px; color:#94a3b8;">VIDEO PROGRESS</div>
-                     <div style="font-size:16px; color:#cbd5e1; font-weight:bold;">NO VIDEO</div></div>`;
-        
-        if (vData) {
-            let totalVids = Object.keys(vData).length;
-            let doneVids = Object.values(vData).filter(v => v.duration > 0 && (v.progress / v.duration) > 0.9).length;
-            vHtml = `<div><div style="font-size:12px; color:#94a3b8;">VIDEO PROGRESS</div>
-                     <div style="font-size:16px; color:${doneVids === totalVids ? '#4ade80' : '#facc15'}; font-weight:bold;">${doneVids} / ${totalVids} DONE</div></div>`;
-        }
         
         let html = `
             <style>
@@ -3495,51 +3513,86 @@ window.openRoadmapWindow = function(subjectFilter) {
                     <div style="font-weight: bold; font-size: 18px; color: #38bdf8;">${subjectFilter}</div>
                     <button onclick="closeInPageMap()" style="margin-top:8px; background:#334155; border:none; color:white; padding:6px 15px; border-radius:4px; font-size:12px; cursor:pointer;">Close Map</button>
                 </div>
-                ${vHtml}
+                <div style="text-align:right;">
+                    <div style="font-size:12px; color:#94a3b8;">TASKS</div>
+                    <div style="font-size:16px; color:#cbd5e1; font-weight:bold;">${filteredTasks.filter(t => t.status === 'DONE').length} / ${filteredTasks.length} DONE</div>
+                </div>
             </div>
             
             <div class="simple-map-container">
         `;
 
+        let nodesArray = [];
+
+        // 1. ADD ROADMAP TASKS TO SEQUENCE
         filteredTasks.forEach((task, i) => {
             const isDone = task.status === 'DONE';
             const isActive = task.status === 'RUNNING';
 
-            html += `
-                <div class="simple-node-wrapper">
-                    <div class="simple-node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
-                        <div class="simple-badge">${isDone ? '✔' : i + 1}</div>
+            nodesArray.push(`
+                <div class="simple-node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
+                    <div class="simple-badge">${isDone ? '✔' : i + 1}</div>
+                    
+                    <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#e5e7eb;">${task.topic}</div>
+                    
+                    ${isActive ? 
+                        `<div style="display:flex; justify-content:space-between; align-items:center;">
+                            <span style="font-size:12px; color:#38bdf8;">Active Session</span>
+                            <span id="activeTimer_${task.id}" style="font-family:monospace; font-size:18px; font-weight:bold; color:#38bdf8;">--:--</span>
+                        </div>` 
+                        : `<div style="font-size:12px; color:#94a3b8;">
+                            Allocated Time: ${Math.floor(task.allocatedTime/60000)}m
+                           </div>`
+                    }
+                    
+                    <div style="display:flex; margin-top:5px; flex-wrap:wrap;">
+                        ${!isDone ? (!isActive ? 
+                            `<button class="btn-simple start" onclick="startRoadmapTask(${task.id})">Start</button>` :
+                            `<button class="btn-simple finish" onclick="completeRoadmapTask(${task.id})">Finish</button>
+                             <button class="btn-simple abort" onclick="abortRoadmapTask(${task.id})">Abort</button>`) 
+                        : `<div style="width:100%; text-align:left; padding:8px 0; background:transparent; color:#22c55e; font-size:12px; font-weight:bold;">
+                            Completed @ ${task.doneTime}
+                           </div>`}
+                    </div>
+                </div>
+            `);
+        });
+
+        // 2. APPEND ASSIGNED VIDEOS AS NODES AT THE END OF THE MAP
+        if (vData) {
+            Object.keys(vData).forEach((key) => {
+                const v = vData[key];
+                let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
+                const isDone = p > 90;
+
+                nodesArray.push(`
+                    <div class="simple-node ${isDone ? 'done' : ''}" style="border-color:${isDone ? '#22c55e' : '#eab308'};">
+                        <div class="simple-badge" style="border-color:${isDone ? '#22c55e' : '#eab308'}; color:${isDone ? '#22c55e' : '#eab308'}; font-size:18px;">🎥</div>
                         
-                        <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#e5e7eb;">${task.topic}</div>
+                        <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#eab308;">Assigned Video</div>
+                        <div style="font-size:12px; color:#94a3b8;">Due: ${v.deadline} | Progress: <span style="color:${isDone ? '#22c55e' : '#eab308'}; font-weight:bold;">${p}%</span></div>
                         
-                        ${isActive ? 
-                            `<div style="display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-size:12px; color:#38bdf8;">Active Session</span>
-                                <span id="activeTimer_${task.id}" style="font-family:monospace; font-size:18px; font-weight:bold; color:#38bdf8;">--:--</span>
-                            </div>` 
-                            : `<div style="font-size:12px; color:#94a3b8;">
-                                Allocated Time: ${Math.floor(task.allocatedTime/60000)}m
-                               </div>`
-                        }
-                        
-                        <div style="display:flex; margin-top:5px; flex-wrap:wrap;">
-                            ${!isDone ? (!isActive ? 
-                                `<button class="btn-simple start" onclick="startRoadmapTask(${task.id})">Start</button>` :
-                                `<button class="btn-simple finish" onclick="completeRoadmapTask(${task.id})">Finish</button>
-                                 <button class="btn-simple abort" onclick="abortRoadmapTask(${task.id})">Abort</button>`) 
-                            : `<div style="width:100%; text-align:left; padding:8px 0; background:transparent; color:#22c55e; font-size:12px; font-weight:bold;">
-                                Completed @ ${task.doneTime}
-                               </div>`}
+                        <div style="display:flex; margin-top:10px;">
+                            <!-- Closes the Map Modal automatically when playing the video so they don't overlap -->
+                            <button class="btn-simple start" style="background:#eab308; border-color:#eab308; color:black;" onclick="window.closeInPageMap(); window.playSpecificVideo('${key}', '${v.id}', ${v.progress})">▶ Play Video</button>
                         </div>
                     </div>
-                    ${i < filteredTasks.length - 1 ? `<div class="simple-connector"></div>` : ''}
-                </div>
-            `;
-        });
+                `);
+            });
+        }
+
+        // 3. JOIN ALL NODES WITH CONNECTORS
+        html += nodesArray.map((nodeHtml, idx) => `
+            <div class="simple-node-wrapper">
+                ${nodeHtml}
+                ${idx < nodesArray.length - 1 ? `<div class="simple-connector"></div>` : ''}
+            </div>
+        `).join('');
+
         html += `</div>`;
         document.getElementById("mapContentContainer").innerHTML = html;
 
-        // Timer Loop for the active node
+        // Timer Loop for the active task node
         if (activeNode && activeNode.targetEndTime) {
             if (roadmapInterval) clearInterval(roadmapInterval);
             roadmapInterval = setInterval(() => {
