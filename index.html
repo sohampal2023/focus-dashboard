@@ -793,12 +793,24 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     <div style="display:flex; flex-direction:column; width:100vw; height:100vh;">
         
         <!-- HUB HEADER -->
+        <!-- CAPTIVE YOUTUBE + NOTES SPLIT-SCREEN MODAL -->
+<div id="videoModal" class="modal-overlay hidden" style="z-index: 10000; background:#020617;">
+    <div style="display:flex; flex-direction:column; width:100vw; height:100vh;">
+        
+        <!-- HUB HEADER -->
         <div style="background:#0f172a; padding:10px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #eab308;">
             <h3 style="margin:0; color:#eab308; display:flex; align-items:center; gap:10px;">
-                🎥 Smart Study Hub (50% Video | 50% Notes)
+                🎥 Smart Study Hub
             </h3>
-            <div style="color:#ef4444; font-size:12px; font-weight:bold;">DO NOT SWITCH TABS!</div>
-            <button onclick="closeStudyVideoModal()" style="width:auto; padding:8px 25px; background:#ef4444; color:white; font-weight:bold; margin:0;">Exit Hub</button>
+            
+            <div style="display:flex; gap:15px; align-items:center;">
+                <div style="color:#ef4444; font-size:12px; font-weight:bold;">DO NOT SWITCH TABS!</div>
+                
+                <!-- NEW TOGGLE NOTES BUTTON -->
+                <button onclick="window.toggleHubNotes()" style="width:auto; padding:8px 20px; background:#8b5cf6; color:white; font-weight:bold; margin:0; border:none; border-radius:6px; cursor:pointer; box-shadow: 0 4px 10px rgba(139, 92, 246, 0.4);">📝 Toggle Notes</button>
+                
+                <button onclick="closeStudyVideoModal()" style="width:auto; padding:8px 25px; background:#ef4444; color:white; font-weight:bold; margin:0; border:none; border-radius:6px; cursor:pointer;">Exit Hub</button>
+            </div>
         </div>
         
         <!-- 50/50 SPLIT SCREEN -->
