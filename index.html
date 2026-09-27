@@ -4495,8 +4495,33 @@ window.openRoadmapWindow = function(subjectFilter) {
                 const isDone = p >= 90;
                 
                 // Pull the dynamically proportioned time for today
-                let allocatedToday = isDone ? 0 : (currentAllocations[key] || 10);
-                let allocatedStr = isDone ? `Completed` : `Allocated Time (Today): ${allocatedToday}m`;
+                // Calculate how much of THIS video should be completed today
+let allocatedToday = isDone
+    ? 0
+    : (currentAllocations[key] || 0);
+
+let videoDurationSec = Number(v.duration) || 0;
+let currentProgressSec = Number(v.progress) || 0;
+
+let remainingVideoSec = Math.max(
+    0,
+    videoDurationSec - currentProgressSec
+);
+
+let portionToday = 0;
+
+if (!isDone && remainingVideoSec > 0 && allocatedToday > 0) {
+    const allocatedSec = allocatedToday * 60;
+
+    portionToday = Math.min(
+        100,
+        Math.round((allocatedSec / remainingVideoSec) * 100)
+    );
+}
+
+let allocatedStr = isDone
+    ? `Completed`
+    : `Today: Watch ${portionToday}% of remaining video`;
 
                 let scoreVal = v.mcqScore !== undefined ? parseFloat(v.mcqScore).toFixed(2) : "0.00";
                 let totalVal = v.mcqTotal !== undefined ? v.mcqTotal : 0;
