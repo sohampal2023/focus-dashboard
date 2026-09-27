@@ -2298,26 +2298,37 @@ window.videoSaveInterval = null;
 window.onYouTubeIframeAPIReady = function() {
     console.log("YT API Ready");
 };
-
-// 1. SAFELY LOAD VIDEOS TO SIDEBAR
+// 1. SAFELY LOAD VIDEOS TO SIDEBAR (AUTO-INJECTS HTML)
 window.loadAssignedVideos = function() {
-    if (!currentUser) return; // Prevents the crash!
+    if (!currentUser) return; 
     
-    const videoListDiv = document.getElementById("studentVideoList");
+    // Auto-create the container if it's missing from the HTML
+    let videoListDiv = document.getElementById("studentVideoList");
     if (!videoListDiv) {
-        console.error("Missing <div id='studentVideoList'> in HTML sidebar!");
-        return;
+        videoListDiv = document.createElement("div");
+        videoListDiv.id = "studentVideoList";
+        videoListDiv.style.cssText = "display:flex; flex-direction:column; gap:8px; margin: 10px 0; width: 100%;";
+        
+        // Inject it directly above the "Digital Notes Canvas" button
+        const notesBtn = document.querySelector("button[onclick='toggleNotesCanvas()']");
+        if (notesBtn && notesBtn.parentNode) {
+            notesBtn.parentNode.insertBefore(videoListDiv, notesBtn);
+        } else {
+            console.error("Could not find Notes button to inject video list.");
+            return;
+        }
     }
 
+    // Fetch from Database
     onValue(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS`), (snap) => {
         if(!snap.exists()) {
-            videoListDiv.innerHTML = "";
+            videoListDiv.innerHTML = ""; // Hide if empty
             if(window.ytPlayer && typeof window.ytPlayer.stopVideo === 'function') window.ytPlayer.stopVideo();
             return;
         }
 
         const videos = snap.val();
-        let html = `<div style="font-size:11px; color:#facc15; font-weight:bold; margin-bottom:5px; text-transform:uppercase;">🎥 Assigned Videos</div>`;
+        let html = `<div style="font-size:11px; color:#facc15; font-weight:bold; margin-bottom:5px; text-transform:uppercase; text-align:center; background:rgba(250, 204, 21, 0.1); border:1px solid #facc15; padding:6px; border-radius:6px; letter-spacing:1px;">🎥 Assigned Videos</div>`;
         
         Object.keys(videos).forEach(key => {
             const v = videos[key];
@@ -2326,9 +2337,9 @@ window.loadAssignedVideos = function() {
             
             html += `
                 <button onclick="playSpecificVideo('${key}', '${v.id}', ${v.progress})" 
-                        style="background:#0f172a; color:white; border:1px solid ${color}; font-size:12px; padding:10px; text-align:left; border-radius:8px; cursor:pointer; width:100%; margin-bottom:6px;">
+                        style="background:#0f172a; color:white; border:1px solid ${color}; font-size:12px; padding:12px; text-align:left; border-radius:8px; cursor:pointer; width:100%; margin-bottom:6px; box-shadow: 0 4px 10px rgba(0,0,0,0.5); transition: 0.2s;">
                     ▶ Play Video <span style="float:right; color:${color}; font-weight:bold;">${p}%</span>
-                    <div style="font-size:10px; color:#ef4444; margin-top:5px; font-weight:bold;">Deadline: ${v.deadline}</div>
+                    <div style="font-size:10px; color:#ef4444; margin-top:6px; font-weight:bold;">Due: ${v.deadline}</div>
                 </button>
             `;
         });
