@@ -816,7 +816,23 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 <div id="inPageMapModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2,6,23,0.95); z-index: 100000; overflow-y: auto; backdrop-filter: blur(10px);">
     <div id="mapContentContainer"></div>
 </div>
-
+<!-- ADMIN IN-PAGE VIDEO ASSIGN MODAL -->
+<div id="adminVideoModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2, 6, 23, 0.95); z-index: 100000; display: flex; justify-content: center; align-items: center;">
+    <div style="background: #0f172a; padding: 30px; border: 1px solid #334155; border-radius: 8px; width: 400px; text-align: left;">
+        <h3 style="color: #38bdf8; margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">Assign YouTube Video</h3>
+        
+        <label style="font-size: 12px; color: #94a3b8; display: block; margin-top: 15px;">YouTube URL:</label>
+        <input id="adminVidUrl" type="text" placeholder="Paste link here..." style="width: 100%; padding: 10px; margin-top: 5px; background: #020617; border: 1px solid #334155; color: white; border-radius: 4px;">
+        
+        <label style="font-size: 12px; color: #94a3b8; display: block; margin-top: 15px;">Target Deadline:</label>
+        <input id="adminVidDeadline" type="text" placeholder="e.g., Tomorrow, Oct 15" style="width: 100%; padding: 10px; margin-top: 5px; background: #020617; border: 1px solid #334155; color: white; border-radius: 4px;">
+        
+        <div style="display: flex; gap: 10px; margin-top: 25px;">
+            <button onclick="submitAdminVideo()" style="flex: 1; background: #0ea5e9; border: none; padding: 12px; color: white; font-weight: bold; border-radius: 4px; cursor: pointer;">Assign Video</button>
+            <button onclick="document.getElementById('adminVideoModal').classList.add('hidden')" style="flex: 1; background: #334155; border: none; padding: 12px; color: white; font-weight: bold; border-radius: 4px; cursor: pointer;">Cancel</button>
+        </div>
+    </div>
+</div>
 <!-- MANDATORY 30-MIN BREAK OVERLAY -->
 <div id="mandatoryBreakOverlay" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #020617; z-index: 999999; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 5px solid #38bdf8;">
     <h1 style="color:#38bdf8; font-size: 50px; text-transform: uppercase; text-shadow: 0 0 20px #38bdf8;">🛑 Mandatory Break 🛑</h1>
@@ -3241,10 +3257,9 @@ window.openRoadmapWindow = function(subjectFilter) {
     const modal = document.getElementById("inPageMapModal");
     modal.classList.remove("hidden");
     
-    // Inject dynamic grid background for that tech/cyber feel
-    modal.style.background = "radial-gradient(circle at 50% 50%, #0f172a 0%, #020617 100%)";
-    modal.style.backgroundImage = "radial-gradient(rgba(56, 189, 248, 0.05) 1px, transparent 1px)";
-    modal.style.backgroundSize = "40px 40px";
+    // Simple translucent dark background
+    modal.style.background = "rgba(2, 6, 23, 0.95)";
+    modal.style.backgroundImage = "none"; 
 
     onValue(ref(db, `users/${currentUser.uid}`), (snap) => {
         const data = snap.val();
@@ -3254,141 +3269,104 @@ window.openRoadmapWindow = function(subjectFilter) {
         const activeNode = filteredTasks.find(t => t.status === 'RUNNING');
         const consumed = data.TIME_CONSUMED || 0;
         
-        // Gamified Video Stats Section
+        // Plain Video Stats Section
         const vData = data.ASSIGNED_VIDEOS;
-        let vHtml = `<div class="cyber-stat">
-                        <div style="font-size:10px; color:#94a3b8; letter-spacing:1px; margin-bottom:4px;">VIDEO INTEL</div>
-                        <div style="font-family:monospace; font-size:16px; color:#64748b;">NO DATA</div>
-                     </div>`;
+        let vHtml = `<div><div style="font-size:12px; color:#94a3b8;">VIDEO PROGRESS</div>
+                     <div style="font-size:16px; color:#cbd5e1; font-weight:bold;">NO VIDEO</div></div>`;
         
         if (vData) {
             let totalVids = Object.keys(vData).length;
             let doneVids = Object.values(vData).filter(v => v.duration > 0 && (v.progress / v.duration) > 0.9).length;
-            let vColor = doneVids === totalVids ? '#4ade80' : '#facc15';
-            vHtml = `<div class="cyber-stat">
-                        <div style="font-size:10px; color:#94a3b8; letter-spacing:1px; margin-bottom:4px;">VIDEO INTEL</div>
-                        <div style="font-family:monospace; font-size:18px; color:${vColor}; font-weight:bold; text-shadow: 0 0 10px ${vColor};">${doneVids} / ${totalVids} SECURED</div>
-                     </div>`;
+            vHtml = `<div><div style="font-size:12px; color:#94a3b8;">VIDEO PROGRESS</div>
+                     <div style="font-size:16px; color:${doneVids === totalVids ? '#4ade80' : '#facc15'}; font-weight:bold;">${doneVids} / ${totalVids} DONE</div></div>`;
         }
         
         let html = `
             <style>
-                /* CYBERPUNK GAMIFIED MAP CSS */
-                .cyber-map-header {
-                    position: sticky; top: 0; background: rgba(15,23,42,0.85); backdrop-filter: blur(12px);
-                    padding: 15px 30px; border-bottom: 1px solid rgba(56, 189, 248, 0.4);
-                    box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 100;
-                    display: grid; grid-template-columns: 1fr 2fr 1fr; gap: 20px; align-items: center;
+                /* PLAIN SIMPLE MAP CSS */
+                .simple-header {
+                    position: sticky; top: 0; background: #0f172a; padding: 20px 40px; 
+                    border-bottom: 1px solid #334155; z-index: 100;
+                    display: flex; justify-content: space-between; align-items: center;
                 }
-                .cyber-stat {
-                    text-align:center; padding:10px; background:rgba(15,23,42,0.6); 
-                    border:1px solid #1e293b; border-radius:12px; box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+                .simple-map-container { display: flex; flex-direction: column; align-items: center; padding: 40px; }
+                
+                .simple-node-wrapper { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
+                .simple-node {
+                    width: 400px; padding: 20px; background: transparent;
+                    border: 1px solid #334155; border-radius: 8px;
+                    position: relative; margin-left: 50px;
                 }
-                .map-container-inner { display: flex; flex-direction: column; align-items: center; padding: 50px 20px 100px; }
+                .simple-node.done { border-color: #22c55e; background: rgba(34, 197, 94, 0.05); }
+                .simple-node.active { border-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }
                 
-                .cyber-node-wrapper { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
-                .cyber-node {
-                    width: 480px; padding: 20px 25px; background: rgba(30,41,59,0.65);
-                    border: 1px solid rgba(255,255,255,0.05); border-radius: 16px;
-                    backdrop-filter: blur(10px); box-shadow: 0 8px 32px rgba(0,0,0,0.3);
-                    position: relative; margin-left: 60px; transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                .simple-badge {
+                    width: 40px; height: 40px; border-radius: 50%; background: #0f172a; border: 2px solid #334155;
+                    position: absolute; left: -70px; top: 50%; transform: translateY(-50%);
+                    display: flex; align-items: center; justify-content: center; font-weight: bold; color: #94a3b8;
                 }
-                .cyber-node:hover { transform: translateY(-4px); border-color: rgba(56,189,248,0.4); box-shadow: 0 12px 40px rgba(56,189,248,0.15); }
+                .simple-node.done .simple-badge { border-color: #22c55e; color: #22c55e; }
+                .simple-node.active .simple-badge { border-color: #38bdf8; color: #38bdf8; }
                 
-                /* DONE STATE */
-                .cyber-node.done { border-color: rgba(16,185,129,0.4); background: linear-gradient(145deg, rgba(16,185,129,0.05), rgba(15,23,42,0.8)); }
+                .simple-connector { width: 2px; height: 40px; background: #334155; margin-left: -50px; }
                 
-                /* ACTIVE STATE */
-                .cyber-node.active {
-                    border: 2px solid #facc15; transform: scale(1.05); z-index: 10;
-                    background: linear-gradient(145deg, rgba(250,204,21,0.1), rgba(15,23,42,0.9));
-                    box-shadow: 0 0 30px rgba(250,204,21,0.2), inset 0 0 15px rgba(250,204,21,0.05);
-                    animation: pulse-border 2s infinite alternate;
+                .btn-simple {
+                    background: #1e293b; border: 1px solid #334155; padding: 10px; border-radius: 4px;
+                    color: white; font-weight: bold; cursor: pointer; width: 100%; margin-top:10px;
                 }
-                @keyframes pulse-border { 100% { box-shadow: 0 0 50px rgba(250,204,21,0.4), inset 0 0 20px rgba(250,204,21,0.1); } }
-                
-                .node-badge {
-                    width: 54px; height: 54px; border-radius: 50%; background: #0f172a; border: 3px solid #475569;
-                    position: absolute; left: -80px; top: 50%; transform: translateY(-50%);
-                    display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 20px; color: #64748b;
-                    box-shadow: 0 0 15px rgba(0,0,0,0.5); transition: all 0.3s;
-                }
-                .cyber-node.done .node-badge { border-color: #10b981; color: #10b981; text-shadow: 0 0 10px #10b981; box-shadow: 0 0 20px rgba(16,185,129,0.3); }
-                .cyber-node.active .node-badge { border-color: #facc15; color: #facc15; text-shadow: 0 0 10px #facc15; box-shadow: 0 0 25px rgba(250,204,21,0.4); }
-                
-                .cyber-connector { width: 4px; height: 50px; background: #1e293b; margin-left: -53px; position: relative; overflow: hidden; }
-                
-                /* ANIMATED ENERGY FLOW */
-                .cyber-connector.flowing { background: #064e3b; box-shadow: 0 0 10px rgba(16,185,129,0.5); }
-                .cyber-connector.flowing::after {
-                    content: ''; position: absolute; top: -100%; left: 0; width: 100%; height: 100%;
-                    background: linear-gradient(to bottom, transparent, #4ade80, transparent);
-                    animation: energyFlow 1.5s infinite linear;
-                }
-                @keyframes energyFlow { 100% { top: 100%; } }
-                
-                .btn-cyber {
-                    background: linear-gradient(45deg, #0ea5e9, #3b82f6); border: none; padding: 12px; border-radius: 8px;
-                    color: white; font-weight: 900; letter-spacing: 1.5px; text-transform: uppercase;
-                    cursor: pointer; box-shadow: 0 4px 15px rgba(14,165,233,0.3); transition: all 0.2s; width: 100%;
-                }
-                .btn-cyber:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(14,165,233,0.5); filter: brightness(1.1); }
-                .btn-cyber.finish { background: linear-gradient(45deg, #10b981, #059669); box-shadow: 0 4px 15px rgba(16,185,129,0.3); }
-                .btn-cyber.finish:hover { box-shadow: 0 6px 20px rgba(16,185,129,0.5); }
-                .btn-cyber.abort { background: linear-gradient(45deg, #ef4444, #b91c1c); box-shadow: 0 4px 15px rgba(239,68,68,0.3); margin-left:10px; }
-                .btn-cyber.abort:hover { box-shadow: 0 6px 20px rgba(239,68,68,0.5); }
+                .btn-simple:hover { background: #334155; }
+                .btn-simple.start { background: #0ea5e9; border-color: #0ea5e9; }
+                .btn-simple.finish { background: #22c55e; border-color: #22c55e; width: 48%; }
+                .btn-simple.abort { background: #ef4444; border-color: #ef4444; width: 48%; margin-left: 4%; }
             </style>
             
-            <div class="cyber-map-header">
-                <div class="cyber-stat">
-                    <div style="font-size:10px; color:#94a3b8; letter-spacing:1px; margin-bottom:4px;">TIME CONSUMED</div>
-                    <div style="font-family:monospace; font-size:18px; color:#facc15; font-weight:bold; text-shadow: 0 0 10px #facc15;">${Math.floor(consumed/60000)}m</div>
+            <div class="simple-header">
+                <div>
+                    <div style="font-size:12px; color:#94a3b8;">TIME CONSUMED</div>
+                    <div style="font-size:16px; color:#cbd5e1; font-weight:bold;">${Math.floor(consumed/60000)}m</div>
                 </div>
                 <div style="text-align:center;">
-                    <div style="font-weight: 900; font-size: 22px; color: #38bdf8; text-transform:uppercase; letter-spacing:1px; text-shadow: 0 0 15px rgba(56,189,248,0.5);">${subjectFilter}</div>
-                    <button onclick="closeInPageMap()" style="margin-top:10px; background:transparent; border:1px solid #ef4444; color:#ef4444; padding:6px 15px; border-radius:20px; font-size:10px; font-weight:bold; letter-spacing:1px; cursor:pointer; text-transform:uppercase; transition:all 0.2s;">Exit Terminal</button>
+                    <div style="font-weight: bold; font-size: 18px; color: #38bdf8;">${subjectFilter}</div>
+                    <button onclick="closeInPageMap()" style="margin-top:8px; background:#334155; border:none; color:white; padding:6px 15px; border-radius:4px; font-size:12px; cursor:pointer;">Close Map</button>
                 </div>
                 ${vHtml}
             </div>
             
-            <div class="map-container-inner">
+            <div class="simple-map-container">
         `;
 
         filteredTasks.forEach((task, i) => {
             const isDone = task.status === 'DONE';
             const isActive = task.status === 'RUNNING';
-            // Logic to make the connector line flow with green energy up to the active task
-            const isConnectorFlowing = isDone || (i < filteredTasks.length - 1 && filteredTasks[i+1].status === 'RUNNING');
 
             html += `
-                <div class="cyber-node-wrapper">
-                    <div class="cyber-node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
-                        <div class="node-badge">${isDone ? '✔' : i + 1}</div>
+                <div class="simple-node-wrapper">
+                    <div class="simple-node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
+                        <div class="simple-badge">${isDone ? '✔' : i + 1}</div>
                         
-                        <div style="font-weight:800; font-size:20px; margin-bottom:8px; color:white; letter-spacing:0.5px;">${task.topic}</div>
+                        <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#e5e7eb;">${task.topic}</div>
                         
                         ${isActive ? 
-                            `<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; background:rgba(0,0,0,0.4); padding:10px; border-radius:8px;">
-                                <span style="font-size:11px; color:#facc15; font-weight:bold; letter-spacing:1px; text-transform:uppercase;">⚡ Session Active</span>
-                                <span id="activeTimer_${task.id}" style="font-family:monospace; font-size:24px; color:#facc15; font-weight:900; text-shadow: 0 0 10px #facc15;">--:--</span>
+                            `<div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-size:12px; color:#38bdf8;">Active Session</span>
+                                <span id="activeTimer_${task.id}" style="font-family:monospace; font-size:18px; font-weight:bold; color:#38bdf8;">--:--</span>
                             </div>` 
-                            : `<div style="font-size:11px; color:#94a3b8; font-weight:bold; text-transform:uppercase; letter-spacing:1px; margin-bottom:12px;">
-                                <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${isDone?'#10b981':'#38bdf8'}; margin-right:5px; box-shadow:0 0 5px ${isDone?'#10b981':'#38bdf8'};"></span>
-                                Target Allocation: ${Math.floor(task.allocatedTime/60000)}m
+                            : `<div style="font-size:12px; color:#94a3b8;">
+                                Allocated Time: ${Math.floor(task.allocatedTime/60000)}m
                                </div>`
                         }
                         
-                        <div style="display:flex; margin-top:5px;">
+                        <div style="display:flex; margin-top:5px; flex-wrap:wrap;">
                             ${!isDone ? (!isActive ? 
-                                `<button class="btn-cyber" onclick="startRoadmapTask(${task.id})">Engage Task</button>` :
-                                `<button class="btn-cyber finish" onclick="completeRoadmapTask(${task.id})">Complete</button>
-                                 <button class="btn-cyber abort" onclick="abortRoadmapTask(${task.id})">Abort</button>`) 
-                            : `<div style="width:100%; text-align:center; padding:10px; background:rgba(16,185,129,0.1); border:1px dashed #10b981; border-radius:8px; color:#4ade80; font-size:12px; font-weight:bold; letter-spacing:1px;">
-                                NODE SECURED @ ${task.doneTime}
+                                `<button class="btn-simple start" onclick="startRoadmapTask(${task.id})">Start</button>` :
+                                `<button class="btn-simple finish" onclick="completeRoadmapTask(${task.id})">Finish</button>
+                                 <button class="btn-simple abort" onclick="abortRoadmapTask(${task.id})">Abort</button>`) 
+                            : `<div style="width:100%; text-align:left; padding:8px 0; background:transparent; color:#22c55e; font-size:12px; font-weight:bold;">
+                                Completed @ ${task.doneTime}
                                </div>`}
                         </div>
                     </div>
-                    ${i < filteredTasks.length - 1 ? `<div class="cyber-connector ${isConnectorFlowing ? 'flowing' : ''}"></div>` : ''}
+                    ${i < filteredTasks.length - 1 ? `<div class="simple-connector"></div>` : ''}
                 </div>
             `;
         });
@@ -3406,11 +3384,9 @@ window.openRoadmapWindow = function(subjectFilter) {
                         const over = Math.abs(timeLeft);
                         display.innerText = `-${Math.floor(over / 60000)}:${String(Math.floor((over % 60000) / 1000)).padStart(2,'0')}`;
                         display.style.color = "#ef4444";
-                        display.style.textShadow = "0 0 10px #ef4444";
                     } else {
                         display.innerText = `${Math.floor(timeLeft / 60000)}:${String(Math.floor((timeLeft % 60000) / 1000)).padStart(2,'0')}`;
-                        display.style.color = "#facc15";
-                        display.style.textShadow = "0 0 10px #facc15";
+                        display.style.color = "#38bdf8";
                     }
                 }
             }, 1000);
@@ -4486,15 +4462,29 @@ function executeWatchdogReset() {
   // ==========================================
 // CAPTIVE YOUTUBE SYSTEM
 // ==========================================
-window.adminAssignVideo = async function(uid) {
-    const url = prompt("Enter YouTube URL:");
-    if(!url) return;
+let pendingVideoAssignUid = null;
+
+// Opens the clean in-page form
+window.adminAssignVideo = function(uid) {
+    pendingVideoAssignUid = uid;
+    document.getElementById("adminVidUrl").value = "";
+    document.getElementById("adminVidDeadline").value = "";
+    document.getElementById("adminVideoModal").classList.remove("hidden");
+};
+
+// Submits the data to Firebase
+window.submitAdminVideo = async function() {
+    if (!pendingVideoAssignUid) return;
+    
+    const url = document.getElementById("adminVidUrl").value;
+    const deadline = document.getElementById("adminVidDeadline").value;
+    
+    if(!url) return alert("Please enter a YouTube URL.");
+    if(!deadline) return alert("Please enter a Target Deadline.");
+    
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     if (!match || match[2].length !== 11) return alert("Invalid YouTube URL.");
-
-    const deadline = prompt("Enter Target Deadline (e.g., 'Oct 15' or 'Tomorrow'):", "YYYY-MM-DD");
-    if(!deadline) return;
 
     const videoId = match[2];
     const videoKey = "vid_" + Date.now(); // Allows multiple videos
@@ -4507,8 +4497,13 @@ window.adminAssignVideo = async function(uid) {
         addedAt: Date.now()
     };
 
-    await update(ref(db, `users/${uid}/ASSIGNED_VIDEOS/${videoKey}`), videoPayload);
-    alert("Video added to student's list with deadline!");
+    try {
+        await update(ref(db, `users/${pendingVideoAssignUid}/ASSIGNED_VIDEOS/${videoKey}`), videoPayload);
+        alert("Video assigned successfully!");
+        document.getElementById("adminVideoModal").classList.add("hidden"); // Close modal automatically
+    } catch (error) {
+        alert("Failed to assign video: " + error.message);
+    }
 };
 
 window.adminManageVideos = async function(uid) {
