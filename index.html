@@ -3086,29 +3086,164 @@ function playWarningBeep() {
 }
 // --- IDLE TIMER & WATCHDOG LOGIC ---
 function startIdle(customSeconds = 125) {
-  if(idleTimer) clearInterval(idleTimer);
-  
-  totalDuration = customSeconds;
-  targetTime = Date.now() + (customSeconds * 1000);
-  
-  const idleBox = document.getElementById("idleBox");
-  if(idleBox) {
-      idleBox.classList.remove("hidden");
-      idleBox.classList.remove("critical");
-  }
+    if (idleTimer) clearInterval(idleTimer);
 
-  updateIdle(customSeconds);
+    totalDuration = 125;
+    targetTime = Date.now() + (125 * 1000);
 
-  idleTimer = setInterval(() => {
-    const current = Date.now();
-    const remainingSeconds = Math.ceil((targetTime - current) / 1000);
-    updateIdle(remainingSeconds);
-    if (remainingSeconds <= 0) {
-      autoLogout();
+    // Watchdog is active again
+    localStorage.removeItem("WATCHDOG_PROOF_REQUIRED");
+
+    const idleBox = document.getElementById("idleBox");
+
+    if (idleBox) {
+        idleBox.classList.remove("hidden");
+        idleBox.classList.remove("critical");
     }
-  }, 1000);
+
+    updateIdle(125);
+
+    idleTimer = setInterval(() => {
+        const current = Date.now();
+        const remainingSeconds = Math.ceil((targetTime - current) / 1000);
+
+        updateIdle(remainingSeconds);
+
+        if (remainingSeconds <= 0) {
+            clearInterval(idleTimer);
+            idleTimer = null;
+
+            // DO NOT LOGOUT
+            watchdogExpired();
+        }
+    }, 1000);
+}
+let watchdogSirenCtx = null;
+let watchdogSirenOsc = null;
+let watchdogSirenGain = null;
+let watchdogSirenInterval = null;
+
+function startContinuousWatchdogSiren() {
+    try {
+        if (watchdogSirenCtx) return;
+
+        watchdogSirenCtx =
+            new (window.AudioContext || window.webkitAudioContext)();
+
+        watchdogSirenOsc = watchdogSirenCtx.createOscillator();
+        watchdogSirenGain = watchdogSirenCtx.createGain();
+
+        watchdogSirenOsc.type = "square";
+        watchdogSirenOsc.frequency.value = 900;
+
+        watchdogSirenGain.gain.value = 0.18;
+
+        watchdogSirenOsc.connect(watchdogSirenGain);
+        watchdogSirenGain.connect(watchdogSirenCtx.destination);
+
+        watchdogSirenOsc.start();
+
+        // Alternating siren tone
+        let high = false;
+
+        watchdogSirenInterval = setInterval(() => {
+            if (!watchdogSirenOsc || !watchdogSirenCtx) return;
+
+            high = !high;
+
+            watchdogSirenOsc.frequency.setValueAtTime(
+                high ? 1200 : 700,
+                watchdogSirenCtx.currentTime
+            );
+        }, 450);
+
+    } catch (e) {
+        console.error("Watchdog siren failed:", e);
+    }
 }
 
+function stopContinuousWatchdogSiren() {
+    try {
+        if (watchdogSirenInterval) {
+            clearInterval(watchdogSirenInterval);
+            watchdogSirenInterval = null;
+        }
+
+        if (watchdogSirenOsc) {
+            try {
+                watchdogSirenOsc.stop();
+            } catch(e) {}
+
+            watchdogSirenOsc.disconnect();
+            watchdogSirenOsc = null;
+        }
+
+        if (watchdogSirenGain) {
+            watchdogSirenGain.disconnect();
+            watchdogSirenGain = null;
+        }
+
+        if (watchdogSirenCtx) {
+            watchdogSirenCtx.close();
+            watchdogSirenCtx = null;
+        }
+    } catch(e) {
+        console.error("Siren stop error:", e);
+    }
+}
+  function watchdogExpired() {
+
+    // Remember that proof is mandatory
+    localStorage.setItem("WATCHDOG_PROOF_REQUIRED", "true");
+
+    // Hide normal watchdog
+    const idleBox = document.getElementById("idleBox");
+    if (idleBox) {
+        idleBox.classList.add("hidden");
+    }
+
+    // Start continuous siren
+    startContinuousWatchdogSiren();
+
+    // Force proof modal
+    const proofModal = document.getElementById("proofModal");
+
+    if (proofModal) {
+        proofModal.classList.remove("hidden");
+
+        // Make modal impossible to dismiss normally
+        proofModal.style.zIndex = "99999999";
+
+        const cancelButton =
+            proofModal.querySelector('button[onclick*="proofModal"]');
+
+        if (cancelButton) {
+            cancelButton.style.display = "none";
+        }
+
+        // Change title/message
+        const title = proofModal.querySelector("h2");
+        if (title) {
+            title.innerText = "🚨 WATCHDOG EXPIRED";
+            title.style.color = "#ef4444";
+        }
+
+        const message = proofModal.querySelector("p");
+
+        if (message) {
+            message.innerHTML =
+                "<b style='color:#ef4444'>CONTINUOUS WATCHDOG ALERT</b><br>" +
+                "Your 2-minute watchdog has expired.<br><br>" +
+                "Upload your study proof to continue.<br>" +
+                "<b>The 5-minute mandatory break will begin only after proof submission.</b>";
+        }
+    }
+
+    // Prevent normal controls
+    document.body.style.overflow = "hidden";
+
+    console.warn("WATCHDOG EXPIRED - PROOF REQUIRED");
+}
 function resetWatchdog() {
     if(!currentUser) return;
     const btn = document.querySelector('.watchdog-btn');
@@ -3156,7 +3291,7 @@ function updateIdle(seconds) {
   let displaySeconds = seconds > 0 ? seconds : 0;
   
   // 🔥 THE 2 MINUTE WARNING CHIME 🔥
-  if (displaySeconds === 120) {
+  if (displaySeconds === 125) {
       window.playWatchdogWarningChime();
   }
   
@@ -3570,7 +3705,7 @@ function startMasterClock() {
 
         // 2-Minute Inactivity Watchdog Check
         window.idleInactivityCounter = (window.idleInactivityCounter || 0) + 1;
-        if (window.idleInactivityCounter >= 120) { 
+        if (window.idleInactivityCounter >= 125) { 
             window.idleInactivityCounter = 0;
             if (typeof window.handleIdleTimeoutPenalty === 'function') {
                 window.handleIdleTimeoutPenalty();
@@ -3626,63 +3761,138 @@ window.handleIdleTimeoutPenalty = function() {
     }
 };
 window.triggerMandatoryBreak = function() {
-    // 1. If YouTube Video Hub is open, force close it immediately!
-    if (typeof window.closeStudyVideoModal === 'function') {
+
+    // Stop study activity
+    if (idleTimer) {
+        clearInterval(idleTimer);
+        idleTimer = null;
+    }
+
+    if (typeof window.closeStudyVideoModal === "function") {
         window.closeStudyVideoModal();
     }
 
-    // 2. Pause your existing Watchdog/Idle Timer
-    if (typeof idleTimer !== 'undefined' && idleTimer) {
-        clearInterval(idleTimer);
-    }
+    // Lock state
+    localStorage.setItem("MANDATORY_BREAK_ACTIVE", "true");
+    localStorage.setItem("MANDATORY_BREAK_END", Date.now() + 300000);
 
-    // 3. Ensure the compulsory break overlay exists on the screen
     let overlay = document.getElementById("mandatoryBreakOverlay");
+
     if (!overlay) {
         overlay = document.createElement("div");
+
         overlay.id = "mandatoryBreakOverlay";
-        overlay.style.cssText = "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2,6,23,0.99); z-index: 9999999; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 6px solid #38bdf8; backdrop-filter: blur(15px);";
+
+        overlay.style.cssText = `
+            position:fixed;
+            top:0;
+            left:0;
+            width:100vw;
+            height:100vh;
+            background:#020617;
+            z-index:999999999;
+            display:flex;
+            flex-direction:column;
+            justify-content:center;
+            align-items:center;
+            text-align:center;
+            border:6px solid #38bdf8;
+        `;
+
         document.body.appendChild(overlay);
     }
 
-    overlay.innerHTML = `
-        <h1 style="color:#38bdf8; font-size: 55px; text-transform: uppercase; text-shadow: 0 0 25px #38bdf8; margin-bottom: 10px;">🛑 Compulsory 5-Min Break 🛑</h1>
-        <p style="color:#94a3b8; font-size: 22px; max-width: 600px; line-height: 1.5;">You've hit your focus limit. Stand up, rest your eyes, stretch, and step away from the screen.</p>
-        <div id="breakTimerDisplay" style="font-size: 90px; font-weight: 900; color: #facc15; margin: 30px 0; font-family: monospace; letter-spacing: 2px;">05:00</div>
-        <div style="background: rgba(239, 68, 68, 0.1); border: 2px solid #ef4444; padding: 15px 30px; border-radius: 8px; color:#ef4444; font-weight: bold; font-size: 16px; text-transform: uppercase;">
-            🔒 System Locked Until Break Timer Expires
-        </div>
-    `;
     overlay.classList.remove("hidden");
 
-    // 4. Run the 5-minute (300 seconds) strict countdown
-    let breakSeconds = 300; 
-    if (window.activeBreakInterval) clearInterval(window.activeBreakInterval);
+    let breakSeconds = 300;
+
+    overlay.innerHTML = `
+        <h1 style="
+            color:#38bdf8;
+            font-size:55px;
+            text-transform:uppercase;
+            text-shadow:0 0 25px #38bdf8;
+        ">
+            🛑 MANDATORY BREAK 🛑
+        </h1>
+
+        <p style="
+            color:#94a3b8;
+            font-size:22px;
+            max-width:650px;
+            line-height:1.6;
+        ">
+            Study session completed.
+            <br><br>
+            <b style="color:#22c55e">
+            Stand up • Drink water • Washroom • Walk
+            </b>
+            <br><br>
+            This 5-minute break is mandatory.
+        </p>
+
+        <div id="breakTimerDisplay" style="
+            font-size:100px;
+            font-weight:900;
+            color:#facc15;
+            margin:30px 0;
+            font-family:monospace;
+        ">
+            05:00
+        </div>
+
+        <div style="
+            color:#ef4444;
+            border:2px solid #ef4444;
+            padding:15px 30px;
+            border-radius:10px;
+            font-weight:bold;
+        ">
+            🔒 SYSTEM LOCKED
+        </div>
+    `;
+
+    if (window.activeBreakInterval) {
+        clearInterval(window.activeBreakInterval);
+    }
 
     window.activeBreakInterval = setInterval(() => {
+
         breakSeconds--;
-        let m = Math.floor(breakSeconds / 60);
-        let s = breakSeconds % 60;
-        
-        const disp = document.getElementById("breakTimerDisplay");
-        if (disp) {
-            disp.innerText = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+
+        const minutes = Math.floor(breakSeconds / 60);
+        const seconds = breakSeconds % 60;
+
+        const display =
+            document.getElementById("breakTimerDisplay");
+
+        if (display) {
+            display.innerText =
+                `${String(minutes).padStart(2,"0")}:${String(seconds).padStart(2,"0")}`;
         }
-        
+
         if (breakSeconds <= 0) {
+
             clearInterval(window.activeBreakInterval);
+            window.activeBreakInterval = null;
+
+            localStorage.removeItem("MANDATORY_BREAK_ACTIVE");
+            localStorage.removeItem("MANDATORY_BREAK_END");
+
             overlay.classList.add("hidden");
-            
-            // 🔥 RESET STUDY TIMER FOR THE NEXT NEW 30-MINUTE BLOCK 🔥
-            window.continuousStudyTime = 0; 
-            
-            alert("Break is over! System unlocked. Your brand new 30-minute focus session has started.");
-            
-            // Restart your existing Watchdog after break automatically
-            if (typeof startIdle === 'function') {
-                startIdle(125); 
-            }
+
+            document.body.style.overflow = "";
+
+            // New 2-minute watchdog starts
+            startIdle(125);
+
+            alert(
+                "Break completed.\n\n" +
+                "System unlocked.\n" +
+                "New 2-minute watchdog has started."
+            );
         }
+
     }, 1000);
 };
 function playTwoMinuteWarning() {
@@ -5044,20 +5254,47 @@ window.submitCanvasProof = function() {
 };
 
 window.submitFileProof = function() {
+
     const input = document.getElementById("proofFileInput");
-    if(input.files.length === 0) return alert("Select a PDF/Image first.");
-    
+
+    if (!input.files || input.files.length === 0) {
+        alert("⚠️ STUDY PROOF REQUIRED.\n\nPlease upload your PDF or image.");
+        return;
+    }
+
     const file = input.files[0];
+
+    // Keep your existing proof download behavior
     const url = URL.createObjectURL(file);
+
     const a = document.createElement("a");
-    a.href = url; a.download = `StudyProof_${file.name}`;
-    document.body.appendChild(a); a.click();
-    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
-    
-    input.value = ""; 
-    alert("Proof accepted and auto-downloaded! Timer reset.");
+    a.href = url;
+    a.download = `StudyProof_${file.name}`;
+
+    document.body.appendChild(a);
+    a.click();
+
+    setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, 100);
+
+    input.value = "";
+
+    // Stop continuous siren
+    stopContinuousWatchdogSiren();
+
+    // Proof requirement completed
+    localStorage.removeItem("WATCHDOG_PROOF_REQUIRED");
+
+    // Close proof modal
     document.getElementById("proofModal").classList.add("hidden");
-    executeWatchdogReset();
+
+    // Restore page scrolling
+    document.body.style.overflow = "";
+
+    // START MANDATORY 5-MINUTE BREAK
+    triggerMandatoryBreak();
 };
 
 function executeWatchdogReset() {
