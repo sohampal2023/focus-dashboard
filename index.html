@@ -452,18 +452,26 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
    <!-- FOOLPROOF CAPTIVE YOUTUBE + MCQ HUB -->
 <div id="videoModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #020617; z-index: 100000; display: flex; flex-direction: column;">
     
-    <!-- HUB HEADER -->
-    <div style="background:#0f172a; padding:15px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #eab308; height: 70px; box-sizing: border-box; flex-shrink: 0;">
-        <h3 style="margin:0; color:#eab308; display:flex; align-items:center; gap:10px;">
-            🎥 Smart Video & MCQ Hub
-        </h3>
-        <div style="display:flex; gap:15px; align-items:center;">
-            <div style="color:#ef4444; font-size:12px; font-weight:bold;">DO NOT SWITCH TABS!</div>
-            <button onclick="window.toggleHubMCQ()" style="padding:8px 20px; background:#8b5cf6; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">📝 Toggle MCQ Panel</button>
-            <button onclick="window.closeStudyVideoModal()" style="padding:8px 25px; background:#ef4444; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">Exit Hub & Save</button>
-        </div>
+    <!-- HUB HEADER WITH PAUSE, SAVE, AND EXIT CONTROLS -->
+<div style="background:#0f172a; padding:15px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #eab308; height: 70px; box-sizing: border-box; flex-shrink: 0;">
+    <h3 style="margin:0; color:#eab308; display:flex; align-items:center; gap:10px;">
+        🎥 Smart Video & MCQ Hub
+    </h3>
+    <div style="display:flex; gap:10px; align-items:center;">
+        <div style="color:#ef4444; font-size:12px; font-weight:bold; margin-right:10px;">DO NOT SWITCH TABS!</div>
+        
+        <button onclick="window.toggleHubMCQ()" style="padding:8px 15px; background:#8b5cf6; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">📝 Toggle MCQ</button>
+        
+        <!-- STEP 1: PAUSE BUTTON -->
+        <button onclick="window.hubPauseVideo()" style="padding:8px 15px; background:#f59e0b; color:black; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">⏸️ 1. Pause</button>
+        
+        <!-- STEP 2: SUBMIT / SAVE BUTTON -->
+        <button onclick="window.hubSaveProgress()" style="padding:8px 15px; background:#3b82f6; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">💾 2. Save</button>
+        
+        <!-- STEP 3: EXIT BUTTON -->
+        <button onclick="window.hubExitModal()" style="padding:8px 20px; background:#ef4444; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">🚪 3. Exit</button>
     </div>
-
+</div>
     <!-- SPLIT SCREEN BODY -->
     <div style="display:flex; flex-grow:1; overflow:hidden; width:100%;">
         
@@ -2600,50 +2608,56 @@ window.submitMcqAnswer = function() {
         btn.style.borderColor = "#334155";
     });
 };
-// 3. EXIT THE HUB (ULTRA-SAFE & CRASH-PROOF)
-window.closeStudyVideoModal = function() {
-    
-    // Step 1: Safely pause video if available
-    if(window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
-        try { window.ytPlayer.pauseVideo(); } catch(e){}
+  // STEP 1: PAUSE THE VIDEO EXPLICITLY
+window.hubPauseVideo = function() {
+    if (window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
+        try { 
+            window.ytPlayer.pauseVideo(); 
+            alert("⏸️ Video paused successfully.");
+        } catch(e) { console.log(e); }
+    } else {
+        alert("Video player is not active.");
+    }
+};
+
+// STEP 2: SUBMIT AND SAVE MARKS EXPLICITLY TO FIREBASE
+window.hubSaveProgress = function() {
+    if (!window.currentPlayingVideoKey || !currentUser) {
+        return alert("No active video session to save.");
     }
     
-    // Step 2: Clear background intervals
-    if(window.videoSaveInterval) clearInterval(window.videoSaveInterval);
-    if(window.mcqInterval) clearInterval(window.mcqInterval);
+    let cTime = 0;
+    let dur = 0;
+    try {
+        if (window.ytPlayer && typeof window.ytPlayer.getCurrentTime === 'function') {
+            cTime = window.ytPlayer.getCurrentTime();
+            dur = window.ytPlayer.getDuration();
+        }
+    } catch(e) {}
 
-    // Step 3: Save score and progress to Firebase safely
-    if(window.currentPlayingVideoKey && typeof currentUser !== 'undefined' && currentUser) {
-        let cTime = 0;
-        let dur = 0;
-        try {
-            if(window.ytPlayer && typeof window.ytPlayer.getCurrentTime === 'function') {
-                cTime = window.ytPlayer.getCurrentTime();
-                dur = window.ytPlayer.getDuration();
-            }
-        } catch(e){}
-        
-        try {
-            update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
-                progress: cTime, 
-                duration: dur,
-                mcqScore: window.currentMcqSession ? window.currentMcqSession.marks : 0,
-                mcqTotal: window.currentMcqSession ? window.currentMcqSession.total : 0
-            });
-        } catch(e){}
-    }
+    update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
+        progress: cTime, 
+        duration: dur,
+        mcqScore: window.currentMcqSession ? window.currentMcqSession.marks : 0,
+        mcqTotal: window.currentMcqSession ? window.currentMcqSession.total : 0
+    }).then(() => {
+        alert("💾 Progress and Cumulative MCQ Scores Saved Successfully!");
+    }).catch((err) => {
+        alert("Save failed: " + err.message);
+    });
+};
 
-    // Step 4: Stop video stream safely
-    if(window.ytPlayer && typeof window.ytPlayer.stopVideo === 'function') {
+// STEP 3: CLOSE/EXIT HUB SAFELY
+window.hubExitModal = function() {
+    if (window.ytPlayer && typeof window.ytPlayer.stopVideo === 'function') {
         try { window.ytPlayer.stopVideo(); } catch(e){}
     }
+    if (window.videoSaveInterval) clearInterval(window.videoSaveInterval);
+    if (window.mcqInterval) clearInterval(window.mcqInterval);
 
-    // Step 5: Hide the modal element safely without querySelector crashes
     try {
         const modal = document.getElementById("videoModal");
-        if(modal) {
-            modal.classList.add("hidden");
-        }
+        if (modal) modal.classList.add("hidden");
     } catch(e){}
 };
 // 3. TRACK PROGRESS EVERY 5 SECONDS
@@ -3776,7 +3790,8 @@ window.openRoadmapWindow = function(subjectFilter) {
                 `);
             });
         }
-      // 2. GENERATE VIDEO NODES (ONLY IF "YT Video" IS CLICKED)
+
+        // 2. GENERATE VIDEO NODES (ONLY IF "YT Video" IS CLICKED)
         if (isVideoMap && vData) {
             const shiftRemainingMins = data.SHIFT_REMAINING_TIME ? Math.floor(data.SHIFT_REMAINING_TIME / 60000) : 0;
 
@@ -3793,7 +3808,7 @@ window.openRoadmapWindow = function(subjectFilter) {
                 let scoreVal = v.mcqScore !== undefined ? parseFloat(v.mcqScore).toFixed(2) : "0.00";
                 let totalVal = v.mcqTotal !== undefined ? v.mcqTotal : 0;
                 
-                const scoreStr = totalVal > 0 ? `<div style="font-size:14px; font-weight:bold; color:#a855f7; margin-top:5px; background:rgba(168, 85, 247, 0.1); padding:4px 8px; border-radius:4px; display:inline-block;">🎯 MCQ Score: ${scoreVal} / ${totalVal}</div>` : "";
+                const scoreStr = totalVal > 0 ? `<div style="font-size:14px; font-weight:bold; color:#a855f7; margin-top:5px; background:rgba(168, 85, 247, 0.1); padding:4px 8px; border-radius:4px; display:inline-block;">🎯 Cumulative Score: ${scoreVal} / ${totalVal}</div>` : "";
 
                 nodesArray.push(`
                     <div class="simple-node ${isDone ? 'done' : ''}" style="border-color:${isDone ? '#22c55e' : '#eab308'};">
@@ -3807,7 +3822,7 @@ window.openRoadmapWindow = function(subjectFilter) {
                         ${scoreStr}
                         
                         <div style="display:flex; margin-top:10px;">
-                            <button class="btn-simple start" style="background:#eab308; border-color:#eab308; color:black;" onclick="window.closeInPageMap(); window.playSpecificVideo('${key}', '${v.id}', ${v.progress}, '${v.mcqScore || 0}', '${v.mcqTotal || 0}', ${v.rewardGiven || false})">▶ Play & Solve</button>
+                            <button class="btn-simple start" style="background:#eab308; border-color:#eab308; color:black;" onclick="window.closeInPageMap(); window.playSpecificVideo('${key}', '${v.id}', ${v.progress}, ${v.mcqScore || 0}, ${v.mcqTotal || 0}, ${v.rewardGiven || false})">▶ Play & Solve</button>
                         </div>
                     </div>
                 `);
