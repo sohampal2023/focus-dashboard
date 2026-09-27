@@ -2600,26 +2600,31 @@ window.submitMcqAnswer = function() {
         btn.style.borderColor = "#334155";
     });
 };
-
+// 3. EXIT THE HUB (FORCES COMPLETE STOP & DESTROY)
 window.closeStudyVideoModal = function() {
-    if(window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
-        window.ytPlayer.pauseVideo(); 
+    
+    // 1. Completely stop and kill the YouTube player instance so background audio/video stops
+    if(window.ytPlayer && typeof window.ytPlayer.stopVideo === 'function') {
+        window.ytPlayer.stopVideo(); 
         
+        // Save the exact millisecond and cumulative decimal score to Firebase
         if(window.currentPlayingVideoKey && currentUser) {
             let cTime = window.ytPlayer.getCurrentTime();
             let dur = window.ytPlayer.getDuration();
             
-            // Save cumulative decimal score to database
             update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
                 progress: cTime, 
                 duration: dur,
-                mcqScore: window.currentMcqSession.marks, // <--- Saves the decimal
+                mcqScore: window.currentMcqSession.marks,
                 mcqTotal: window.currentMcqSession.total
             });
         }
     }
 
+    // 2. Hide Modal
     document.getElementById("videoModal").classList.add("hidden");
+    
+    // 3. Clear MCQ timer loop
     if(window.mcqInterval) clearInterval(window.mcqInterval);
 };
 // 3. TRACK PROGRESS EVERY 5 SECONDS
