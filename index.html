@@ -3508,26 +3508,28 @@ window.initializeShift = async function() {
 };
 
 window.continuousStudyTime = 0;
+window.idleInactivityCounter = 0;
 
 function startMasterClock() {
     if(masterClockInterval) clearInterval(masterClockInterval);
     
-    // Auto-create Break Screen if missing
+    // Auto-create Break Screen Overlay if missing
     if (!document.getElementById("mandatoryBreakOverlay")) {
         const overlay = document.createElement("div");
         overlay.id = "mandatoryBreakOverlay";
         overlay.className = "hidden";
-        overlay.style.cssText = "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2,6,23,0.98); z-index: 999999; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 5px solid #38bdf8; backdrop-filter: blur(10px);";
+        overlay.style.cssText = "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2,6,23,0.99); z-index: 9999999; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 6px solid #38bdf8; backdrop-filter: blur(15px);";
         overlay.innerHTML = `
-            <h1 style="color:#38bdf8; font-size: 50px; text-transform: uppercase; text-shadow: 0 0 20px #38bdf8;">🛑 Mandatory Break 🛑</h1>
-            <p style="color:#94a3b8; font-size: 22px; max-width: 600px;">You've studied for 30 minutes straight. Stand up, drink some water, and walk around. System is temporarily locked.</p>
-            <div id="breakTimerDisplay" style="font-size: 80px; font-weight: 900; color: #facc15; margin: 30px 0; font-family: monospace;">05:00</div>
-            <p style="color:#ef4444; font-weight: bold; font-size: 18px;">Videos, Tasks, and Watchdog are PAUSED.</p>
+            <h1 style="color:#38bdf8; font-size: 55px; text-transform: uppercase; text-shadow: 0 0 25px #38bdf8; margin-bottom: 10px;">🛑 Compulsory 5-Min Break 🛑</h1>
+            <p style="color:#94a3b8; font-size: 22px; max-width: 600px; line-height: 1.5;">You've hit your focus limit. Stand up, rest your eyes, stretch, and step away from the screen.</p>
+            <div id="breakTimerDisplay" style="font-size: 90px; font-weight: 900; color: #facc15; margin: 30px 0; font-family: monospace; letter-spacing: 2px;">05:00</div>
+            <div style="background: rgba(239, 68, 68, 0.1); border: 2px solid #ef4444; padding: 15px 30px; border-radius: 8px; color:#ef4444; font-weight: bold; font-size: 16px; text-transform: uppercase;">
+                🔒 System Locked Until Break Timer Expires
+            </div>
         `;
         document.body.appendChild(overlay);
     }
 
-    // Auto-inject Shift Tracker under Master Clock
     let shiftTracker = document.getElementById("hudShiftTracker");
     if (!shiftTracker) {
         const clockParent = document.getElementById("masterClockDisplay").parentNode;
@@ -3547,27 +3549,34 @@ function startMasterClock() {
 
         localShiftRemaining -= 1000;
         
-        // --- 🔥 30 MINUTE MANDATORY BREAK LOGIC 🔥 ---
         const breakOverlay = document.getElementById("mandatoryBreakOverlay");
         if (localStorage.getItem(key("SHIFT_ACTIVE")) === "true" && (!breakOverlay || breakOverlay.classList.contains("hidden"))) {
             window.continuousStudyTime++;
-            if (window.continuousStudyTime >= 1800) { // 1800 seconds = 30 minutes
+            
+            // --- ⏱️ 30-MINUTE STUDY LIMIT REACHED ---
+            if (window.continuousStudyTime >= 1800) { 
                 window.triggerMandatoryBreak();
-                window.continuousStudyTime = 0; // Reset for the next 30-min cycle
+                window.continuousStudyTime = 0; 
             }
         }
 
-        // --- 📊 CALCULATE 2-HOUR SHIFTS 📊 ---
-        const chunkMs = 7200000; // 2 Hours in milliseconds
+        // --- ⏳ 2-MINUTE INACTIVITY / IDLE CHECK ---
+        // Increments if no user interaction/submission has occurred
+        window.idleInactivityCounter++;
+        if (window.idleInactivityCounter >= 120) { // 120 seconds = 2 minutes
+            window.idleInactivityCounter = 0;
+            window.handleIdleTimeoutPenalty();
+        }
+
+        // Shift calculation tracker
+        const chunkMs = 7200000; 
         const consumedMs = window.totalShiftTimeMs - localShiftRemaining;
-        
         const totalShifts = Math.ceil(window.totalShiftTimeMs / chunkMs);
         const completedShifts = Math.floor(consumedMs / chunkMs);
         const shiftsLeft = Math.max(0, totalShifts - completedShifts);
         
         shiftTracker.innerText = `SHIFTS: ${completedShifts} DONE | ${shiftsLeft} LEFT`;
 
-        // Format UI Clock HH:MM:SS
         const h = Math.floor(localShiftRemaining / 3600000);
         const m = Math.floor((localShiftRemaining % 3600000) / 60000);
         const s = Math.floor((localShiftRemaining % 60000) / 1000);
@@ -3582,14 +3591,38 @@ function startMasterClock() {
         }
     }, 1000);
 }
-// UNIVERSAL COMPULSORY BREAK TRIGGER & LOOP RESET
+  // --- EXISTING WATCHDOG / IDLE INTEGRATION ---
+
+// Call this function wherever your code registers clicks, typing, or submissions
+window.resetIdleTimer = function() {
+    window.idleInactivityCounter = 0;
+};
+
+// This hooks straight into your existing idle tracking loop
+window.handleIdleTimeoutPenalty = function() {
+    if (typeof currentUser !== 'undefined' && currentUser) {
+        get(ref(db, `users/${currentUser.uid}/IDLE_STRIKES`)).then((snap) => {
+            let currentStrikes = snap.exists() ? parseInt(snap.val()) : 0;
+            currentStrikes++;
+            
+            update(ref(db, `users/${currentUser.uid}`), {
+                IDLE_STRIKES: currentStrikes,
+                PENALTY: (currentStrikes * 5) // Automatically increments penalty score
+            });
+            
+            console.warn("⚠️ Idle Timeout: No student action detected for 2 minutes. Strike added.");
+        }).catch((err) => {
+            console.error("Idle penalty sync error:", err);
+        });
+    }
+};
 window.triggerMandatoryBreak = function() {
     // 1. If YouTube Video Hub is open, force close it immediately!
     if (typeof window.closeStudyVideoModal === 'function') {
         window.closeStudyVideoModal();
     }
 
-    // 2. Pause Watchdog Timer
+    // 2. Pause your existing Watchdog/Idle Timer
     if (typeof idleTimer !== 'undefined' && idleTimer) {
         clearInterval(idleTimer);
     }
@@ -3636,14 +3669,13 @@ window.triggerMandatoryBreak = function() {
             
             alert("Break is over! System unlocked. Your brand new 30-minute focus session has started.");
             
-            // Restart Watchdog after break automatically
+            // Restart your existing Watchdog after break automatically
             if (typeof startIdle === 'function') {
                 startIdle(1800); 
             }
         }
     }, 1000);
 };
-
 function playTwoMinuteWarning() {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = ctx.createOscillator();
@@ -3791,20 +3823,22 @@ window.openRoadmapWindow = function(subjectFilter) {
             });
         }
 
-        // 2. GENERATE VIDEO NODES (ONLY IF "YT Video" IS CLICKED)
+        // 2. GENERATE VIDEO NODES WITH ACCURATE DURATION ALLOCATION
         if (isVideoMap && vData) {
-            const shiftRemainingMins = data.SHIFT_REMAINING_TIME ? Math.floor(data.SHIFT_REMAINING_TIME / 60000) : 0;
+            const shiftRemainingMins = data.SHIFT_REMAINING_TIME ? Math.max(1, Math.floor(data.SHIFT_REMAINING_TIME / 60000)) : 120;
 
             Object.keys(vData).forEach((key, i) => {
                 const v = vData[key];
-                let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
+                let durationSec = (v.duration && v.duration > 0) ? v.duration : 600; // Fallback to 10 mins if duration isn't loaded yet
+                let progressSec = v.progress || 0;
+                
+                let p = Math.floor((progressSec / durationSec) * 100);
                 const isDone = p >= 90;
                 
-                let videoRemainingMins = v.duration > 0 ? Math.ceil((v.duration - v.progress) / 60) : 0;
-                let allocatedToday = Math.min(videoRemainingMins, shiftRemainingMins);
-                let allocatedStr = isDone ? `Completed` : `Allocated Time (Today): ${allocatedToday}m`;
+                let videoRemainingMins = Math.ceil((durationSec - progressSec) / 60);
+                let allocatedToday = isDone ? 0 : Math.min(videoRemainingMins, shiftRemainingMins);
+                let allocatedStr = isDone ? `Completed` : `Allocated Time (Today): ${Math.max(1, allocatedToday)}m`;
 
-                // 🔥 ENSURES THE LATEST CUMULATIVE SCORE SHOWS ON THE MAP
                 let scoreVal = v.mcqScore !== undefined ? parseFloat(v.mcqScore).toFixed(2) : "0.00";
                 let totalVal = v.mcqTotal !== undefined ? v.mcqTotal : 0;
                 
