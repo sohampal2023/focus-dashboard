@@ -5332,6 +5332,25 @@ window.handleExtraRequest = handleExtraRequest;
 window.enterDeepFocus = enterDeepFocus;
 window.exitDeepFocus = exitDeepFocus;
 window.renderAnalyticsChart = renderAnalyticsChart;
+  // --- 🎥 NEW: VIDEO HUB & MCQ SYSTEM ---
+if (typeof loadAssignedVideos !== 'undefined') window.loadAssignedVideos = loadAssignedVideos;
+if (typeof playSpecificVideo !== 'undefined') window.playSpecificVideo = playSpecificVideo;
+if (typeof toggleHubMCQ !== 'undefined') window.toggleHubMCQ = toggleHubMCQ;
+if (typeof toggleHubNotes !== 'undefined') window.toggleHubNotes = toggleHubNotes;
+if (typeof startMcqTimer !== 'undefined') window.startMcqTimer = startMcqTimer;
+if (typeof selectMcqOption !== 'undefined') window.selectMcqOption = selectMcqOption;
+if (typeof submitMcqAnswer !== 'undefined') window.submitMcqAnswer = submitMcqAnswer;
+if (typeof closeStudyVideoModal !== 'undefined') window.closeStudyVideoModal = closeStudyVideoModal;
+if (typeof closeInPageMap !== 'undefined') window.closeInPageMap = closeInPageMap;
+
+// --- ⚙️ NEW: ADMIN VIDEO MANAGEMENT ---
+if (typeof submitCustomVideo !== 'undefined') window.submitCustomVideo = submitCustomVideo;
+if (typeof adminManageVideos !== 'undefined') window.adminManageVideos = adminManageVideos;
+if (typeof deleteSpecificVideo !== 'undefined') window.deleteSpecificVideo = deleteSpecificVideo;
+
+// --- 🛑 NEW: 30-MIN BREAK & WATCHDOG CHIME ---
+if (typeof triggerMandatoryBreak !== 'undefined') window.triggerMandatoryBreak = triggerMandatoryBreak;
+if (typeof playWatchdogWarningChime !== 'undefined') window.playWatchdogWarningChime = playWatchdogWarningChime;
   </script>
 
 </body>
