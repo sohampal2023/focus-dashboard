@@ -2366,37 +2366,42 @@ window.loadAssignedVideos = function() {
     });
 };
 
-// 2. PLAY THE VIDEO IN THE HUB (FULL SCREEN DEFAULT)
+// 2. PLAY OR RESUME THE VIDEO IN THE HUB
 window.playSpecificVideo = function(videoKey, ytId, startAt) {
     window.currentPlayingVideoKey = videoKey;
     
-    // Open the Hub
+    // Open the Hub UI
     document.getElementById("videoModal").classList.remove("hidden");
     const rightPane = document.getElementById("videoSplitRight");
-    const leftPane = document.getElementById("videoSplitLeft");
+    rightPane.style.display = "none"; // Default to full screen video
     
-    // Reset to full screen video by default
-    rightPane.style.display = "none";
-    
-    // Prepare canvas quietly in the background
     const canvasBox = document.getElementById("canvasBox");
     rightPane.appendChild(canvasBox);
     canvasBox.classList.remove("hidden", "board-fullscreen");
     canvasBox.style.minHeight = "100%"; 
-    
-    // Hide standard canvas buttons since we are in the hub
     document.getElementById("fullscreenBtn").style.display = "none";
     document.getElementById("closeCanvasBtn").style.display = "none";
 
-    // Load video into player safely
+    // Load or Resume Video Logic
     if(!window.ytPlayer) {
+        // First time loading the player
         window.ytPlayer = new YT.Player('ytPlayer', {
             height: '100%', width: '100%', videoId: ytId,
             playerVars: { 'start': Math.floor(startAt), 'rel': 0 },
             events: { 'onStateChange': onPlayerStateChange }
         });
     } else {
-        window.ytPlayer.loadVideoById({videoId: ytId, startSeconds: startAt});
+        // Check if the clicked video is the SAME one that is already loaded
+        let currentLoadedId = "";
+        try { currentLoadedId = window.ytPlayer.getVideoData().video_id; } catch(e){}
+
+        if (currentLoadedId === ytId) {
+            // Same video! Just unpause it from the exact millisecond they left off.
+            window.ytPlayer.playVideo();
+        } else {
+            // Different video. Load the new one and jump to the saved start time.
+            window.ytPlayer.loadVideoById({videoId: ytId, startSeconds: startAt});
+        }
     }
 };
   // TOGGLES BETWEEN 100% VIDEO AND 50/50 SPLIT SCREEN
@@ -4692,8 +4697,31 @@ window.deleteSpecificVideo = async function(uid, videoKey) {
 window.openStudyVideoModal = function() { document.getElementById("videoModal").classList.remove("hidden"); };
 window.closeStudyVideoModal = function() {
     document.getElementById("videoModal").classList.add("hidden");
-    const iframe = document.querySelector("#videoIframeContainer iframe");
-    if(iframe) iframe.src = iframe.src; // Stops video from playing in background
+    
+    // 1. Pause video perfectly and save EXACT time instantly
+    if(window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
+        window.ytPlayer.pauseVideo(); // Pauses instead of resetting
+        
+        // Instantly save exact progress to Firebase so no seconds are lost
+        if(window.currentPlayingVideoKey) {
+            let cTime = window.ytPlayer.getCurrentTime();
+            let dur = window.ytPlayer.getDuration();
+            update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
+                progress: cTime, duration: dur 
+            });
+        }
+    }
+    
+    // 2. Move Canvas Box back to normal dashboard
+    const studentView = document.getElementById("studentView");
+    const canvasBox = document.getElementById("canvasBox");
+    studentView.appendChild(canvasBox);
+    canvasBox.classList.add("hidden"); 
+    canvasBox.style.minHeight = "70vh";
+    
+    // 3. Restore buttons
+    document.getElementById("fullscreenBtn").style.display = "inline-block";
+    document.getElementById("closeCanvasBtn").style.display = "inline-block";
 };
   
 // --- LIVE ANALYTICS (CHART.JS) ---
