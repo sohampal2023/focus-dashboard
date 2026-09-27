@@ -450,7 +450,9 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
 </button>
       </div>
     <!-- DYNAMIC VIDEO LIST (MULTIPLE VIDEOS) -->
-<div id="studentVideoList" style="display:flex; flex-direction:column; gap:8px; margin: 10px 0;"></div>
+<div id="videoSplitLeft" style="flex:1; background:#000; border-right:2px solid #334155; position:relative;">
+    <div id="ytPlayer" style="width:100%; height:100%;"></div>
+</div>
 <button onclick="toggleNotesCanvas()" style="background:#8b5cf6; color:#fff; font-weight:bold;">📝 Digital Notes Canvas</button>
       <button id="noticeBtn" onclick="toggleNoticeBoard()">📢 Notice Board</button>
       <button onclick="softRefresh()">🔄 Refresh</button>
@@ -2272,6 +2274,7 @@ onValue(ref(db, `users/${currentUser.uid}/BIO_ACTIVE`), (snap) => {
         }
     });
     loadNotices();
+    window.loadAssignedVideos();
     checkLeaveStatus(serverData);
     startIdle(1800);
     renderLogs();
@@ -2285,19 +2288,31 @@ window.dismissFeedback = async function() {
         await remove(ref(db, `users/${currentUser.uid}/newFeedback`));
     }
 };
-let ytPlayer;
-let currentPlayingVideoKey = null;
-let currentVideoData = null;
-let videoSaveInterval = null;
+// Global Variables
+window.ytPlayer = null;
+window.currentPlayingVideoKey = null;
+window.currentVideoData = null;
+window.videoSaveInterval = null;
 
+// Required by YouTube API, but we leave it empty to prevent early-load crashes
 window.onYouTubeIframeAPIReady = function() {
+    console.log("YT API Ready");
+};
+
+// 1. SAFELY LOAD VIDEOS TO SIDEBAR
+window.loadAssignedVideos = function() {
+    if (!currentUser) return; // Prevents the crash!
+    
+    const videoListDiv = document.getElementById("studentVideoList");
+    if (!videoListDiv) {
+        console.error("Missing <div id='studentVideoList'> in HTML sidebar!");
+        return;
+    }
+
     onValue(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS`), (snap) => {
-        const videoListDiv = document.getElementById("studentVideoList");
-        if(!videoListDiv) return;
-        
         if(!snap.exists()) {
             videoListDiv.innerHTML = "";
-            if(ytPlayer && typeof ytPlayer.stopVideo === 'function') ytPlayer.stopVideo();
+            if(window.ytPlayer && typeof window.ytPlayer.stopVideo === 'function') window.ytPlayer.stopVideo();
             return;
         }
 
@@ -2311,7 +2326,7 @@ window.onYouTubeIframeAPIReady = function() {
             
             html += `
                 <button onclick="playSpecificVideo('${key}', '${v.id}', ${v.progress})" 
-                        style="background:#0f172a; color:white; border:1px solid ${color}; font-size:12px; padding:10px; text-align:left; border-radius:8px;">
+                        style="background:#0f172a; color:white; border:1px solid ${color}; font-size:12px; padding:10px; text-align:left; border-radius:8px; cursor:pointer; width:100%; margin-bottom:6px;">
                     ▶ Play Video <span style="float:right; color:${color}; font-weight:bold;">${p}%</span>
                     <div style="font-size:10px; color:#ef4444; margin-top:5px; font-weight:bold;">Deadline: ${v.deadline}</div>
                 </button>
@@ -2319,16 +2334,17 @@ window.onYouTubeIframeAPIReady = function() {
         });
         videoListDiv.innerHTML = html;
         
-        if (currentPlayingVideoKey && videos[currentPlayingVideoKey]) {
-            currentVideoData = videos[currentPlayingVideoKey];
+        if (window.currentPlayingVideoKey && videos[window.currentPlayingVideoKey]) {
+            window.currentVideoData = videos[window.currentPlayingVideoKey];
         }
     });
 };
 
+// 2. PLAY THE VIDEO IN THE HUB
 window.playSpecificVideo = function(videoKey, ytId, startAt) {
-    currentPlayingVideoKey = videoKey;
+    window.currentPlayingVideoKey = videoKey;
     
-    // Forces video to open in the internal smart hub (No New Screen)
+    // Open the Split-Screen Hub
     document.getElementById("videoModal").classList.remove("hidden");
     const rightPane = document.getElementById("videoSplitRight");
     const canvasBox = document.getElementById("canvasBox");
@@ -2339,31 +2355,32 @@ window.playSpecificVideo = function(videoKey, ytId, startAt) {
     document.getElementById("closeCanvasBtn").style.display = "none";
     setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 100);
 
-    // Load video into player
-    if(!ytPlayer) {
-        ytPlayer = new YT.Player('ytPlayer', {
+    // Load video into player safely
+    if(!window.ytPlayer) {
+        window.ytPlayer = new YT.Player('ytPlayer', {
             height: '100%', width: '100%', videoId: ytId,
             playerVars: { 'start': Math.floor(startAt), 'rel': 0 },
             events: { 'onStateChange': onPlayerStateChange }
         });
     } else {
-        ytPlayer.loadVideoById({videoId: ytId, startSeconds: startAt});
+        window.ytPlayer.loadVideoById({videoId: ytId, startSeconds: startAt});
     }
 };
 
+// 3. TRACK PROGRESS EVERY 5 SECONDS
 function onPlayerStateChange(event) {
     if (event.data == YT.PlayerState.PLAYING) {
-        videoSaveInterval = setInterval(() => {
-            if(ytPlayer && currentPlayingVideoKey) {
-                let cTime = ytPlayer.getCurrentTime();
-                let dur = ytPlayer.getDuration();
-                update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${currentPlayingVideoKey}`), { 
+        window.videoSaveInterval = setInterval(() => {
+            if(window.ytPlayer && window.currentPlayingVideoKey) {
+                let cTime = window.ytPlayer.getCurrentTime();
+                let dur = window.ytPlayer.getDuration();
+                update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
                     progress: cTime, duration: dur 
                 });
             }
         }, 5000);
     } else {
-        clearInterval(videoSaveInterval);
+        clearInterval(window.videoSaveInterval);
     }
 }
 // --- ALERT DISMISS ---
