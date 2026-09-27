@@ -2600,20 +2600,20 @@ window.submitMcqAnswer = function() {
         btn.style.borderColor = "#334155";
     });
 };
-// 3. EXIT THE HUB (SAFE & CRASH-PROOF)
+// 3. EXIT THE HUB (ULTRA-SAFE & CRASH-PROOF)
 window.closeStudyVideoModal = function() {
     
-    // Step 1: Pause video safely if it exists
+    // Step 1: Safely pause video if available
     if(window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
         try { window.ytPlayer.pauseVideo(); } catch(e){}
     }
     
-    // Step 2: Clear intervals
+    // Step 2: Clear background intervals
     if(window.videoSaveInterval) clearInterval(window.videoSaveInterval);
     if(window.mcqInterval) clearInterval(window.mcqInterval);
 
-    // Step 3: Save score and progress to Firebase
-    if(window.currentPlayingVideoKey && currentUser) {
+    // Step 3: Save score and progress to Firebase safely
+    if(window.currentPlayingVideoKey && typeof currentUser !== 'undefined' && currentUser) {
         let cTime = 0;
         let dur = 0;
         try {
@@ -2623,24 +2623,28 @@ window.closeStudyVideoModal = function() {
             }
         } catch(e){}
         
-        update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
-            progress: cTime, 
-            duration: dur,
-            mcqScore: window.currentMcqSession ? window.currentMcqSession.marks : 0,
-            mcqTotal: window.currentMcqSession ? window.currentMcqSession.total : 0
-        });
+        try {
+            update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
+                progress: cTime, 
+                duration: dur,
+                mcqScore: window.currentMcqSession ? window.currentMcqSession.marks : 0,
+                mcqTotal: window.currentMcqSession ? window.currentMcqSession.total : 0
+            });
+        } catch(e){}
     }
 
-    // Step 4: Stop video stream
+    // Step 4: Stop video stream safely
     if(window.ytPlayer && typeof window.ytPlayer.stopVideo === 'function') {
         try { window.ytPlayer.stopVideo(); } catch(e){}
     }
 
-    // Step 5: Safely hide the modal without crashing if querySelector fails
-    const modal = document.getElementById("videoModal");
-    if(modal) {
-        modal.classList.add("hidden");
-    }
+    // Step 5: Hide the modal element safely without querySelector crashes
+    try {
+        const modal = document.getElementById("videoModal");
+        if(modal) {
+            modal.classList.add("hidden");
+        }
+    } catch(e){}
 };
 // 3. TRACK PROGRESS EVERY 5 SECONDS
 function onPlayerStateChange(event) {
