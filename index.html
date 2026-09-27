@@ -4485,32 +4485,17 @@ function executeWatchdogReset() {
   // ==========================================
 // CAPTIVE YOUTUBE SYSTEM
 // ==========================================
-// ==========================================
-// FOOLPROOF IN-PAGE VIDEO ASSIGN MODAL
-// ==========================================
 window.pendingVideoAssignUid = null;
 
 window.adminAssignVideo = function(uid) {
     window.pendingVideoAssignUid = uid;
     
-    // 1. Look for the modal, or create it if it doesn't exist
     let modal = document.getElementById("customVideoModal");
     
     if (!modal) {
         modal = document.createElement("div");
         modal.id = "customVideoModal";
-        
-        // Using strict inline styles so your CSS classes can't break it
-        modal.style.position = "fixed";
-        modal.style.top = "0";
-        modal.style.left = "0";
-        modal.style.width = "100vw";
-        modal.style.height = "100vh";
-        modal.style.backgroundColor = "rgba(2, 6, 23, 0.95)";
-        modal.style.zIndex = "999999";
-        modal.style.display = "flex";
-        modal.style.justifyContent = "center";
-        modal.style.alignItems = "center";
+        modal.style.cssText = "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2, 6, 23, 0.95); z-index: 999999; display: flex; justify-content: center; align-items: center;";
         
         modal.innerHTML = `
             <div style="background: #0f172a; padding: 30px; border: 1px solid #334155; border-radius: 8px; width: 400px; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
@@ -4520,7 +4505,8 @@ window.adminAssignVideo = function(uid) {
                 <input id="customVidUrl" type="text" placeholder="Paste link here..." style="width: 100%; padding: 12px; margin-top: 5px; background: #020617; border: 1px solid #334155; color: white; border-radius: 4px; box-sizing:border-box;">
                 
                 <label style="font-size: 12px; color: #94a3b8; display: block; margin-top: 15px; font-weight:bold;">Target Deadline:</label>
-                <input id="customVidDeadline" type="text" placeholder="e.g., Tomorrow, Oct 15" style="width: 100%; padding: 12px; margin-top: 5px; background: #020617; border: 1px solid #334155; color: white; border-radius: 4px; box-sizing:border-box;">
+                <!-- CHANGED TO CALENDAR DATE PICKER -->
+                <input id="customVidDeadline" type="date" style="width: 100%; padding: 12px; margin-top: 5px; background: #020617; border: 1px solid #334155; color: white; border-radius: 4px; box-sizing:border-box; color-scheme: dark;">
                 
                 <div style="display: flex; gap: 10px; margin-top: 25px;">
                     <button onclick="window.submitCustomVideo()" style="flex: 1; background: #0ea5e9; border: none; padding: 12px; color: white; font-weight: bold; border-radius: 4px; cursor: pointer;">Assign Video</button>
@@ -4531,7 +4517,6 @@ window.adminAssignVideo = function(uid) {
         document.body.appendChild(modal);
     }
     
-    // 2. Clear inputs and forcefully show the modal
     document.getElementById("customVidUrl").value = "";
     document.getElementById("customVidDeadline").value = "";
     modal.style.display = "flex"; 
@@ -4545,14 +4530,14 @@ window.submitCustomVideo = async function() {
     const deadline = document.getElementById("customVidDeadline").value;
     
     if(!url) return alert("Please enter a YouTube URL.");
-    if(!deadline) return alert("Please enter a Target Deadline.");
+    if(!deadline) return alert("Please select a Target Deadline.");
     
     const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
     const match = url.match(regExp);
     if (!match || match[2].length !== 11) return alert("Invalid YouTube URL.");
 
     const videoId = match[2];
-    const videoKey = "vid_" + Date.now(); // Allows multiple videos 
+    const videoKey = "vid_" + Date.now(); 
     
     const videoPayload = { 
         id: videoId, 
@@ -4565,42 +4550,74 @@ window.submitCustomVideo = async function() {
     try {
         await update(ref(db, `users/${window.pendingVideoAssignUid}/ASSIGNED_VIDEOS/${videoKey}`), videoPayload);
         alert("Video assigned successfully!");
-        document.getElementById("customVideoModal").style.display = "none"; // Hide modal on success
+        document.getElementById("customVideoModal").style.display = "none"; 
     } catch (error) {
         alert("Failed to assign video: " + error.message);
     }
 };
 window.adminManageVideos = async function(uid) {
+    // 1. Fetch videos from database
     const snap = await get(ref(db, `users/${uid}/ASSIGNED_VIDEOS`));
-    if (!snap.exists()) return alert("No videos assigned to this student.");
-    
+    if (!snap.exists()) {
+        alert("No videos assigned to this student.");
+        return;
+    }
     const videos = snap.val();
-    let menu = "Select video to delete (enter number):\n\n";
-    const keys = Object.keys(videos);
+
+    // 2. Create the custom modal if it doesn't exist
+    let modal = document.getElementById("manageVideoModal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "manageVideoModal";
+        modal.style.cssText = "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2, 6, 23, 0.95); z-index: 100000; display: flex; justify-content: center; align-items: center;";
+        document.body.appendChild(modal);
+    }
+
+    // 3. Build the visual list of videos dynamically
+    let listHtml = `<div style="max-height:300px; overflow-y:auto; margin-bottom:20px; padding-right:5px;">`;
     
-    keys.forEach((k, i) => {
+    Object.keys(videos).forEach((k) => {
         let v = videos[k];
         let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
-        menu += `${i + 1}. ID: ${v.id} | ${p}% Done | Due: ${v.deadline}\n`;
+        
+        listHtml += `
+            <div style="background:#1e293b; padding:12px; margin-bottom:8px; border-radius:6px; display:flex; justify-content:space-between; align-items:center; border-left: 4px solid #facc15;">
+                <div>
+                    <div style="color:#38bdf8; font-size:13px; font-weight:bold;">Video ID: ${v.id}</div>
+                    <div style="color:#94a3b8; font-size:11px; margin-top:4px;">
+                        Progress: <span style="color:${p > 90 ? '#4ade80' : '#facc15'}; font-weight:bold;">${p}%</span> | Due: ${v.deadline}
+                    </div>
+                </div>
+                <button onclick="window.deleteSpecificVideo('${uid}', '${k}')" style="background:#ef4444; color:white; border:none; padding:8px 12px; border-radius:4px; cursor:pointer; font-size:11px; font-weight:bold; text-transform:uppercase;">Delete</button>
+            </div>
+        `;
     });
+    listHtml += `</div>`;
+
+    // 4. Inject the list into the modal and show it
+    modal.innerHTML = `
+        <div style="background: #0f172a; padding: 30px; border: 1px solid #334155; border-radius: 8px; width: 450px; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.8);">
+            <h3 style="color: #ef4444; margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">Manage Assigned Videos</h3>
+            ${listHtml}
+            <button onclick="document.getElementById('manageVideoModal').style.display='none'" style="width: 100%; background: #334155; border: none; padding: 12px; color: white; font-weight: bold; border-radius: 4px; cursor: pointer;">Close Window</button>
+        </div>
+    `;
     
-    const choice = prompt(menu);
-    if (!choice) return;
-    const idx = parseInt(choice) - 1;
-    if (idx >= 0 && idx < keys.length) {
-        if(confirm("Remove this video?")) {
-            await remove(ref(db, `users/${uid}/ASSIGNED_VIDEOS/${keys[idx]}`));
-            alert("Video removed!");
+    modal.style.display = "flex";
+};
+
+// Function triggered when the Admin clicks "Delete" on a specific video in the new menu
+window.deleteSpecificVideo = async function(uid, videoKey) {
+    if(confirm("Are you sure you want to permanently delete this video?")) {
+        try {
+            await remove(ref(db, `users/${uid}/ASSIGNED_VIDEOS/${videoKey}`));
+            // Instantly refresh the menu to show the video is gone
+            window.adminManageVideos(uid); 
+        } catch(e) {
+            alert("Error removing video.");
         }
     }
 };
-
-window.adminRemoveVideo = async function(uid) {
-    if(!confirm("Remove current assigned video?")) return;
-    await update(ref(db, `users/${uid}`), { assignedVideoId: null });
-    alert("Video removed.");
-};
-
 window.openStudyVideoModal = function() { document.getElementById("videoModal").classList.remove("hidden"); };
 window.closeStudyVideoModal = function() {
     document.getElementById("videoModal").classList.add("hidden");
