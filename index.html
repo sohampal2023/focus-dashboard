@@ -787,40 +787,35 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
         <canvas id="notesCanvas" style="position:absolute; top:0; left:0; width:100%; height:100%; cursor:crosshair; touch-action:none;"></canvas>
     </div>
 </div>
+<!-- FOOLPROOF CAPTIVE YOUTUBE + NOTES HUB -->
+<div id="videoModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #020617; z-index: 100000; display: flex; flex-direction: column;">
+    
+    <!-- HUB HEADER (Fixed height so it never collapses) -->
+    <div style="background:#0f172a; padding:15px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #eab308; flex-shrink: 0;">
+        <h3 style="margin:0; color:#eab308; display:flex; align-items:center; gap:10px;">
+            🎥 Smart Study Hub
+        </h3>
+        <div style="display:flex; gap:15px; align-items:center;">
+            <div style="color:#ef4444; font-size:12px; font-weight:bold;">DO NOT SWITCH TABS!</div>
+            <button onclick="window.toggleHubNotes()" style="padding:8px 20px; background:#8b5cf6; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">📝 Toggle Notes</button>
+            <button onclick="window.closeStudyVideoModal()" style="padding:8px 25px; background:#ef4444; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">Exit Hub</button>
+        </div>
+    </div>
 
-      
-        <!-- HUB HEADER -->
-        <!-- CAPTIVE YOUTUBE + NOTES SPLIT-SCREEN MODAL -->
-<div id="videoModal" class="modal-overlay hidden" style="z-index: 10000; background:#020617;">
-    <div style="display:flex; flex-direction:column; width:100vw; height:100vh;">
+    <!-- SPLIT SCREEN BODY -->
+    <div style="display:flex; flex-grow:1; overflow:hidden; width:100%;">
         
-        <!-- HUB HEADER -->
-        <div style="background:#0f172a; padding:10px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #eab308;">
-            <h3 style="margin:0; color:#eab308; display:flex; align-items:center; gap:10px;">
-                🎥 Smart Study Hub
-            </h3>
-            
-            <div style="display:flex; gap:15px; align-items:center;">
-                <div style="color:#ef4444; font-size:12px; font-weight:bold;">DO NOT SWITCH TABS!</div>
-                
-                <!-- NEW TOGGLE NOTES BUTTON -->
-                <button onclick="window.toggleHubNotes()" style="width:auto; padding:8px 20px; background:#8b5cf6; color:white; font-weight:bold; margin:0; border:none; border-radius:6px; cursor:pointer; box-shadow: 0 4px 10px rgba(139, 92, 246, 0.4);">📝 Toggle Notes</button>
-                
-                <button onclick="closeStudyVideoModal()" style="width:auto; padding:8px 25px; background:#ef4444; color:white; font-weight:bold; margin:0; border:none; border-radius:6px; cursor:pointer;">Exit Hub</button>
+        <!-- Left Side: YouTube (Uses Flex-grow to fill the screen) -->
+        <div id="videoSplitLeft" style="flex:1; background:#000; display:flex; flex-direction:column; transition: all 0.3s ease;">
+            <!-- PERMANENT WRAPPER to prevent YouTube from deleting sizes -->
+            <div style="flex-grow:1; width:100%; height:100%;">
+                <div id="ytPlayer"></div>
             </div>
         </div>
         
-        <!-- SPLIT SCREEN CONTAINER -->
-        <div style="display:flex; flex-grow:1; overflow:hidden; width:100vw;">
-            <!-- Left Side: YouTube (Defaults to 100% width) -->
-            <div id="videoSplitLeft" style="flex:1; background:#000; position:relative; transition: all 0.3s ease;">
-                <div id="ytPlayer" style="width:100%; height:100%;"></div>
-            </div>
-            
-            <!-- Right Side: Moved Canvas Box (HIDDEN BY DEFAULT) -->
-            <div id="videoSplitRight" style="flex:1; background:#020617; display:none; flex-direction:column; padding:10px; border-left:2px solid #334155; transition: all 0.3s ease;">
-                <!-- JavaScript will dynamically inject the canvas here -->
-            </div>
+        <!-- Right Side: Notes Canvas (Hidden by default so video is 100%) -->
+        <div id="videoSplitRight" style="flex:1; background:#020617; display:none; flex-direction:column; padding:10px; border-left:2px solid #334155; transition: all 0.3s ease;">
+            <!-- Canvas injects here -->
         </div>
     </div>
 </div>
@@ -2361,59 +2356,104 @@ window.loadAssignedVideos = function() {
     });
 };
 
-// 2. PLAY OR RESUME THE VIDEO IN THE HUB
+// 1. PLAY OR RESUME THE VIDEO IN THE HUB
 window.playSpecificVideo = function(videoKey, ytId, startAt) {
     window.currentPlayingVideoKey = videoKey;
     
-    // Open the Hub UI
-    document.getElementById("videoModal").classList.remove("hidden");
-    const rightPane = document.getElementById("videoSplitRight");
-    rightPane.style.display = "none"; // Default to full screen video
+    const modal = document.getElementById("videoModal");
+    if(!modal) return alert("Error: Video modal missing from HTML!");
+    modal.classList.remove("hidden");
     
+    // Default to Full Screen Video (Hide the Notes)
+    const rightPane = document.getElementById("videoSplitRight");
+    rightPane.style.display = "none"; 
+    
+    // Quietly prepare the Notes Canvas in the hidden right pane
     const canvasBox = document.getElementById("canvasBox");
-    rightPane.appendChild(canvasBox);
-    canvasBox.classList.remove("hidden", "board-fullscreen");
-    canvasBox.style.minHeight = "100%"; 
-    document.getElementById("fullscreenBtn").style.display = "none";
-    document.getElementById("closeCanvasBtn").style.display = "none";
+    if(canvasBox) {
+        rightPane.appendChild(canvasBox);
+        canvasBox.classList.remove("hidden", "board-fullscreen");
+        canvasBox.style.minHeight = "100%"; 
+    }
+    
+    // Hide the normal canvas buttons since we are inside the Hub
+    const btnFull = document.getElementById("fullscreenBtn");
+    const btnClose = document.getElementById("closeCanvasBtn");
+    if(btnFull) btnFull.style.display = "none";
+    if(btnClose) btnClose.style.display = "none";
 
-    // Load or Resume Video Logic
+    // YouTube API Safety Check
+    if (typeof YT === 'undefined' || !YT.Player) {
+        alert("YouTube system is still connecting to the server. Please wait 2 seconds and click Play again.");
+        return;
+    }
+
+    // Load or Resume Video
     if(!window.ytPlayer) {
-        // First time loading the player
         window.ytPlayer = new YT.Player('ytPlayer', {
             height: '100%', width: '100%', videoId: ytId,
-            playerVars: { 'start': Math.floor(startAt), 'rel': 0 },
-            events: { 'onStateChange': onPlayerStateChange }
+            playerVars: { 'start': Math.floor(startAt), 'rel': 0, 'autoplay': 1 },
+            events: { 'onStateChange': window.onPlayerStateChange }
         });
     } else {
-        // Check if the clicked video is the SAME one that is already loaded
         let currentLoadedId = "";
         try { currentLoadedId = window.ytPlayer.getVideoData().video_id; } catch(e){}
 
         if (currentLoadedId === ytId) {
-            // Same video! Just unpause it from the exact millisecond they left off.
-            window.ytPlayer.playVideo();
+            window.ytPlayer.playVideo(); // Unpause if same video
         } else {
-            // Different video. Load the new one and jump to the saved start time.
             window.ytPlayer.loadVideoById({videoId: ytId, startSeconds: startAt});
         }
     }
 };
-  // TOGGLES BETWEEN 100% VIDEO AND 50/50 SPLIT SCREEN
+
+// 2. TOGGLE NOTES (50/50 SPLIT SCREEN)
 window.toggleHubNotes = function() {
     const rightPane = document.getElementById("videoSplitRight");
     
     if (rightPane.style.display === "none") {
         // Turn ON 50/50 Split Screen
         rightPane.style.display = "flex";
-        // Force canvas to resize to fit the new 50% window perfectly
+        // Force the canvas to recalculate its new 50% width securely
         setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 100);
     } else {
-        // Turn OFF Notes (Go back to Full Screen Video)
+        // Turn OFF Notes (Video goes back to 100% full screen width)
         rightPane.style.display = "none";
     }
 };
 
+// 3. EXIT THE HUB (AUTOSAVES EXACT MILLISECOND)
+window.closeStudyVideoModal = function() {
+    document.getElementById("videoModal").classList.add("hidden");
+    
+    // Pause video perfectly and save EXACT time instantly
+    if(window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
+        window.ytPlayer.pauseVideo(); 
+        
+        if(window.currentPlayingVideoKey && currentUser) {
+            let cTime = window.ytPlayer.getCurrentTime();
+            let dur = window.ytPlayer.getDuration();
+            update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
+                progress: cTime, duration: dur 
+            });
+        }
+    }
+    
+    // Move Canvas Box back to normal dashboard automatically
+    const studentView = document.getElementById("studentView");
+    const canvasBox = document.getElementById("canvasBox");
+    if (studentView && canvasBox) {
+        studentView.appendChild(canvasBox);
+        canvasBox.classList.add("hidden"); 
+        canvasBox.style.minHeight = "70vh";
+    }
+    
+    // Restore Canvas buttons for normal dashboard use
+    const btnFull = document.getElementById("fullscreenBtn");
+    const btnClose = document.getElementById("closeCanvasBtn");
+    if(btnFull) btnFull.style.display = "inline-block";
+    if(btnClose) btnClose.style.display = "inline-block";
+};
 // 3. TRACK PROGRESS EVERY 5 SECONDS
 function onPlayerStateChange(event) {
     if (event.data == YT.PlayerState.PLAYING) {
