@@ -3527,7 +3527,10 @@ window.openRoadmapWindow = function(subjectFilter) {
 
     onValue(ref(db, `users/${currentUser.uid}`), (snap) => {
         const data = snap.val();
-        if(!data || !data.ROADMAP) return;
+        if(!data) return;
+        
+        const isVideoMap = (subjectFilter === "YT Video - Assigned Videos");
+        
         const roadmap = JSON.parse(data.ROADMAP || "[]");
         const filteredTasks = roadmap.filter(t => `${t.subject} - ${t.module}` === subjectFilter);
         const activeNode = filteredTasks.find(t => t.status === 'RUNNING');
@@ -3536,25 +3539,32 @@ window.openRoadmapWindow = function(subjectFilter) {
         // Fetch Video Data
         const vData = data.ASSIGNED_VIDEOS;
         
+        let totalItems = 0;
+        let doneItems = 0;
+        
+        if (isVideoMap && vData) {
+            totalItems = Object.keys(vData).length;
+            doneItems = Object.values(vData).filter(v => v.duration > 0 && (v.progress / v.duration) > 0.9).length;
+        } else {
+            totalItems = filteredTasks.length;
+            doneItems = filteredTasks.filter(t => t.status === 'DONE').length;
+        }
+        
         let html = `
             <style>
-                /* PLAIN SIMPLE MAP CSS */
                 .simple-header {
                     position: sticky; top: 0; background: #0f172a; padding: 20px 40px; 
                     border-bottom: 1px solid #334155; z-index: 100;
                     display: flex; justify-content: space-between; align-items: center;
                 }
                 .simple-map-container { display: flex; flex-direction: column; align-items: center; padding: 40px; }
-                
                 .simple-node-wrapper { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
                 .simple-node {
                     width: 400px; padding: 20px; background: transparent;
-                    border: 1px solid #334155; border-radius: 8px;
-                    position: relative; margin-left: 50px;
+                    border: 1px solid #334155; border-radius: 8px; position: relative; margin-left: 50px;
                 }
                 .simple-node.done { border-color: #22c55e; background: rgba(34, 197, 94, 0.05); }
                 .simple-node.active { border-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }
-                
                 .simple-badge {
                     width: 40px; height: 40px; border-radius: 50%; background: #0f172a; border: 2px solid #334155;
                     position: absolute; left: -70px; top: 50%; transform: translateY(-50%);
@@ -3562,9 +3572,7 @@ window.openRoadmapWindow = function(subjectFilter) {
                 }
                 .simple-node.done .simple-badge { border-color: #22c55e; color: #22c55e; }
                 .simple-node.active .simple-badge { border-color: #38bdf8; color: #38bdf8; }
-                
                 .simple-connector { width: 2px; height: 40px; background: #334155; margin-left: -50px; }
-                
                 .btn-simple {
                     background: #1e293b; border: 1px solid #334155; padding: 10px; border-radius: 4px;
                     color: white; font-weight: bold; cursor: pointer; width: 100%; margin-top:10px;
@@ -3581,12 +3589,12 @@ window.openRoadmapWindow = function(subjectFilter) {
                     <div style="font-size:16px; color:#cbd5e1; font-weight:bold;">${Math.floor(consumed/60000)}m</div>
                 </div>
                 <div style="text-align:center;">
-                    <div style="font-weight: bold; font-size: 18px; color: #38bdf8;">${subjectFilter}</div>
+                    <div style="font-weight: bold; font-size: 18px; color: ${isVideoMap ? '#eab308' : '#38bdf8'};">${subjectFilter}</div>
                     <button onclick="closeInPageMap()" style="margin-top:8px; background:#334155; border:none; color:white; padding:6px 15px; border-radius:4px; font-size:12px; cursor:pointer;">Close Map</button>
                 </div>
                 <div style="text-align:right;">
-                    <div style="font-size:12px; color:#94a3b8;">TASKS</div>
-                    <div style="font-size:16px; color:#cbd5e1; font-weight:bold;">${filteredTasks.filter(t => t.status === 'DONE').length} / ${filteredTasks.length} DONE</div>
+                    <div style="font-size:12px; color:#94a3b8;">${isVideoMap ? 'VIDEOS' : 'TASKS'}</div>
+                    <div style="font-size:16px; color:#cbd5e1; font-weight:bold;">${doneItems} / ${totalItems} DONE</div>
                 </div>
             </div>
             
@@ -3595,59 +3603,54 @@ window.openRoadmapWindow = function(subjectFilter) {
 
         let nodesArray = [];
 
-        // 1. ADD ROADMAP TASKS TO SEQUENCE
-        filteredTasks.forEach((task, i) => {
-            const isDone = task.status === 'DONE';
-            const isActive = task.status === 'RUNNING';
+        // 1. GENERATE ROADMAP TASKS
+        if (!isVideoMap) {
+            filteredTasks.forEach((task, i) => {
+                const isDone = task.status === 'DONE';
+                const isActive = task.status === 'RUNNING';
 
-            nodesArray.push(`
-                <div class="simple-node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
-                    <div class="simple-badge">${isDone ? '✔' : i + 1}</div>
-                    
-                    <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#e5e7eb;">${task.topic}</div>
-                    
-                    ${isActive ? 
-                        `<div style="display:flex; justify-content:space-between; align-items:center;">
-                            <span style="font-size:12px; color:#38bdf8;">Active Session</span>
-                            <span id="activeTimer_${task.id}" style="font-family:monospace; font-size:18px; font-weight:bold; color:#38bdf8;">--:--</span>
-                        </div>` 
-                        : `<div style="font-size:12px; color:#94a3b8;">
-                            Allocated Time: ${Math.floor(task.allocatedTime/60000)}m
-                           </div>`
-                    }
-                    
-                    <div style="display:flex; margin-top:5px; flex-wrap:wrap;">
-                        ${!isDone ? (!isActive ? 
-                            `<button class="btn-simple start" onclick="startRoadmapTask(${task.id})">Start</button>` :
-                            `<button class="btn-simple finish" onclick="completeRoadmapTask(${task.id})">Finish</button>
-                             <button class="btn-simple abort" onclick="abortRoadmapTask(${task.id})">Abort</button>`) 
-                        : `<div style="width:100%; text-align:left; padding:8px 0; background:transparent; color:#22c55e; font-size:12px; font-weight:bold;">
-                            Completed @ ${task.doneTime}
-                           </div>`}
+                nodesArray.push(`
+                    <div class="simple-node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
+                        <div class="simple-badge">${isDone ? '✔' : i + 1}</div>
+                        <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#e5e7eb;">${task.topic}</div>
+                        
+                        ${isActive ? 
+                            `<div style="display:flex; justify-content:space-between; align-items:center;">
+                                <span style="font-size:12px; color:#38bdf8;">Active Session</span>
+                                <span id="activeTimer_${task.id}" style="font-family:monospace; font-size:18px; font-weight:bold; color:#38bdf8;">--:--</span>
+                            </div>` 
+                            : `<div style="font-size:12px; color:#94a3b8;">Allocated Time: ${Math.floor(task.allocatedTime/60000)}m</div>`
+                        }
+                        
+                        <div style="display:flex; margin-top:5px; flex-wrap:wrap;">
+                            ${!isDone ? (!isActive ? 
+                                `<button class="btn-simple start" onclick="startRoadmapTask(${task.id})">Start</button>` :
+                                `<button class="btn-simple finish" onclick="completeRoadmapTask(${task.id})">Finish</button>
+                                 <button class="btn-simple abort" onclick="abortRoadmapTask(${task.id})">Abort</button>`) 
+                            : `<div style="width:100%; text-align:left; padding:8px 0; background:transparent; color:#22c55e; font-size:12px; font-weight:bold;">Completed @ ${task.doneTime}</div>`}
+                        </div>
                     </div>
-                </div>
-            `);
-        });
+                `);
+            });
+        }
 
-        // 2. APPEND ASSIGNED VIDEOS AS NODES AT THE END OF THE MAP
-        // 2. APPEND ASSIGNED VIDEOS AS NODES AT THE END OF THE MAP
-        if (vData) {
-            Object.keys(vData).forEach((key) => {
+        // 2. GENERATE VIDEO NODES (ONLY IF "YT Video" IS CLICKED)
+        if (isVideoMap && vData) {
+            Object.keys(vData).forEach((key, i) => {
                 const v = vData[key];
                 let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
                 const isDone = p > 90;
                 
-                // Fetch the saved MCQ score if it exists
                 const scoreStr = v.mcqTotal > 0 ? `<div style="font-size:14px; font-weight:bold; color:#a855f7; margin-top:5px; background:rgba(168, 85, 247, 0.1); padding:4px 8px; border-radius:4px; display:inline-block;">🎯 MCQ Score: ${v.mcqScore} / ${v.mcqTotal}</div>` : "";
 
                 nodesArray.push(`
                     <div class="simple-node ${isDone ? 'done' : ''}" style="border-color:${isDone ? '#22c55e' : '#eab308'};">
                         <div class="simple-badge" style="border-color:${isDone ? '#22c55e' : '#eab308'}; color:${isDone ? '#22c55e' : '#eab308'}; font-size:18px;">🎥</div>
                         
-                        <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#eab308;">Assigned Video</div>
+                        <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#eab308;">Assigned Video ${i+1}</div>
                         <div style="font-size:12px; color:#94a3b8;">Due: ${v.deadline} | Progress: <span style="color:${isDone ? '#22c55e' : '#eab308'}; font-weight:bold;">${p}%</span></div>
                         
-                        ${scoreStr} <!-- Injects Score here -->
+                        ${scoreStr}
                         
                         <div style="display:flex; margin-top:10px;">
                             <button class="btn-simple start" style="background:#eab308; border-color:#eab308; color:black;" onclick="window.closeInPageMap(); window.playSpecificVideo('${key}', '${v.id}', ${v.progress}, '${v.mcqScore || 0}', '${v.mcqTotal || 0}')">▶ Play & Solve</button>
@@ -3657,7 +3660,7 @@ window.openRoadmapWindow = function(subjectFilter) {
             });
         }
 
-        // 3. JOIN ALL NODES WITH CONNECTORS
+        // 3. JOIN ALL NODES
         html += nodesArray.map((nodeHtml, idx) => `
             <div class="simple-node-wrapper">
                 ${nodeHtml}
@@ -3668,7 +3671,7 @@ window.openRoadmapWindow = function(subjectFilter) {
         html += `</div>`;
         document.getElementById("mapContentContainer").innerHTML = html;
 
-        // Timer Loop for the active task node
+        // Timer Loop for active roadmap tasks
         if (activeNode && activeNode.targetEndTime) {
             if (roadmapInterval) clearInterval(roadmapInterval);
             roadmapInterval = setInterval(() => {
@@ -3827,21 +3830,23 @@ function renderMapNodes(win, roadmap) {
         }
     });
 }
-function loadTasks() {
+window.loadTasks = function() {
     const tList = document.getElementById("taskList");
     if(!tList) return;
     tList.innerHTML = "";
 
-    get(ref(db, `users/${currentUser.uid}/ROADMAP`)).then((snap) => {
+    get(ref(db, `users/${currentUser.uid}`)).then((snap) => {
         if(!snap.exists()) {
             tList.innerHTML = "<div style='color:#64748b; padding:20px; text-align:center;'>Waiting for Admin Assignment...</div>";
             return;
         }
 
-        const roadmap = JSON.parse(snap.val());
+        const data = snap.val();
+        const roadmap = JSON.parse(data.ROADMAP || "[]");
         
-        // --- 🏆 UNIQUE GROUPING LOGIC ---
         let uniqueGroups = {};
+        
+        // 1. Group Standard Subjects
         roadmap.forEach(t => {
             const groupKey = `${t.subject} - ${t.module}`;
             if(!uniqueGroups[groupKey]) {
@@ -3849,34 +3854,65 @@ function loadTasks() {
                     subject: t.subject,
                     module: t.module,
                     total: 0,
-                    done: 0
+                    done: 0,
+                    type: 'task'
                 };
             }
             uniqueGroups[groupKey].total++;
             if(t.status === 'DONE') uniqueGroups[groupKey].done++;
         });
 
+        // 2. Group Assigned Videos into "YT Video" Subject Card
+        if (data.ASSIGNED_VIDEOS) {
+            const vids = Object.keys(data.ASSIGNED_VIDEOS);
+            if (vids.length > 0) {
+                let doneVids = 0;
+                vids.forEach(k => {
+                    let v = data.ASSIGNED_VIDEOS[k];
+                    if (v.duration > 0 && (v.progress / v.duration) > 0.9) doneVids++;
+                });
+                
+                uniqueGroups["YT Video - Assigned Videos"] = {
+                    subject: "YT Video",
+                    module: "Assigned Videos",
+                    total: vids.length,
+                    done: doneVids,
+                    type: 'video'
+                };
+            }
+        }
+
+        if (Object.keys(uniqueGroups).length === 0) {
+            tList.innerHTML = "<div style='color:#64748b; padding:20px; text-align:center;'>No tasks or videos assigned.</div>";
+            return;
+        }
+
+        // 3. Render the List UI
         Object.keys(uniqueGroups).forEach(groupKey => {
-            const data = uniqueGroups[groupKey];
+            const gData = uniqueGroups[groupKey];
             const container = document.createElement("div");
+            
+            let borderColor = gData.type === 'video' ? '#eab308' : '#38bdf8';
+            let titleColor = gData.type === 'video' ? '#facc15' : '#7dd3fc';
+            let icon = gData.type === 'video' ? '🎥' : '📘';
+
             container.style.cssText = `
                 padding: 18px; border: 1px solid #334155; border-radius: 12px; 
                 margin-bottom: 15px; background: #0f172a; cursor: pointer;
-                border-left: 6px solid #38bdf8; transition: 0.2s;
+                border-left: 6px solid ${borderColor}; transition: 0.2s;
             `;
             
-            // This subject key is passed to open the roadmap window
-            container.onclick = () => openRoadmapWindow(groupKey); 
+            container.onclick = () => window.openRoadmapWindow(groupKey); 
 
             container.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <div style="font-weight:bold; color:#7dd3fc; font-size:16px;">${data.subject}</div>
-                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">${data.module}</div>
+                        <div style="font-weight:bold; color:${titleColor}; font-size:16px;">${icon} ${gData.subject}</div>
+                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">${gData.module}</div>
                     </div>
                     <div style="text-align:right">
-                        <div style="font-size:12px; color:#4ade80; font-weight:800;">${data.done} / ${data.total} DONE</div>
-                        <div style="font-size:10px; color:#38bdf8; margin-top:5px;">OPEN STUDY MAP →</div>
+                        <div style="font-size:12px; color:#4ade80; font-weight:800;">${gData.done} / ${gData.total} DONE</div>
+                        <div style="font-size:10px; color:${borderColor}; margin-top:5px; text-transform:uppercase;">OPEN STUDY MAP →</div>
                     </div>
                 </div>
             `;
