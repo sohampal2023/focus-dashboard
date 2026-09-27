@@ -2328,7 +2328,7 @@ onValue(ref(db, `users/${currentUser.uid}/BIO_ACTIVE`), (snap) => {
     } else {
         if (existingOverlay) {
             existingOverlay.remove();
-            startIdle(18);
+            startIdle(1800);
             document.getElementById("idleBox")?.classList.remove("hidden");
         }
     }
@@ -2343,7 +2343,7 @@ onValue(ref(db, `users/${currentUser.uid}/BIO_ACTIVE`), (snap) => {
     loadNotices();
     window.loadAssignedVideos();
     checkLeaveStatus(serverData);
-    startIdle(18);
+    startIdle(1800);
     renderLogs();
     loadSubjectList();
 }
@@ -3085,11 +3085,11 @@ function playWarningBeep() {
     osc.stop(ctx.currentTime + 0.2);
 }
 // --- IDLE TIMER & WATCHDOG LOGIC ---
-function startIdle(customSeconds = 18) {
+function startIdle(customSeconds = 1800) {
     if (idleTimer) clearInterval(idleTimer);
 
-    totalDuration = 18;
-    targetTime = Date.now() + (18 * 1000);
+    totalDuration = 1800;
+    targetTime = Date.now() + (1800 * 1000);
 
     // Watchdog is active again
     localStorage.removeItem("WATCHDOG_PROOF_REQUIRED");
@@ -3101,7 +3101,7 @@ function startIdle(customSeconds = 18) {
         idleBox.classList.remove("critical");
     }
 
-    updateIdle(18);
+    updateIdle(1800);
 
     idleTimer = setInterval(() => {
         const current = Date.now();
@@ -3259,7 +3259,7 @@ function resetWatchdog() {
         }, 1500);
         return;
     }
-    startIdle(18); 
+    startIdle(1800); 
     const originalText = "I AM STUDYING";
     btn.innerText = "WATCHDOG RESET";
     btn.style.background = "#22c55e"; 
@@ -3291,7 +3291,7 @@ function updateIdle(seconds) {
   let displaySeconds = seconds > 0 ? seconds : 0;
   
   // 🔥 THE 2 MINUTE WARNING CHIME 🔥
-  if (displaySeconds === 18) {
+  if (displaySeconds === 1800) {
       window.playWatchdogWarningChime();
   }
   
