@@ -4037,13 +4037,14 @@ window.adminAssignTasks = async function(uid) {
                 width: 100%; padding: 12px; margin: 8px 0; 
                 background: #020617; border: 1px solid #334155; 
                 color: white; border-radius: 8px; font-size: 14px;
+                box-sizing: border-box;
             }
             button { 
                 width: 100%; padding: 15px; background: #0ea5e9; 
                 color: white; border: none; border-radius: 8px; 
                 font-weight: bold; cursor: pointer; margin-top: 20px;
             }
-            .append-note { font-size: 10px; color: #facc15; margin-top: 5px; text-align: center; }
+            .append-note { font-size: 11px; color: #facc15; margin-top: 10px; text-align: center; font-weight:bold; }
         </style>
         <h2>Add to Study Roadmap</h2>
         
@@ -4055,14 +4056,14 @@ window.adminAssignTasks = async function(uid) {
         <label>Module Number:</label>
         <input id="modNum" placeholder="e.g. 02">
         
-        <label>Module Name:</label>
+        <label>Module Name (Enter "Extra Work" for Bonus):</label>
         <input id="modName" placeholder="e.g. Advanced Circuits">
         
         <label>New Subtopics (Comma separated or One per line):</label>
         <textarea id="topics" placeholder="Topic A, Topic B..." style="height:120px;"></textarea>
         
-        <button id="pushBtn">APPEND TO ROADMAP</button>
-        <div class="append-note">Existing tasks on student devices will not be deleted.</div>
+        <button id="pushBtn">APPEND & DISTRIBUTE TIME</button>
+        <div class="append-note">System will automatically divide remaining time equally across all pending tasks.</div>
     `);
 
     roadmapWin.document.getElementById("pushBtn").onclick = async () => {
@@ -4073,36 +4074,58 @@ window.adminAssignTasks = async function(uid) {
 
         if(!mod || !raw) { alert("Module and Topics are required."); return; }
 
-        // 1. Fetch Existing Roadmap first to APPEND
-        const snap = await get(ref(db, `users/${uid}/ROADMAP`));
-        let existingRoadmap = snap.exists() ? JSON.parse(snap.val()) : [];
+        try {
+            // 1. Fetch User Data and Existing Roadmap
+            const snap = await get(ref(db, `users/${uid}`));
+            let userData = snap.exists() ? snap.val() : {};
+            let existingRoadmap = userData.ROADMAP ? JSON.parse(userData.ROADMAP) : [];
 
-        const topicList = raw.includes(",") ? raw.split(",") : raw.split("\n");
-        
-        topicList.forEach((t, i) => {
-            const cleanTopic = t.trim();
-            if(cleanTopic){
-                existingRoadmap.push({
-                    id: Date.now() + i, // Unique ID for every node
-                    subject: sub,
-                    module: `Mod ${mod}: ${name}`,
-                    topic: cleanTopic,
-                    status: "PENDING",
-                    allocatedTime: 0,
-                    doneTime: null
+            // 2. Append New Topics
+            const topicList = raw.includes(",") ? raw.split(",") : raw.split("\n");
+            
+            topicList.forEach((t, i) => {
+                const cleanTopic = t.trim();
+                if(cleanTopic){
+                    existingRoadmap.push({
+                        id: Date.now() + i, // Unique ID for every node
+                        subject: sub,
+                        module: `Mod ${mod}: ${name}`,
+                        topic: cleanTopic,
+                        status: "PENDING",
+                        allocatedTime: 0,
+                        doneTime: null
+                    });
+                }
+            });
+
+            // 3. ⏱️ INTELLIGENT TIME DISTRIBUTION LOGIC
+            let remainingTime = parseFloat(userData.SHIFT_REMAINING_TIME);
+            if (isNaN(remainingTime) || remainingTime <= 0) {
+                remainingTime = parseFloat(userData.SHIFT_TOTAL_TIME) || 7200000; // Default 2 hrs if empty
+            }
+
+            // Count how many tasks are left to do (Old pending + newly added)
+            let pendingCount = existingRoadmap.filter(t => t.status === "PENDING" || t.status === "RUNNING").length;
+
+            if(pendingCount > 0) {
+                // Divide the remaining clock time equally among all pending tasks
+                let timePerTask = Math.floor(remainingTime / pendingCount);
+                
+                existingRoadmap = existingRoadmap.map(t => {
+                    // Update allocated time for ALL unfinished tasks
+                    if(t.status === "PENDING" || t.status === "RUNNING") {
+                        t.allocatedTime = timePerTask;
+                    }
+                    return t;
                 });
             }
-        });
 
-        try {
-            // 2. Update Firebase with the expanded list
+            // 4. Update Firebase instantly
             await update(ref(db, `users/${uid}`), { ROADMAP: JSON.stringify(existingRoadmap) });
             
-            // 3. Trigger recalculation so the 2-hour shift covers the new tasks
-            // Note: This is handled by the student's device listener automatically
-            
-            alert("✅ Roadmap Updated! New tasks appended.");
+            alert("✅ Roadmap Updated! The remaining time has been perfectly balanced across all tasks.");
             roadmapWin.close();
+
         } catch (e) {
             alert("Append failed: " + e.message);
         }
