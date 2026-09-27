@@ -3509,13 +3509,13 @@ window.initializeShift = async function() {
 
 window.continuousStudyTime = 0;
 window.idleInactivityCounter = 0;
-
 function startMasterClock() {
     if(masterClockInterval) clearInterval(masterClockInterval);
     
-    // Auto-create Break Screen Overlay if missing
-    if (!document.getElementById("mandatoryBreakOverlay")) {
-        const overlay = document.createElement("div");
+    // 1. Ensure the compulsory break overlay exists in the DOM right away
+    let overlay = document.getElementById("mandatoryBreakOverlay");
+    if (!overlay) {
+        overlay = document.createElement("div");
         overlay.id = "mandatoryBreakOverlay";
         overlay.className = "hidden";
         overlay.style.cssText = "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2,6,23,0.99); z-index: 9999999; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 6px solid #38bdf8; backdrop-filter: blur(15px);";
@@ -3530,8 +3530,9 @@ function startMasterClock() {
         document.body.appendChild(overlay);
     }
 
+    // Auto-inject Shift Tracker if missing
     let shiftTracker = document.getElementById("hudShiftTracker");
-    if (!shiftTracker) {
+    if (!shiftTracker && document.getElementById("masterClockDisplay")) {
         const clockParent = document.getElementById("masterClockDisplay").parentNode;
         shiftTracker = document.createElement("div");
         shiftTracker.id = "hudShiftTracker";
@@ -3542,30 +3543,38 @@ function startMasterClock() {
     masterClockInterval = setInterval(() => {
         if(localShiftRemaining <= 0) {
             clearInterval(masterClockInterval);
-            document.getElementById("masterClockDisplay").innerText = "EXHAUSTED";
-            document.getElementById("masterClockDisplay").style.color = "#ef4444";
+            const disp = document.getElementById("masterClockDisplay");
+            if(disp) {
+                disp.innerText = "EXHAUSTED";
+                disp.style.color = "#ef4444";
+            }
             return;
         }
 
         localShiftRemaining -= 1000;
         
+        // Check if break overlay is currently hidden
         const breakOverlay = document.getElementById("mandatoryBreakOverlay");
-        if (localStorage.getItem(key("SHIFT_ACTIVE")) === "true" && (!breakOverlay || breakOverlay.classList.contains("hidden"))) {
+        const isBreakActive = breakOverlay && !breakOverlay.classList.contains("hidden");
+
+        if (localStorage.getItem(key("SHIFT_ACTIVE")) === "true" && !isBreakActive) {
             window.continuousStudyTime++;
             
-            // --- ⏱️ 30-MINUTE STUDY LIMIT REACHED ---
-            if (window.continuousStudyTime >= 125) { 
+            // 🔥 FORCE BREAK AT EXACTLY 1800 SECONDS (30 MINUTES) 🔥
+            if (window.continuousStudyTime >= 1800) { 
+                window.continuousStudyTime = 0; // Reset counter immediately
                 window.triggerMandatoryBreak();
-                window.continuousStudyTime = 0; 
+                return;
             }
         }
 
-        // --- ⏳ 2-MINUTE INACTIVITY / IDLE CHECK ---
-        // Increments if no user interaction/submission has occurred
-        window.idleInactivityCounter++;
-        if (window.idleInactivityCounter >= 120) { // 120 seconds = 2 minutes
+        // 2-Minute Inactivity Watchdog Check
+        window.idleInactivityCounter = (window.idleInactivityCounter || 0) + 1;
+        if (window.idleInactivityCounter >= 120) { 
             window.idleInactivityCounter = 0;
-            window.handleIdleTimeoutPenalty();
+            if (typeof window.handleIdleTimeoutPenalty === 'function') {
+                window.handleIdleTimeoutPenalty();
+            }
         }
 
         // Shift calculation tracker
@@ -3575,7 +3584,7 @@ function startMasterClock() {
         const completedShifts = Math.floor(consumedMs / chunkMs);
         const shiftsLeft = Math.max(0, totalShifts - completedShifts);
         
-        shiftTracker.innerText = `SHIFTS: ${completedShifts} DONE | ${shiftsLeft} LEFT`;
+        if(shiftTracker) shiftTracker.innerText = `SHIFTS: ${completedShifts} DONE | ${shiftsLeft} LEFT`;
 
         const h = Math.floor(localShiftRemaining / 3600000);
         const m = Math.floor((localShiftRemaining % 3600000) / 60000);
@@ -3584,7 +3593,7 @@ function startMasterClock() {
         const disp = document.getElementById("masterClockDisplay");
         if(disp) disp.innerText = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
 
-        if(s % 30 === 0) {
+        if(s % 30 === 0 && currentUser) {
             update(ref(db, `users/${currentUser.uid}`), {
                 SHIFT_REMAINING_TIME: localShiftRemaining
             });
@@ -5418,6 +5427,52 @@ window.closeStudyVideoModal = function() {
     // 3. Restore buttons
     document.getElementById("fullscreenBtn").style.display = "inline-block";
     document.getElementById("closeCanvasBtn").style.display = "inline-block";
+};
+  window.checkVideoTimeTriggers = function(assignedVideos, shiftRemainingMs) {
+    if (!assignedVideos) return;
+    
+    const now = Date.now();
+    const shiftRemainingMins = Math.max(1, Math.floor(shiftRemainingMs / 60000));
+
+    Object.keys(assignedVideos).forEach((key) => {
+        let v = assignedVideos[key];
+        let p = (v.duration > 0) ? (v.progress / v.duration) : 0;
+        
+        // Skip if already completed (>90%)
+        if (p >= 0.90) return;
+
+        // Recalculate precise remaining time factor
+        let totalSec = v.duration || 600;
+        let progSec = v.progress || 0;
+        let videoRemainingMins = Math.ceil((totalSec - progSec) / 60);
+        let allocatedMins = Math.min(videoRemainingMins, shiftRemainingMins);
+
+        // Check if deadline factor or shift timing triggers right now
+        // (Triggers if deadline date string matches today or shift capacity matches allocation)
+        let deadlineTime = new Date(v.deadline).getTime();
+        let isDueSoon = !isNaN(deadlineTime) && (deadlineTime - now <= 3600000); // Due within 1 hour or past due
+
+        if (isDueSoon && !v.alertTriggered) {
+            // 🔥 FIRE GREEN NOTIFICATION BANNER FOR 30 SECONDS 🔥
+            const banner = document.getElementById("videoNotificationBanner");
+            const alertText = document.getElementById("videoAlertText");
+            
+            if (banner && alertText) {
+                alertText.innerText = `Time to watch Assigned Video (${allocatedMins}m allocated)! Due: ${v.deadline}`;
+                banner.classList.remove("hidden");
+                banner.style.display = "flex";
+
+                // Mark as triggered so it doesn't spam every second
+                update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${key}`), { alertTriggered: true });
+
+                // Auto-hide after 30 seconds
+                setTimeout(() => {
+                    banner.classList.add("hidden");
+                    banner.style.display = "none";
+                }, 30000);
+            }
+        }
+    });
 };
 // --- ATTACH TO WINDOW ---
 window.handleLoginFlow = handleLoginFlow;
