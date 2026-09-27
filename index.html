@@ -3714,6 +3714,50 @@ window.startRoadmapTask = async function(taskId) {
 
     await update(ref(db, `users/${currentUser.uid}`), { ROADMAP: JSON.stringify(roadmap) });
 };
+  window.recalculateVideoAllocations = function(assignedVideos, shiftRemainingMs) {
+    if (!assignedVideos) return {};
+
+    // 1. Filter out completed videos (>90% progress) and sort remaining by priority or order
+    let videoKeys = Object.keys(assignedVideos);
+    let pendingVideos = videoKeys.filter(key => {
+        let v = assignedVideos[key];
+        let p = (v.duration > 0) ? (v.progress / v.duration) : 0;
+        return p < 0.90;
+    });
+
+    if (pendingVideos.length === 0) return {};
+
+    // 2. Get total remaining shift time in minutes
+    let totalShiftMins = Math.max(1, Math.floor(shiftRemainingMs / 60000));
+    
+    // 3. Calculate total remaining workload across all unfinished videos (in minutes)
+    let totalWorkloadMins = 0;
+    let videoWorkloads = {};
+
+    pendingVideos.forEach(key => {
+        let v = assignedVideos[key];
+        let durationSec = v.duration || 600; // Fallback 10m if uninitialized
+        let progressSec = v.progress || 0;
+        let remMins = Math.max(1, Math.ceil((durationSec - progressSec) / 60));
+        
+        videoWorkloads[key] = remMins;
+        totalWorkloadMins += remMins;
+    });
+
+    // 4. Dynamically proportion shift time based on remaining workload weight
+    let dynamicAllocations = {};
+    
+    pendingVideos.forEach(key => {
+        let workload = videoWorkloads[key];
+        // Proportion of shift time allocated to this specific video based on weight
+        let proportion = totalWorkloadMins > 0 ? (workload / totalWorkloadMins) : (1 / pendingVideos.length);
+        let allocatedForToday = Math.min(workload, Math.ceil(totalShiftMins * proportion));
+        
+        dynamicAllocations[key] = Math.max(1, allocatedForToday);
+    });
+
+    return dynamicAllocations;
+};
 let roadmapInterval = null;
 window.openRoadmapWindow = function(subjectFilter) {
     const modal = document.getElementById("inPageMapModal");
@@ -3832,21 +3876,20 @@ window.openRoadmapWindow = function(subjectFilter) {
             });
         }
 
-        // 2. GENERATE VIDEO NODES WITH ACCURATE DURATION ALLOCATION
         if (isVideoMap && vData) {
-            const shiftRemainingMins = data.SHIFT_REMAINING_TIME ? Math.max(1, Math.floor(data.SHIFT_REMAINING_TIME / 60000)) : 120;
+            const shiftRemainingMins = data.SHIFT_REMAINING_TIME ? data.SHIFT_REMAINING_TIME : 7200000;
+            
+            // 🔥 Call the dynamic recalculation engine 🔥
+            const currentAllocations = window.recalculateVideoAllocations(vData, shiftRemainingMins);
 
             Object.keys(vData).forEach((key, i) => {
                 const v = vData[key];
-                let durationSec = (v.duration && v.duration > 0) ? v.duration : 600; // Fallback to 10 mins if duration isn't loaded yet
-                let progressSec = v.progress || 0;
-                
-                let p = Math.floor((progressSec / durationSec) * 100);
+                let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
                 const isDone = p >= 90;
                 
-                let videoRemainingMins = Math.ceil((durationSec - progressSec) / 60);
-                let allocatedToday = isDone ? 0 : Math.min(videoRemainingMins, shiftRemainingMins);
-                let allocatedStr = isDone ? `Completed` : `Allocated Time (Today): ${Math.max(1, allocatedToday)}m`;
+                // Pull the dynamically proportioned time for today
+                let allocatedToday = isDone ? 0 : (currentAllocations[key] || 10);
+                let allocatedStr = isDone ? `Completed` : `Allocated Time (Today): ${allocatedToday}m`;
 
                 let scoreVal = v.mcqScore !== undefined ? parseFloat(v.mcqScore).toFixed(2) : "0.00";
                 let totalVal = v.mcqTotal !== undefined ? v.mcqTotal : 0;
