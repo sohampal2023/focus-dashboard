@@ -4487,15 +4487,43 @@ function executeWatchdogReset() {
 // ==========================================
 let pendingVideoAssignUid = null;
 
-// Opens the clean in-page form
+// FOOLPROOF AUTO-GENERATING MODAL
 window.adminAssignVideo = function(uid) {
     pendingVideoAssignUid = uid;
+    
+    // 1. Check if the modal exists in HTML. If not, auto-inject it!
+    let modal = document.getElementById("adminVideoModal");
+    if (!modal) {
+        modal = document.createElement("div");
+        modal.id = "adminVideoModal";
+        modal.className = "hidden";
+        modal.style.cssText = "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2, 6, 23, 0.95); z-index: 100000; display: flex; justify-content: center; align-items: center;";
+        modal.innerHTML = `
+            <div style="background: #0f172a; padding: 30px; border: 1px solid #334155; border-radius: 8px; width: 400px; text-align: left; box-shadow: 0 10px 30px rgba(0,0,0,0.5);">
+                <h3 style="color: #38bdf8; margin-top: 0; border-bottom: 1px solid #334155; padding-bottom: 10px;">Assign YouTube Video</h3>
+                
+                <label style="font-size: 12px; color: #94a3b8; display: block; margin-top: 15px; font-weight:bold;">YouTube URL:</label>
+                <input id="adminVidUrl" type="text" placeholder="Paste link here..." style="width: 100%; padding: 12px; margin-top: 5px; background: #020617; border: 1px solid #334155; color: white; border-radius: 4px; box-sizing:border-box;">
+                
+                <label style="font-size: 12px; color: #94a3b8; display: block; margin-top: 15px; font-weight:bold;">Target Deadline:</label>
+                <input id="adminVidDeadline" type="text" placeholder="e.g., Tomorrow, Oct 15" style="width: 100%; padding: 12px; margin-top: 5px; background: #020617; border: 1px solid #334155; color: white; border-radius: 4px; box-sizing:border-box;">
+                
+                <div style="display: flex; gap: 10px; margin-top: 25px;">
+                    <button onclick="submitAdminVideo()" style="flex: 1; background: #0ea5e9; border: none; padding: 12px; color: white; font-weight: bold; border-radius: 4px; cursor: pointer;">Assign Video</button>
+                    <button onclick="document.getElementById('adminVideoModal').classList.add('hidden')" style="flex: 1; background: #334155; border: none; padding: 12px; color: white; font-weight: bold; border-radius: 4px; cursor: pointer;">Cancel</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+    }
+
+    // 2. Clear old text and show the modal
     document.getElementById("adminVidUrl").value = "";
     document.getElementById("adminVidDeadline").value = "";
-    document.getElementById("adminVideoModal").classList.remove("hidden");
+    modal.classList.remove("hidden");
 };
 
-// Submits the data to Firebase
+// SUBMITS THE VIDEO TO THE STUDENT
 window.submitAdminVideo = async function() {
     if (!pendingVideoAssignUid) return;
     
@@ -4510,7 +4538,7 @@ window.submitAdminVideo = async function() {
     if (!match || match[2].length !== 11) return alert("Invalid YouTube URL.");
 
     const videoId = match[2];
-    const videoKey = "vid_" + Date.now(); // Allows multiple videos
+    const videoKey = "vid_" + Date.now(); // Allows multiple videos securely
     
     const videoPayload = { 
         id: videoId, 
@@ -4523,12 +4551,11 @@ window.submitAdminVideo = async function() {
     try {
         await update(ref(db, `users/${pendingVideoAssignUid}/ASSIGNED_VIDEOS/${videoKey}`), videoPayload);
         alert("Video assigned successfully!");
-        document.getElementById("adminVideoModal").classList.add("hidden"); // Close modal automatically
+        document.getElementById("adminVideoModal").classList.add("hidden"); 
     } catch (error) {
         alert("Failed to assign video: " + error.message);
     }
 };
-
 window.adminManageVideos = async function(uid) {
     const snap = await get(ref(db, `users/${uid}/ASSIGNED_VIDEOS`));
     if (!snap.exists()) return alert("No videos assigned to this student.");
