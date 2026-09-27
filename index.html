@@ -4223,70 +4223,106 @@ window.startRoadmapTask = async function(taskId) {
     await update(ref(db, `users/${currentUser.uid}`), { ROADMAP: JSON.stringify(roadmap) });
 };
   window.recalculateVideoAllocations = function(assignedVideos, shiftRemainingMs) {
-    if (!assignedVideos || shiftRemainingMs <= 0) return {};
+
+    if (!assignedVideos || shiftRemainingMs <= 0) {
+        return {};
+    }
 
     const now = Date.now();
 
-    // =========================================================
-    // YOUTUBE SUBJECT ONLY
-    // Each video = sub-part of the YT Video subject
-    // Allocation depends on:
-    // 1. Remaining video length
-    // 2. Deadline pressure
-    // 3. Current progress
-    // =========================================================
+    // =====================================================
+    // 1. GET ALL PENDING VIDEOS
+    // =====================================================
 
-    const videos = Object.keys(assignedVideos)
+    const pendingVideos = Object.keys(assignedVideos)
         .map(key => ({
             key: key,
             video: assignedVideos[key]
         }))
         .filter(item => {
+
             const v = item.video;
 
-            const duration = Number(v.duration) || 0;
-            const progress = Number(v.progress) || 0;
+            const duration =
+                Number(v.duration) || 0;
 
-            // 90% or more = completed
-            if (duration > 0 && progress / duration >= 0.90) {
+            const progress =
+                Number(v.progress) || 0;
+
+            // 90% = completed
+            if (
+                duration > 0 &&
+                progress / duration >= 0.90
+            ) {
                 return false;
             }
 
             return true;
         });
 
-    if (videos.length === 0) return {};
+    if (pendingVideos.length === 0) {
+        return {};
+    }
 
-    const shiftMinutes = Math.max(
-        1,
-        Math.floor(shiftRemainingMs / 60000)
-    );
+    // =====================================================
+    // 2. TOTAL YT TIME AVAILABLE
+    // =====================================================
 
-    // ---------------------------------------------------------
-    // Calculate workload + deadline pressure for every video
-    // ---------------------------------------------------------
+    const totalAvailableMinutes =
+        Math.max(
+            1,
+            Math.floor(shiftRemainingMs / 60000)
+        );
 
-    let totalWeight = 0;
+    // =====================================================
+    // 3. CALCULATE EACH VIDEO'S REAL REMAINING TIME
+    // =====================================================
 
-    const calculated = videos.map(item => {
+    let totalRemainingVideoMinutes = 0;
+
+    const videoData = pendingVideos.map(item => {
 
         const v = item.video;
 
-        const durationSec = Number(v.duration) || 0;
-        const progressSec = Number(v.progress) || 0;
+        const durationSec =
+            Number(v.duration) || 0;
 
-        // Remaining video length
-        let remainingSec = Math.max(
-            60,
-            durationSec - progressSec
-        );
+        const progressSec =
+            Number(v.progress) || 0;
 
-        const remainingMinutes =
-            Math.max(1, Math.ceil(remainingSec / 60));
+        /*
+         * If duration is known:
+         * use actual remaining video time.
+         *
+         * If duration is not known:
+         * do NOT assume the video is only 10 minutes.
+         * Give it a small provisional workload until
+         * YouTube reports its real duration.
+         */
 
-        // -----------------------------------------------------
-        // Deadline calculation
-        // -----------------------------------------------------
+        let remainingMinutes;
+
+        if (durationSec > 0) {
+
+            remainingMinutes =
+                Math.max(
+                    1,
+                    Math.ceil(
+                        Math.max(
+                            0,
+                            durationSec - progressSec
+                        ) / 60
+                    )
+                );
+
+        } else {
+
+            remainingMinutes = 1;
+        }
+
+        // =================================================
+        // 4. DEADLINE PRIORITY
+        // =================================================
 
         let deadlineWeight = 1;
 
@@ -4297,23 +4333,26 @@ window.startRoadmapTask = async function(taskId) {
 
             if (!isNaN(deadlineTime)) {
 
-                const hoursLeft =
-                    (deadlineTime - now) / 3600000;
+                const minutesUntilDeadline =
+                    (deadlineTime - now) / 60000;
 
-                if (hoursLeft <= 0) {
+                if (minutesUntilDeadline <= 0) {
 
-                    // Deadline already passed
                     deadlineWeight = 5;
 
-                } else if (hoursLeft <= 6) {
+                } else if (minutesUntilDeadline <= 60) {
+
+                    deadlineWeight = 5;
+
+                } else if (minutesUntilDeadline <= 360) {
 
                     deadlineWeight = 4;
 
-                } else if (hoursLeft <= 24) {
+                } else if (minutesUntilDeadline <= 720) {
 
                     deadlineWeight = 3;
 
-                } else if (hoursLeft <= 48) {
+                } else if (minutesUntilDeadline <= 1440) {
 
                     deadlineWeight = 2;
 
@@ -4324,15 +4363,14 @@ window.startRoadmapTask = async function(taskId) {
             }
         }
 
-        // -----------------------------------------------------
-        // Remaining length is the main workload
-        // Deadline increases priority
-        // -----------------------------------------------------
-
+        /*
+         * Workload × deadline priority
+         */
         const weight =
             remainingMinutes * deadlineWeight;
 
-        totalWeight += weight;
+        totalRemainingVideoMinutes +=
+            remainingMinutes;
 
         return {
             key: item.key,
@@ -4342,92 +4380,147 @@ window.startRoadmapTask = async function(taskId) {
         };
     });
 
-    // ---------------------------------------------------------
-    // Allocate YT subject time among individual videos
-    // ---------------------------------------------------------
+    // =====================================================
+    // 5. TOTAL PRIORITY WEIGHT
+    // =====================================================
+
+    const totalWeight =
+        videoData.reduce(
+            (sum, item) =>
+                sum + item.weight,
+            0
+        );
 
     const allocations = {};
 
-    calculated.forEach(item => {
+    // =====================================================
+    // 6. FIRST ALLOCATION
+    // =====================================================
+
+    videoData.forEach(item => {
 
         const proportion =
             totalWeight > 0
                 ? item.weight / totalWeight
-                : 1 / calculated.length;
+                : 1 / videoData.length;
 
-        let allocatedMinutes =
-            Math.floor(shiftMinutes * proportion);
-
-        // Never allocate more than the actual remaining
-        // video length.
-        allocatedMinutes =
-            Math.min(
-                allocatedMinutes,
-                item.remainingMinutes
+        let allocation =
+            Math.floor(
+                totalAvailableMinutes *
+                proportion
             );
 
-        // At least 1 minute for every unfinished video
-        allocatedMinutes =
-            Math.max(1, allocatedMinutes);
+        /*
+         * Never allocate more than the actual
+         * remaining video duration.
+         *
+         * But if the video duration is unknown,
+         * allow at least 1 minute temporarily.
+         */
 
-        allocations[item.key] = allocatedMinutes;
+        if (item.remainingMinutes > 0) {
+
+            allocation =
+                Math.min(
+                    allocation,
+                    item.remainingMinutes
+                );
+        }
+
+        allocations[item.key] =
+            Math.max(1, allocation);
     });
 
-    // ---------------------------------------------------------
-    // If rounding leaves unused minutes,
-    // give them to the most urgent remaining videos.
-    // ---------------------------------------------------------
+    // =====================================================
+    // 7. REDISTRIBUTE UNUSED MINUTES
+    // =====================================================
 
     let allocatedTotal =
         Object.values(allocations)
-            .reduce((sum, value) => sum + value, 0);
+            .reduce(
+                (sum, value) =>
+                    sum + value,
+                0
+            );
 
     let remainingPool =
-        shiftMinutes - allocatedTotal;
+        totalAvailableMinutes -
+        allocatedTotal;
 
-    if (remainingPool > 0) {
+    /*
+     * Give unused time to videos that still
+     * have remaining workload.
+     *
+     * Deadline comes first.
+     */
 
-        const priorityOrder =
-            [...calculated].sort((a, b) => {
+    const priorityOrder =
+        [...videoData].sort((a, b) => {
 
-                // First deadline pressure
-                if (
-                    b.deadlineWeight !==
-                    a.deadlineWeight
-                ) {
-                    return (
-                        b.deadlineWeight -
-                        a.deadlineWeight
-                    );
-                }
-
-                // Then longer remaining video
+            if (
+                b.deadlineWeight !==
+                a.deadlineWeight
+            ) {
                 return (
-                    b.remainingMinutes -
-                    a.remainingMinutes
+                    b.deadlineWeight -
+                    a.deadlineWeight
                 );
-            });
+            }
 
-        for (
-            let i = 0;
-            i < priorityOrder.length &&
-            remainingPool > 0;
-            i++
-        ) {
+            return (
+                b.remainingMinutes -
+                a.remainingMinutes
+            );
+        });
 
-            const item = priorityOrder[i];
+    while (remainingPool > 0) {
 
-            // Do not allocate beyond remaining video length
+        let added = false;
+
+        for (const item of priorityOrder) {
+
             if (
                 allocations[item.key] <
                 item.remainingMinutes
             ) {
 
                 allocations[item.key]++;
+
                 remainingPool--;
+
+                added = true;
+
+                if (remainingPool <= 0) {
+                    break;
+                }
             }
         }
+
+        /*
+         * No video can accept more time.
+         */
+        if (!added) {
+            break;
+        }
     }
+
+    // =====================================================
+    // 8. DEBUG
+    // =====================================================
+
+    console.log(
+        "🎥 YT ALLOCATION RECALCULATED",
+        {
+            shiftAvailableMinutes:
+                totalAvailableMinutes,
+
+            totalVideoMinutes:
+                totalRemainingVideoMinutes,
+
+            allocations:
+                allocations
+        }
+    );
 
     return allocations;
 };
