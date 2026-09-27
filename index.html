@@ -4073,40 +4073,52 @@ window.triggerMandatoryBreak = function() {
         // BREAK FINISHED
         // =====================================
 
-        if (breakSeconds <= 0) {
+        // =====================================
+// BREAK FINISHED
+// =====================================
 
-            clearInterval(window.activeBreakInterval);
+if (breakSeconds <= 0) {
 
-            window.activeBreakInterval = null;
+    clearInterval(window.activeBreakInterval);
 
-            // STOP SIREN
-            stopBreakLast10SecSiren();
+    window.activeBreakInterval = null;
 
-            console.log(
-                "✅ BREAK COMPLETE - SYSTEM UNLOCKED"
-            );
+    // STOP LAST 10 SECOND SIREN
+    stopBreakLast10SecSiren();
 
-            // Hide overlay
-            overlay.classList.add("hidden");
+    console.log(
+        "✅ BREAK COMPLETE - SYSTEM UNLOCKED"
+    );
 
-            // Restore scrolling
-            document.body.style.overflow = "";
+    // =====================================
+    // REMOVE BREAK SCREEN COMPLETELY
+    // =====================================
 
-            // Reset continuous study counter
-            window.continuousStudyTime = 0;
+    if (overlay) {
+        overlay.remove();
+    }
 
-            // Reset inactivity counter
-            window.idleInactivityCounter = 0;
+    // Restore scrolling
+    document.body.style.overflow = "";
 
-            // Start fresh 2-minute watchdog
-            if (typeof startIdle === "function") {
-                startIdle(125);
-            }
+    // Reset continuous study counter
+    window.continuousStudyTime = 0;
 
-            console.log(
-                "🟢 NEW 2-MINUTE WATCHDOG STARTED"
-            );
-        }
+    // Reset inactivity counter
+    window.idleInactivityCounter = 0;
+
+    // =====================================
+    // START FRESH 2-MINUTE WATCHDOG
+    // =====================================
+
+    if (typeof startIdle === "function") {
+        startIdle(125);
+    }
+
+    console.log(
+        "🟢 NEW 2-MINUTE WATCHDOG STARTED"
+    );
+}
 
     }, 1000);
 };
