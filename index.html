@@ -2600,32 +2600,43 @@ window.submitMcqAnswer = function() {
         btn.style.borderColor = "#334155";
     });
 };
-// 3. EXIT THE HUB (FORCES COMPLETE STOP & DESTROY)
+// 3. EXIT THE HUB (PAUSE FIRST, SAVE MARKS, THEN CLOSE)
 window.closeStudyVideoModal = function() {
     
-    // 1. Completely stop and kill the YouTube player instance so background audio/video stops
-    if(window.ytPlayer && typeof window.ytPlayer.stopVideo === 'function') {
-        window.ytPlayer.stopVideo(); 
-        
-        // Save the exact millisecond and cumulative decimal score to Firebase
-        if(window.currentPlayingVideoKey && currentUser) {
-            let cTime = window.ytPlayer.getCurrentTime();
-            let dur = window.ytPlayer.getDuration();
-            
-            update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
-                progress: cTime, 
-                duration: dur,
-                mcqScore: window.currentMcqSession.marks,
-                mcqTotal: window.currentMcqSession.total
-            });
-        }
+    // Step 1: Immediately pause the video and clear any background tracking loops
+    if(window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
+        window.ytPlayer.pauseVideo(); 
+    }
+    if(window.videoSaveInterval) {
+        clearInterval(window.videoSaveInterval);
+    }
+    if(window.mcqInterval) {
+        clearInterval(window.mcqInterval);
     }
 
-    // 2. Hide Modal
-    document.getElementById("videoModal").classList.add("hidden");
-    
-    // 3. Clear MCQ timer loop
-    if(window.mcqInterval) clearInterval(window.mcqInterval);
+    // Step 2: Submit and save the progress and cumulative MCQ scores to Firebase right away
+    if(window.currentPlayingVideoKey && currentUser) {
+        let cTime = window.ytPlayer && typeof window.ytPlayer.getCurrentTime === 'function' ? window.ytPlayer.getCurrentTime() : 0;
+        let dur = window.ytPlayer && typeof window.ytPlayer.getDuration === 'function' ? window.ytPlayer.getDuration() : 0;
+        
+        update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
+            progress: cTime, 
+            duration: dur,
+            mcqScore: window.currentMcqSession.marks,
+            mcqTotal: window.currentMcqSession.total
+        });
+    }
+
+    // Step 3: Fully stop the video stream so no audio plays in the background
+    if(window.ytPlayer && typeof window.ytPlayer.stopVideo === 'function') {
+        window.ytPlayer.stopVideo();
+    }
+
+    // Step 4: Hide the modal window completely
+    const modal = document.getElementById("videoModal");
+    if(modal) {
+        modal.classList.add("hidden");
+    }
 };
 // 3. TRACK PROGRESS EVERY 5 SECONDS
 function onPlayerStateChange(event) {
