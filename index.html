@@ -449,34 +449,55 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
     👁️ ENTER DEEP FOCUS
 </button>
       </div>
-    <!-- DYNAMIC VIDEO LIST (MULTIPLE VIDEOS) -->
-<!-- FOOLPROOF CAPTIVE YOUTUBE + NOTES HUB -->
+   <!-- FOOLPROOF CAPTIVE YOUTUBE + MCQ HUB -->
 <div id="videoModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: #020617; z-index: 100000; display: flex; flex-direction: column;">
     
     <!-- HUB HEADER -->
-    <div style="background:#0f172a; padding:15px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #eab308; height: 70px; box-sizing: border-box;">
+    <div style="background:#0f172a; padding:15px 20px; display:flex; justify-content:space-between; align-items:center; border-bottom:2px solid #eab308; height: 70px; box-sizing: border-box; flex-shrink: 0;">
         <h3 style="margin:0; color:#eab308; display:flex; align-items:center; gap:10px;">
-            🎥 Smart Study Hub
+            🎥 Smart Video & MCQ Hub
         </h3>
         <div style="display:flex; gap:15px; align-items:center;">
             <div style="color:#ef4444; font-size:12px; font-weight:bold;">DO NOT SWITCH TABS!</div>
-            <button onclick="window.toggleHubNotes()" style="padding:8px 20px; background:#8b5cf6; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">📝 Toggle Notes</button>
-            <button onclick="window.closeStudyVideoModal()" style="padding:8px 25px; background:#ef4444; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">Exit Hub</button>
+            <button onclick="window.toggleHubMCQ()" style="padding:8px 20px; background:#8b5cf6; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">📝 Toggle MCQ Panel</button>
+            <button onclick="window.closeStudyVideoModal()" style="padding:8px 25px; background:#ef4444; color:white; font-weight:bold; border:none; border-radius:6px; cursor:pointer;">Exit Hub & Save</button>
         </div>
     </div>
 
     <!-- SPLIT SCREEN BODY -->
-    <div style="display:flex; width:100vw; height: calc(100vh - 70px);">
+    <div style="display:flex; flex-grow:1; overflow:hidden; width:100%;">
         
-        <!-- Left Side: YouTube -->
-        <div id="videoSplitLeft" style="flex:1; background:#000; position:relative; transition: all 0.3s ease;">
-            <!-- This Absolute Positioning Forces 100% Full Screen -->
-            <div id="ytPlayer" style="position:absolute; top:0; left:0; width:100%; height:100%;"></div>
+        <!-- Left Side: YouTube (Flex-grow fills screen automatically) -->
+        <div id="videoSplitLeft" style="flex:1; background:#000; display:flex; flex-direction:column; transition: all 0.3s ease;">
+            <div style="flex-grow:1; width:100%; height:100%;">
+                <div id="ytPlayer"></div>
+            </div>
         </div>
         
-        <!-- Right Side: Notes Canvas (Hidden by default) -->
-        <div id="videoSplitRight" style="flex:1; background:#020617; display:none; flex-direction:column; padding:10px; border-left:2px solid #334155; transition: all 0.3s ease;">
-            <!-- Canvas injects here -->
+        <!-- Right Side: MCQ Panel (Hidden by default) -->
+        <div id="videoSplitRight" style="width: 350px; background:#020617; display:none; flex-direction:column; padding:20px; border-left:2px solid #334155; transition: all 0.3s ease;">
+            
+            <h3 style="color:#38bdf8; text-align:center; margin-top:0; border-bottom:1px solid #1e293b; padding-bottom:10px;">Live OMR Clicker</h3>
+            
+            <div style="text-align:center; margin-bottom: 20px;">
+                <div id="mcqTimerDisplay" style="font-family:monospace; font-size:40px; font-weight:900; color:#facc15;">00:00</div>
+                <button onclick="window.startMcqTimer()" style="background:#0ea5e9; border:none; color:white; font-weight:bold; padding:8px 20px; border-radius:6px; margin-top:10px; cursor:pointer;">Start Timer</button>
+            </div>
+
+            <!-- Options Grid -->
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-bottom:20px;">
+                <button id="mcqOptA" class="mcq-btn" onclick="window.selectMcqOption('A')" style="padding:20px; font-size:24px; font-weight:bold; background:#0f172a; border:2px solid #334155; color:white; border-radius:12px; cursor:pointer;">A</button>
+                <button id="mcqOptB" class="mcq-btn" onclick="window.selectMcqOption('B')" style="padding:20px; font-size:24px; font-weight:bold; background:#0f172a; border:2px solid #334155; color:white; border-radius:12px; cursor:pointer;">B</button>
+                <button id="mcqOptC" class="mcq-btn" onclick="window.selectMcqOption('C')" style="padding:20px; font-size:24px; font-weight:bold; background:#0f172a; border:2px solid #334155; color:white; border-radius:12px; cursor:pointer;">C</button>
+                <button id="mcqOptD" class="mcq-btn" onclick="window.selectMcqOption('D')" style="padding:20px; font-size:24px; font-weight:bold; background:#0f172a; border:2px solid #334155; color:white; border-radius:12px; cursor:pointer;">D</button>
+            </div>
+
+            <button onclick="window.submitMcqAnswer()" style="background:#22c55e; border:none; color:white; font-weight:bold; font-size:18px; padding:15px; border-radius:8px; cursor:pointer; width:100%; box-shadow: 0 4px 10px rgba(34, 197, 94, 0.3);">Submit & Grade</button>
+            
+            <div style="margin-top:auto; padding:15px; background:#1e293b; border-radius:8px; text-align:center;">
+                <div style="font-size:12px; color:#94a3b8; text-transform:uppercase; font-weight:bold;">Session Score</div>
+                <div id="mcqScoreDisplay" style="font-size:24px; color:#4ade80; font-weight:900;">0 / 0</div>
+            </div>
         </div>
     </div>
 </div>
@@ -2382,40 +2403,35 @@ window.loadAssignedVideos = function() {
         }
     });
 };
+// --- MCQ SYSTEM VARIABLES ---
+window.mcqInterval = null;
+window.mcqSeconds = 0;
+window.mcqSelected = null;
+window.currentMcqSession = { correct: 0, total: 0 };
 
 // 1. PLAY OR RESUME THE VIDEO IN THE HUB
-window.playSpecificVideo = function(videoKey, ytId, startAt) {
+window.playSpecificVideo = function(videoKey, ytId, startAt, oldScore, oldTotal) {
     window.currentPlayingVideoKey = videoKey;
+    
+    // Reset MCQ Session for this video
+    window.currentMcqSession = { 
+        correct: oldScore ? parseInt(oldScore) : 0, 
+        total: oldTotal ? parseInt(oldTotal) : 0 
+    };
+    document.getElementById("mcqScoreDisplay").innerText = `${window.currentMcqSession.correct} / ${window.currentMcqSession.total}`;
     
     const modal = document.getElementById("videoModal");
     if(!modal) return alert("Error: Video modal missing from HTML!");
     modal.classList.remove("hidden");
     
-    // Default to Full Screen Video (Hide the Notes)
-    const rightPane = document.getElementById("videoSplitRight");
-    rightPane.style.display = "none"; 
-    
-    // Quietly prepare the Notes Canvas in the hidden right pane
-    const canvasBox = document.getElementById("canvasBox");
-    if(canvasBox) {
-        rightPane.appendChild(canvasBox);
-        canvasBox.classList.remove("hidden", "board-fullscreen");
-        canvasBox.style.minHeight = "100%"; 
-    }
-    
-    // Hide the normal canvas buttons since we are inside the Hub
-    const btnFull = document.getElementById("fullscreenBtn");
-    const btnClose = document.getElementById("closeCanvasBtn");
-    if(btnFull) btnFull.style.display = "none";
-    if(btnClose) btnClose.style.display = "none";
+    // Default to Full Screen Video (Hide MCQ panel)
+    document.getElementById("videoSplitRight").style.display = "none"; 
 
-    // YouTube API Safety Check
     if (typeof YT === 'undefined' || !YT.Player) {
         alert("YouTube system is still connecting to the server. Please wait 2 seconds and click Play again.");
         return;
     }
 
-    // Load or Resume Video
     if(!window.ytPlayer) {
         window.ytPlayer = new YT.Player('ytPlayer', {
             height: '100%', width: '100%', videoId: ytId,
@@ -2427,59 +2443,114 @@ window.playSpecificVideo = function(videoKey, ytId, startAt) {
         try { currentLoadedId = window.ytPlayer.getVideoData().video_id; } catch(e){}
 
         if (currentLoadedId === ytId) {
-            window.ytPlayer.playVideo(); // Unpause if same video
+            window.ytPlayer.playVideo(); 
         } else {
             window.ytPlayer.loadVideoById({videoId: ytId, startSeconds: startAt});
         }
     }
 };
 
-// 2. TOGGLE NOTES (50/50 SPLIT SCREEN)
-window.toggleHubNotes = function() {
+// 2. TOGGLE MCQ PANEL
+window.toggleHubMCQ = function() {
     const rightPane = document.getElementById("videoSplitRight");
-    
     if (rightPane.style.display === "none") {
-        // Turn ON 50/50 Split Screen
         rightPane.style.display = "flex";
-        // Force the canvas to recalculate its new 50% width securely
-        setTimeout(() => { window.dispatchEvent(new Event('resize')); }, 100);
     } else {
-        // Turn OFF Notes (Video goes back to 100% full screen width)
         rightPane.style.display = "none";
     }
 };
 
-// 3. EXIT THE HUB (AUTOSAVES EXACT MILLISECOND)
+// --- NEW MCQ LOGIC ---
+window.startMcqTimer = function() {
+    if(window.mcqInterval) clearInterval(window.mcqInterval);
+    window.mcqSeconds = 0;
+    
+    // Reset buttons
+    window.mcqSelected = null;
+    document.querySelectorAll(".mcq-btn").forEach(btn => {
+        btn.style.background = "#0f172a";
+        btn.style.borderColor = "#334155";
+    });
+
+    window.mcqInterval = setInterval(() => {
+        window.mcqSeconds++;
+        const m = Math.floor(window.mcqSeconds / 60);
+        const s = window.mcqSeconds % 60;
+        document.getElementById("mcqTimerDisplay").innerText = `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }, 1000);
+};
+
+window.selectMcqOption = function(opt) {
+    window.mcqSelected = opt;
+    document.querySelectorAll(".mcq-btn").forEach(btn => {
+        btn.style.background = "#0f172a";
+        btn.style.borderColor = "#334155";
+    });
+    const selectedBtn = document.getElementById("mcqOpt" + opt);
+    selectedBtn.style.background = "#3b82f6";
+    selectedBtn.style.borderColor = "#60a5fa";
+};
+
+window.submitMcqAnswer = function() {
+    if(!window.mcqSelected) return alert("Please select an option first!");
+    
+    // Stop Timer
+    clearInterval(window.mcqInterval);
+    const timeTaken = document.getElementById("mcqTimerDisplay").innerText;
+    
+    // Ask for actual correct answer
+    let actualCorrect = prompt(`You selected [ ${window.mcqSelected} ] in ${timeTaken}.\n\nWhat was the CORRECT answer shown in the video? (A/B/C/D)`);
+    
+    if(!actualCorrect) return; // User cancelled
+    actualCorrect = actualCorrect.toUpperCase().trim();
+    
+    if(!['A','B','C','D'].includes(actualCorrect)) {
+        return alert("Invalid input. Must be A, B, C, or D.");
+    }
+    
+    window.currentMcqSession.total++;
+    
+    if (window.mcqSelected === actualCorrect) {
+        window.currentMcqSession.correct++;
+        alert(`✅ CORRECT! (+1 Point)\nTime taken: ${timeTaken}`);
+    } else {
+        alert(`❌ INCORRECT.\nYou chose: ${window.mcqSelected}\nCorrect was: ${actualCorrect}`);
+    }
+    
+    // Update Score UI
+    document.getElementById("mcqScoreDisplay").innerText = `${window.currentMcqSession.correct} / ${window.currentMcqSession.total}`;
+    
+    // Reset Timer display for next question
+    document.getElementById("mcqTimerDisplay").innerText = "00:00";
+    window.mcqSelected = null;
+    document.querySelectorAll(".mcq-btn").forEach(btn => {
+        btn.style.background = "#0f172a";
+        btn.style.borderColor = "#334155";
+    });
+};
+
+// 3. EXIT THE HUB (AUTOSAVES PROGRESS + MCQ SCORE)
 window.closeStudyVideoModal = function() {
     document.getElementById("videoModal").classList.add("hidden");
     
-    // Pause video perfectly and save EXACT time instantly
+    if(window.mcqInterval) clearInterval(window.mcqInterval);
+    
     if(window.ytPlayer && typeof window.ytPlayer.pauseVideo === 'function') {
         window.ytPlayer.pauseVideo(); 
         
         if(window.currentPlayingVideoKey && currentUser) {
             let cTime = window.ytPlayer.getCurrentTime();
             let dur = window.ytPlayer.getDuration();
+            
+            // Save Video time AND MCQ Score to database
             update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
-                progress: cTime, duration: dur 
+                progress: cTime, 
+                duration: dur,
+                mcqScore: window.currentMcqSession.correct,
+                mcqTotal: window.currentMcqSession.total
             });
         }
     }
-    
-    // Move Canvas Box back to normal dashboard automatically
-    const studentView = document.getElementById("studentView");
-    const canvasBox = document.getElementById("canvasBox");
-    if (studentView && canvasBox) {
-        studentView.appendChild(canvasBox);
-        canvasBox.classList.add("hidden"); 
-        canvasBox.style.minHeight = "70vh";
-    }
-    
-    // Restore Canvas buttons for normal dashboard use
-    const btnFull = document.getElementById("fullscreenBtn");
-    const btnClose = document.getElementById("closeCanvasBtn");
-    if(btnFull) btnFull.style.display = "inline-block";
-    if(btnClose) btnClose.style.display = "inline-block";
 };
 // 3. TRACK PROGRESS EVERY 5 SECONDS
 function onPlayerStateChange(event) {
@@ -3559,11 +3630,15 @@ window.openRoadmapWindow = function(subjectFilter) {
         });
 
         // 2. APPEND ASSIGNED VIDEOS AS NODES AT THE END OF THE MAP
+        // 2. APPEND ASSIGNED VIDEOS AS NODES AT THE END OF THE MAP
         if (vData) {
             Object.keys(vData).forEach((key) => {
                 const v = vData[key];
                 let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
                 const isDone = p > 90;
+                
+                // Fetch the saved MCQ score if it exists
+                const scoreStr = v.mcqTotal > 0 ? `<div style="font-size:14px; font-weight:bold; color:#a855f7; margin-top:5px; background:rgba(168, 85, 247, 0.1); padding:4px 8px; border-radius:4px; display:inline-block;">🎯 MCQ Score: ${v.mcqScore} / ${v.mcqTotal}</div>` : "";
 
                 nodesArray.push(`
                     <div class="simple-node ${isDone ? 'done' : ''}" style="border-color:${isDone ? '#22c55e' : '#eab308'};">
@@ -3572,9 +3647,10 @@ window.openRoadmapWindow = function(subjectFilter) {
                         <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#eab308;">Assigned Video</div>
                         <div style="font-size:12px; color:#94a3b8;">Due: ${v.deadline} | Progress: <span style="color:${isDone ? '#22c55e' : '#eab308'}; font-weight:bold;">${p}%</span></div>
                         
+                        ${scoreStr} <!-- Injects Score here -->
+                        
                         <div style="display:flex; margin-top:10px;">
-                            <!-- Closes the Map Modal automatically when playing the video so they don't overlap -->
-                            <button class="btn-simple start" style="background:#eab308; border-color:#eab308; color:black;" onclick="window.closeInPageMap(); window.playSpecificVideo('${key}', '${v.id}', ${v.progress})">▶ Play Video</button>
+                            <button class="btn-simple start" style="background:#eab308; border-color:#eab308; color:black;" onclick="window.closeInPageMap(); window.playSpecificVideo('${key}', '${v.id}', ${v.progress}, '${v.mcqScore || 0}', '${v.mcqTotal || 0}')">▶ Play & Solve</button>
                         </div>
                     </div>
                 `);
