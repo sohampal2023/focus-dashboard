@@ -2645,7 +2645,41 @@ window.mcqInterval = null;
 window.mcqSeconds = 0;
 window.mcqSelected = null;
 window.currentMcqSession = { correct: 0, total: 0 };
+// =====================================================
+// SAVE CURRENT MCQ SCORE TO FIREBASE
+// =====================================================
 
+if (currentUser && window.currentPlayingVideoKey) {
+
+    update(
+        ref(
+            db,
+            `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
+        ),
+        {
+            mcqScore: window.currentMcqSession.marks,
+            mcqTotal: window.currentMcqSession.total
+        }
+    )
+    .then(() => {
+
+        console.log(
+            "✅ MCQ score saved:",
+            window.currentMcqSession.marks,
+            "/",
+            window.currentMcqSession.total
+        );
+
+    })
+    .catch(error => {
+
+        console.error(
+            "MCQ score save error:",
+            error
+        );
+
+    });
+}
 window.currentVideoRewarded = false;
 // 1. PLAY OR RESUME THE VIDEO IN THE HUB
 window.playSpecificVideo = function(videoKey, ytId, startAt, oldScore, oldTotal, rewardGiven) {
@@ -2699,131 +2733,166 @@ window.playSpecificVideo = function(videoKey, ytId, startAt, oldScore, oldTotal,
         }
     }
 };
-
-// 2. 🔥 AUTOMATIC TRACKING & MARKING DONE ENGINE 🔥
 window.onPlayerStateChange = function(event) {
 
-    if (event.data == YT.PlayerState.PLAYING) {
+    // =====================================================
+    // VIDEO PLAYING
+    // =====================================================
+    if (event.data === YT.PlayerState.PLAYING) {
 
-        // Prevent duplicate intervals
+        // Prevent duplicate save intervals
         if (window.videoSaveInterval) {
             clearInterval(window.videoSaveInterval);
         }
 
-        // Runs every 5 seconds while playing
         window.videoSaveInterval = setInterval(async () => {
 
             if (
-                window.ytPlayer &&
-                window.currentPlayingVideoKey &&
-                currentUser
+                !window.ytPlayer ||
+                !window.currentPlayingVideoKey ||
+                !currentUser
             ) {
+                return;
+            }
 
-                let cTime = window.ytPlayer.getCurrentTime();
-                let dur = window.ytPlayer.getDuration();
+            try {
 
-                let updates = {
-                    progress: cTime,
-                    duration: dur
-                };
+                const cTime = window.ytPlayer.getCurrentTime();
+                const dur = window.ytPlayer.getDuration();
 
-                // =========================================
-                // AUTOMATICALLY MARK AS DONE AT 90%
-                // =========================================
-
-                if (
-                    dur > 0 &&
-                    (cTime / dur) >= 0.90 &&
-                    !window.currentVideoRewarded
-                ) {
-
-                    window.currentVideoRewarded = true;
-
-                    // Final MCQ score
-                    updates.mcqScore =
-                        window.currentMcqSession
-                            ? window.currentMcqSession.marks
-                            : 0;
-
-                    updates.mcqTotal =
-                        window.currentMcqSession
-                            ? window.currentMcqSession.total
-                            : 0;
-
-                    try {
-
-                        // -----------------------------------------
-                        // 1. SAVE FINAL PROGRESS + MCQ
-                        // -----------------------------------------
-
-                        await update(
-                            ref(
-                                db,
-                                `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
-                            ),
-                            updates
-                        );
-
-                        // -----------------------------------------
-                        // 2. NOW CLEAN DATABASE
-                        //    KEEP ONLY VIDEO NAME + MARKS
-                        // -----------------------------------------
-
-                        await window.completeYouTubeVideo();
-
-                        console.log(
-                            "✅ Video completed and database cleaned."
-                        );
-
-                        // -----------------------------------------
-                        // 3. STOP SAVE TIMER
-                        // -----------------------------------------
-
-                        if (window.videoSaveInterval) {
-                            clearInterval(
-                                window.videoSaveInterval
-                            );
-
-                            window.videoSaveInterval = null;
-                        }
-
-                    } catch (error) {
-
-                        console.error(
-                            "Video completion error:",
-                            error
-                        );
-
-                    }
-
-                    // VERY IMPORTANT
-                    // Do not execute the normal update below
-                    return;
-                }
-
-                // =========================================
-                // NORMAL PROGRESS SAVE
-                // =========================================
-
+                // -----------------------------------------
+                // ONLY SAVE CURRENT POSITION
+                // -----------------------------------------
                 await update(
                     ref(
                         db,
                         `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
                     ),
-                    updates
+                    {
+                        progress: cTime,
+                        duration: dur
+                    }
                 );
+
+                console.log(
+                    `💾 Video progress saved: ${cTime.toFixed(1)} / ${dur.toFixed(1)} sec`
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Video progress save error:",
+                    error
+                );
+
             }
 
         }, 5000);
 
-    } else {
+    }
+
+
+    // =====================================================
+    // VIDEO PAUSED
+    // =====================================================
+    else if (event.data === YT.PlayerState.PAUSED) {
 
         if (window.videoSaveInterval) {
+            clearInterval(window.videoSaveInterval);
+            window.videoSaveInterval = null;
+        }
 
-            clearInterval(
-                window.videoSaveInterval
-            );
+        // Save immediately when paused
+        if (
+            window.ytPlayer &&
+            window.currentPlayingVideoKey &&
+            currentUser
+        ) {
 
+            try {
+
+                const cTime = window.ytPlayer.getCurrentTime();
+                const dur = window.ytPlayer.getDuration();
+
+                update(
+                    ref(
+                        db,
+                        `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
+                    ),
+                    {
+                        progress: cTime,
+                        duration: dur
+                    }
+                );
+
+                console.log(
+                    `⏸️ Pause position saved: ${cTime.toFixed(1)} sec`
+                );
+
+            } catch (error) {
+
+                console.error(
+                    "Pause save error:",
+                    error
+                );
+
+            }
+        }
+    }
+
+
+    // =====================================================
+    // VIDEO ACTUALLY ENDED
+    // =====================================================
+    else if (event.data === YT.PlayerState.ENDED) {
+
+        console.log("🎬 VIDEO ACTUALLY ENDED");
+
+        if (window.videoSaveInterval) {
+            clearInterval(window.videoSaveInterval);
+            window.videoSaveInterval = null;
+        }
+
+        // Mark video as actually completed,
+        // BUT DO NOT DELETE DATABASE DATA YET.
+        if (
+            window.currentPlayingVideoKey &&
+            currentUser
+        ) {
+
+            update(
+                ref(
+                    db,
+                    `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
+                ),
+                {
+                    progress: window.ytPlayer.getDuration(),
+                    duration: window.ytPlayer.getDuration(),
+                    videoCompleted: true
+                }
+            )
+            .then(() => {
+                console.log(
+                    "✅ Video completion recorded. Waiting for MCQ submission."
+                );
+            })
+            .catch(error => {
+                console.error(
+                    "Video completion save error:",
+                    error
+                );
+            });
+        }
+    }
+
+
+    // =====================================================
+    // OTHER STATES
+    // =====================================================
+    else {
+
+        if (window.videoSaveInterval) {
+            clearInterval(window.videoSaveInterval);
             window.videoSaveInterval = null;
         }
     }
