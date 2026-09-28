@@ -2702,60 +2702,130 @@ window.playSpecificVideo = function(videoKey, ytId, startAt, oldScore, oldTotal,
 
 // 2. 🔥 AUTOMATIC TRACKING & MARKING DONE ENGINE 🔥
 window.onPlayerStateChange = function(event) {
+
     if (event.data == YT.PlayerState.PLAYING) {
+
+        // Prevent duplicate intervals
+        if (window.videoSaveInterval) {
+            clearInterval(window.videoSaveInterval);
+        }
+
         // Runs every 5 seconds while playing
-        window.videoSaveInterval = setInterval(() => {
-            if(window.ytPlayer && window.currentPlayingVideoKey) {
+        window.videoSaveInterval = setInterval(async () => {
+
+            if (
+                window.ytPlayer &&
+                window.currentPlayingVideoKey &&
+                currentUser
+            ) {
+
                 let cTime = window.ytPlayer.getCurrentTime();
                 let dur = window.ytPlayer.getDuration();
-                
-                let updates = { progress: cTime, duration: dur };
-                
-                // AUTOMATICALLY MARK AS DONE (At 90% Watched)
-               if (
-    dur > 0 &&
-    (cTime / dur) >= 0.90 &&
-    !window.currentVideoRewarded
-) {
 
-    window.currentVideoRewarded = true;
+                let updates = {
+                    progress: cTime,
+                    duration: dur
+                };
 
-    updates.rewardGiven = true;
+                // =========================================
+                // AUTOMATICALLY MARK AS DONE AT 90%
+                // =========================================
 
-    // Save final MCQ score before cleanup
-    updates.mcqScore =
-        window.currentMcqSession
-            ? window.currentMcqSession.marks
-            : 0;
+                if (
+                    dur > 0 &&
+                    (cTime / dur) >= 0.90 &&
+                    !window.currentVideoRewarded
+                ) {
 
-    updates.mcqTotal =
-        window.currentMcqSession
-            ? window.currentMcqSession.total
-            : 0;
+                    window.currentVideoRewarded = true;
 
-    // Save normal progress first
-    await update(
-        ref(
-            db,
-            `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
-        ),
-        updates
-    );
+                    // Final MCQ score
+                    updates.mcqScore =
+                        window.currentMcqSession
+                            ? window.currentMcqSession.marks
+                            : 0;
 
-    // Then remove everything except name + marks
-    await window.completeYouTubeVideo();
+                    updates.mcqTotal =
+                        window.currentMcqSession
+                            ? window.currentMcqSession.total
+                            : 0;
 
-    // Continue your existing XP/reward code here
-}
-                
-                // Save to database instantly
-                if(currentUser) {
-                    update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), updates);
+                    try {
+
+                        // -----------------------------------------
+                        // 1. SAVE FINAL PROGRESS + MCQ
+                        // -----------------------------------------
+
+                        await update(
+                            ref(
+                                db,
+                                `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
+                            ),
+                            updates
+                        );
+
+                        // -----------------------------------------
+                        // 2. NOW CLEAN DATABASE
+                        //    KEEP ONLY VIDEO NAME + MARKS
+                        // -----------------------------------------
+
+                        await window.completeYouTubeVideo();
+
+                        console.log(
+                            "✅ Video completed and database cleaned."
+                        );
+
+                        // -----------------------------------------
+                        // 3. STOP SAVE TIMER
+                        // -----------------------------------------
+
+                        if (window.videoSaveInterval) {
+                            clearInterval(
+                                window.videoSaveInterval
+                            );
+
+                            window.videoSaveInterval = null;
+                        }
+
+                    } catch (error) {
+
+                        console.error(
+                            "Video completion error:",
+                            error
+                        );
+
+                    }
+
+                    // VERY IMPORTANT
+                    // Do not execute the normal update below
+                    return;
                 }
+
+                // =========================================
+                // NORMAL PROGRESS SAVE
+                // =========================================
+
+                await update(
+                    ref(
+                        db,
+                        `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
+                    ),
+                    updates
+                );
             }
+
         }, 5000);
+
     } else {
-        if(window.videoSaveInterval) clearInterval(window.videoSaveInterval);
+
+        if (window.videoSaveInterval) {
+
+            clearInterval(
+                window.videoSaveInterval
+            );
+
+            window.videoSaveInterval = null;
+        }
     }
 };
 
