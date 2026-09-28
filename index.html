@@ -3745,24 +3745,26 @@ window.initializeShift = async function () {
         } else {
 
             // Calculate from absolute end time
-            if (data.SHIFT_END_TS) {
+           if (data.SHIFT_END_TS) {
 
-                localShiftRemaining = Math.max(
-                    0,
-                    Number(data.SHIFT_END_TS) - Date.now()
-                );
+    window.shiftEndTimestamp = Number(data.SHIFT_END_TS);
 
-            } else {
+    localShiftRemaining = Math.max(
+        0,
+        window.shiftEndTimestamp - Date.now()
+    );
 
-                // Upgrade old shift data
-                localShiftRemaining =
-                    Number(data.SHIFT_REMAINING_TIME) || 0;
+} else {
 
-                await update(userRef, {
-                    SHIFT_END_TS:
-                        Date.now() + localShiftRemaining
-                });
-            }
+    localShiftRemaining =
+        Number(data.SHIFT_REMAINING_TIME) || 0;
+
+    window.shiftEndTimestamp =
+        Date.now() + localShiftRemaining;
+
+    await update(userRef, {
+        SHIFT_END_TS: window.shiftEndTimestamp
+    });
         }
 
     } else {
@@ -3819,118 +3821,176 @@ window.initializeShift = async function () {
 window.continuousStudyTime = 0;
 window.idleInactivityCounter = 0;
 function startMasterClock() {
-    if(masterClockInterval) clearInterval(masterClockInterval);
-    
-    // 1. Ensure the compulsory break overlay exists in the DOM right away
-    let overlay = document.getElementById("mandatoryBreakOverlay");
-    if (!overlay) {
-        overlay = document.createElement("div");
-        overlay.id = "mandatoryBreakOverlay";
-        overlay.className = "hidden";
-        overlay.style.cssText = "position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(2,6,23,0.99); z-index: 9999999; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 6px solid #38bdf8; backdrop-filter: blur(15px);";
-        overlay.innerHTML = `
-            <h1 style="color:#38bdf8; font-size: 55px; text-transform: uppercase; text-shadow: 0 0 25px #38bdf8; margin-bottom: 10px;">🛑 Compulsory 5-Min Break 🛑</h1>
-            <p style="color:#94a3b8; font-size: 22px; max-width: 600px; line-height: 1.5;">You've hit your focus limit. Stand up, rest your eyes, stretch, and step away from the screen.</p>
-            <div id="breakTimerDisplay" style="font-size: 90px; font-weight: 900; color: #facc15; margin: 30px 0; font-family: monospace; letter-spacing: 2px;">05:00</div>
-            <div style="background: rgba(239, 68, 68, 0.1); border: 2px solid #ef4444; padding: 15px 30px; border-radius: 8px; color:#ef4444; font-weight: bold; font-size: 16px; text-transform: uppercase;">
-                🔒 System Locked Until Break Timer Expires
-            </div>
-        `;
-        document.body.appendChild(overlay);
+
+    if (masterClockInterval) {
+        clearInterval(masterClockInterval);
+        masterClockInterval = null;
     }
 
-    // Auto-inject Shift Tracker if missing
-    let shiftTracker = document.getElementById("hudShiftTracker");
-    if (!shiftTracker && document.getElementById("masterClockDisplay")) {
-        const clockParent = document.getElementById("masterClockDisplay").parentNode;
+    // -----------------------------------------
+    // MASTER TIMER SOURCE
+    // -----------------------------------------
+    if (!window.shiftEndTimestamp && currentUser) {
+        console.warn("SHIFT_END_TS not loaded yet.");
+        return;
+    }
+
+    // -----------------------------------------
+    // SHIFT TRACKER
+    // -----------------------------------------
+    let shiftTracker =
+        document.getElementById("hudShiftTracker");
+
+    if (
+        !shiftTracker &&
+        document.getElementById("masterClockDisplay")
+    ) {
+
+        const clockParent =
+            document.getElementById("masterClockDisplay").parentNode;
+
         shiftTracker = document.createElement("div");
+
         shiftTracker.id = "hudShiftTracker";
-        shiftTracker.style.cssText = "font-size:11px; color:#4ade80; font-weight:bold; margin-top:8px; text-transform:uppercase; text-align:right; letter-spacing:1px;";
+
+        shiftTracker.style.cssText =
+            "font-size:11px;" +
+            "color:#4ade80;" +
+            "font-weight:bold;" +
+            "margin-top:8px;" +
+            "text-transform:uppercase;" +
+            "text-align:right;" +
+            "letter-spacing:1px;";
+
         clockParent.appendChild(shiftTracker);
     }
 
-    masterClockInterval = setInterval(() => {
+    // -----------------------------------------
+    // TIMER UPDATE FUNCTION
+    // -----------------------------------------
+    function updateMasterTimer() {
 
-    if (
-        window.shiftEndTimestamp &&
-        !document.getElementById("bioOverlay")
-    ) {
+        // ALWAYS calculate from absolute end time
         localShiftRemaining = Math.max(
             0,
-            window.shiftEndTimestamp - Date.now()
+            Number(window.shiftEndTimestamp) - Date.now()
         );
-    }
 
-    if (localShiftRemaining <= 0) {
+        // -------------------------------------
+        // SHIFT FINISHED
+        // -------------------------------------
+        if (localShiftRemaining <= 0) {
 
-        localShiftRemaining = 0;
+            localShiftRemaining = 0;
 
-        clearInterval(masterClockInterval);
-        masterClockInterval = null;
+            const disp =
+                document.getElementById("masterClockDisplay");
+
+            if (disp) {
+                disp.innerText = "00:00:00";
+                disp.style.color = "#ef4444";
+            }
+
+            if (shiftTracker) {
+                shiftTracker.innerText =
+                    "SHIFTS: " +
+                    Math.ceil(
+                        (Number(window.totalShiftTimeMs) || 7200000) /
+                        (2 * 60 * 60 * 1000)
+                    ) +
+                    " DONE | 0 LEFT";
+            }
+
+            clearInterval(masterClockInterval);
+            masterClockInterval = null;
+
+            update(
+                ref(db, `users/${currentUser.uid}`),
+                {
+                    SHIFT_REMAINING_TIME: 0,
+                    SHIFT_ACTIVE: false
+                }
+            );
+
+            return;
+        }
+
+        // -------------------------------------
+        // CLOCK DISPLAY
+        // -------------------------------------
+        const h = Math.floor(
+            localShiftRemaining / 3600000
+        );
+
+        const m = Math.floor(
+            (localShiftRemaining % 3600000) / 60000
+        );
+
+        const s = Math.floor(
+            (localShiftRemaining % 60000) / 1000
+        );
 
         const disp =
             document.getElementById("masterClockDisplay");
 
         if (disp) {
-            disp.innerText = "00:00:00";
-            disp.style.color = "#ef4444";
+
+            disp.innerText =
+                `${String(h).padStart(2, "0")}:` +
+                `${String(m).padStart(2, "0")}:` +
+                `${String(s).padStart(2, "0")}`;
+
+            disp.style.color = "";
         }
 
-        // REAL SHIFT END ONLY
-        update(ref(db, `users/${currentUser.uid}`), {
-            SHIFT_REMAINING_TIME: 0,
-            SHIFT_ACTIVE: false
-        });
+        // -------------------------------------
+        // 2-HOUR SHIFT COUNTER
+        // -------------------------------------
+        const SHIFT_BLOCK_MS =
+            2 * 60 * 60 * 1000;
 
-        return;
+        const totalAssignedMs =
+            Number(window.totalShiftTimeMs) ||
+            SHIFT_BLOCK_MS;
+
+        const consumedMs =
+            Math.max(
+                0,
+                totalAssignedMs - localShiftRemaining
+            );
+
+        const totalShifts =
+            Math.ceil(
+                totalAssignedMs / SHIFT_BLOCK_MS
+            );
+
+        const completedShifts =
+            Math.min(
+                totalShifts,
+                Math.floor(
+                    consumedMs / SHIFT_BLOCK_MS
+                )
+            );
+
+        const shiftsLeft =
+            Math.max(
+                0,
+                totalShifts - completedShifts
+            );
+
+        if (shiftTracker) {
+
+            shiftTracker.innerText =
+                `SHIFTS: ${completedShifts} DONE | ${shiftsLeft} LEFT`;
+        }
     }
-        
-        // Check if break overlay is currently hidden
-        const breakOverlay = document.getElementById("mandatoryBreakOverlay");
-        const isBreakActive = breakOverlay && !breakOverlay.classList.contains("hidden");
 
-        if (localStorage.getItem(key("SHIFT_ACTIVE")) === "true" && !isBreakActive) {
-            window.continuousStudyTime++;
-            
-            // 🔥 FORCE BREAK AT EXACTLY 1800 SECONDS (30 MINUTES) 🔥
-            if (window.continuousStudyTime >= 18) { 
-                window.continuousStudyTime = 0; // Reset counter immediately
-                window.triggerMandatoryBreak();
-                return;
-            }
-        }
+    // Update immediately
+    updateMasterTimer();
 
-        // 2-Minute Inactivity Watchdog Check
-        window.idleInactivityCounter = (window.idleInactivityCounter || 0) + 1;
-        if (window.idleInactivityCounter >= 18) { 
-            window.idleInactivityCounter = 0;
-            if (typeof window.handleIdleTimeoutPenalty === 'function') {
-                window.handleIdleTimeoutPenalty();
-            }
-        }
-
-        // Shift calculation tracker
-        const chunkMs = 7200000; 
-        const consumedMs = window.totalShiftTimeMs - localShiftRemaining;
-        const totalShifts = Math.ceil(window.totalShiftTimeMs / chunkMs);
-        const completedShifts = Math.floor(consumedMs / chunkMs);
-        const shiftsLeft = Math.max(0, totalShifts - completedShifts);
-        
-        if(shiftTracker) shiftTracker.innerText = `SHIFTS: ${completedShifts} DONE | ${shiftsLeft} LEFT`;
-
-        const h = Math.floor(localShiftRemaining / 3600000);
-        const m = Math.floor((localShiftRemaining % 3600000) / 60000);
-        const s = Math.floor((localShiftRemaining % 60000) / 1000);
-        
-        const disp = document.getElementById("masterClockDisplay");
-        if(disp) disp.innerText = `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
-
-        if(s % 30 === 0 && currentUser) {
-            update(ref(db, `users/${currentUser.uid}`), {
-                SHIFT_REMAINING_TIME: localShiftRemaining
-            });
-        }
-    }, 1000);
+    // Then update every second
+    masterClockInterval =
+        setInterval(updateMasterTimer, 1000);
 }
   // --- EXISTING WATCHDOG / IDLE INTEGRATION ---
 
