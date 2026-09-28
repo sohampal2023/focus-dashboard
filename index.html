@@ -3082,18 +3082,31 @@ function toggleHistory() {
 }
 // --- ADVANCED TAB WATCHDOG ---
 document.addEventListener("visibilitychange", () => {
-    if (document.hidden && localStorage.getItem(key("SHIFT_ACTIVE")) === "true") {
-        // Tab switched! Punish immediately
-        let currentStrikes = parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+
+    // Never punish the in-app Refresh button
+    if (sessionStorage.getItem("APP_BUTTON_REFRESH") === "true") {
+        return;
+    }
+
+    if (
+        document.hidden &&
+        localStorage.getItem(key("SHIFT_ACTIVE")) === "true"
+    ) {
+        let currentStrikes =
+            parseInt(localStorage.getItem(key("IDLE_STRIKES")) || "0");
+
         currentStrikes++;
-        localStorage.setItem(key("IDLE_STRIKES"), currentStrikes);
-        
-        // Flash screen red and play warning beep (using Web Audio API)
+
+        localStorage.setItem(
+            key("IDLE_STRIKES"),
+            currentStrikes
+        );
+
         flashScreenRed();
         playWarningBeep();
 
-        if(currentStrikes >= 2) {
-            autoLogout(); // Trigger existing auto-logout
+        if (currentStrikes >= 2) {
+            autoLogout();
         }
     }
 });
@@ -3899,24 +3912,35 @@ function startMasterClock() {
 window.resetIdleTimer = function() {
     window.idleInactivityCounter = 0;
 };
-
-// This hooks straight into your existing idle tracking loop
 window.handleIdleTimeoutPenalty = function() {
-    if (typeof currentUser !== 'undefined' && currentUser) {
-        get(ref(db, `users/${currentUser.uid}/IDLE_STRIKES`)).then((snap) => {
-            let currentStrikes = snap.exists() ? parseInt(snap.val()) : 0;
-            currentStrikes++;
-            
-            update(ref(db, `users/${currentUser.uid}`), {
-                IDLE_STRIKES: currentStrikes,
-                PENALTY: (currentStrikes * 5) // Automatically increments penalty score
-            });
-            
-            console.warn("⚠️ Idle Timeout: No student action detected for 2 minutes. Strike added.");
-        }).catch((err) => {
-            console.error("Idle penalty sync error:", err);
+    if (!currentUser) return;
+
+    const userRef = ref(db, `users/${currentUser.uid}`);
+
+    get(userRef).then((snap) => {
+        const data = snap.val() || {};
+
+        let strikes = parseInt(data.IDLE_STRIKES || 0);
+        let penalty = parseInt(data.PENALTY || 0);
+
+        strikes++;
+
+        // Penalty ONLY after 2 actual watchdog misses
+        if (strikes >= 2) {
+            penalty += 10;
+            strikes = 0;
+
+            console.warn("⚠️ 2 watchdog misses = +10 penalty");
+        }
+
+        return update(userRef, {
+            IDLE_STRIKES: strikes,
+            PENALTY: penalty
         });
-    }
+
+    }).catch((err) => {
+        console.error("Idle penalty sync error:", err);
+    });
 };
 window.breakWarningAudio = null;
 window.breakWarningOsc = null;
@@ -5353,12 +5377,7 @@ window.toggleNoticeBoard = function () {
     }
 };
 window.softRefresh = function () {
-
-    sessionStorage.setItem(
-        "APP_BUTTON_REFRESH",
-        "true"
-    );
-
+    sessionStorage.setItem("APP_BUTTON_REFRESH", "true");
     location.reload();
 };
 
