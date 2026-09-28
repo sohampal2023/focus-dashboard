@@ -922,6 +922,7 @@ import {
     signOut,
     onAuthStateChanged,
     setPersistence,
+    browserLocalPersistence
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 
@@ -937,9 +938,11 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-const db = getDatabase(app);
+const db = getDatabase(app);  
 const auth = getAuth(app);
-  await setPersistence(auth, inMemoryPersistence);
+
+// Keep Firebase login across the dashboard Refresh button
+await setPersistence(auth, browserLocalPersistence);
   // --- CONFIGURATION: FIXED SUBJECT LIST ---
 // --- CONFIGURATION: FIXED SUBJECT LIST ---
 const FIXED_SUBJECTS = [
@@ -969,162 +972,35 @@ const FIXED_SUBJECTS = [
 let authStartupCheck = true;
   onAuthStateChanged(auth, async (user) => {
 
-    // --------------------------------------------------
-    // DETECT HOW THE PAGE WAS RELOADED
-    // --------------------------------------------------
-
     const appButtonRefresh =
         sessionStorage.getItem("APP_BUTTON_REFRESH") === "true";
 
-    // The flag is valid for ONLY this one reload
     if (appButtonRefresh) {
         sessionStorage.removeItem("APP_BUTTON_REFRESH");
     }
 
-    // --------------------------------------------------
-    // FIRST AUTH CHECK AFTER PAGE LOAD
-    // --------------------------------------------------
-
-    if (authStartupCheck) {
-        authStartupCheck = false;
-
-        // If Firebase restored an old login after:
-        // F5 / Ctrl+R / browser refresh
-        // then force logout.
-        //
-        // EXCEPTION:
-        // dashboard Refresh button set APP_BUTTON_REFRESH.
-        if (user && !appButtonRefresh) {
-
-            currentUser = null;
-
-            await signOut(auth);
-
-            document.getElementById("statusBox").innerText =
-                "Logged out";
-
-            document.getElementById("loginBtn")
-                .classList.remove("hidden");
-
-            document.getElementById("logoutBtn")
-                .classList.add("hidden");
-
-            document.getElementById("studentView")
-                .classList.add("hidden");
-
-            return;
-        }
-    }
-
-    // --------------------------------------------------
-    // NORMAL AUTH STATE
-    // --------------------------------------------------
-
-    const lockedReport =
-        localStorage.getItem("LOCKED_REPORT_VIEW");
-
-    if (lockedReport) {
-
-        document.body.innerHTML = `
-            <div style="
-                min-height:100vh;
-                display:flex;
-                justify-content:center;
-                align-items:center;
-                background:#020617;
-                padding:20px;
-            ">
-                <div style="width:100%;max-width:520px">
-
-                    ${lockedReport}
-
-                    <div style="
-                        margin-top:15px;
-                        text-align:center
-                    ">
-                        <button
-                            onclick="dismissReportLock()"
-                            style="
-                                padding:12px 20px;
-                                background:#0ea5e9;
-                                border:none;
-                                border-radius:8px;
-                                color:white;
-                                font-size:14px;
-                                cursor:pointer;
-                            "
-                        >
-                            Login & Start New Day
-                        </button>
-                    </div>
-
-                </div>
-            </div>
-        `;
-
+    if (user && !appButtonRefresh) {
+        await signOut(auth);
         return;
     }
 
     if (user) {
-
         currentUser = user;
 
-        document.getElementById("syncStatus").innerText =
-            "Session Restored";
-
-        // --------------------------------------------------
-        // MULTI DEVICE FORCE LOGOUT
-        // --------------------------------------------------
-
-        onValue(
-            ref(db, `users/${user.uid}/forceLogoutTrigger`),
-            async (snap) => {
-
-                if (snap.exists() && snap.val() !== null) {
-
-                    localStorage.clear();
-                    sessionStorage.clear();
-
-                    await signOut(auth);
-
-                    location.reload();
-                }
-            }
-        );
-
-        // --------------------------------------------------
-        // ADMIN
-        // --------------------------------------------------
-
         if (user.email === ADMIN_EMAIL) {
-
             initAdminDashboard();
-
         } else {
-
-            // --------------------------------------------------
-            // STUDENT
-            // --------------------------------------------------
-
             initializeShift();
-
             initStudentDashboard();
         }
 
     } else {
-
         currentUser = null;
-
-        document.getElementById("statusBox").innerText =
-            "Logged out";
 
         document.getElementById("loginBtn")
             .classList.remove("hidden");
 
         document.getElementById("logoutBtn")
-            .classList.add("hidden");
-
-        document.getElementById("studentView")
             .classList.add("hidden");
     }
 });
