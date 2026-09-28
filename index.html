@@ -2712,22 +2712,41 @@ window.onPlayerStateChange = function(event) {
                 let updates = { progress: cTime, duration: dur };
                 
                 // AUTOMATICALLY MARK AS DONE (At 90% Watched)
-                if (dur > 0 && (cTime / dur) >= 0.90 && !window.currentVideoRewarded) {
-                    window.currentVideoRewarded = true;
-                    updates.rewardGiven = true;
-                    
-                    // Grant Gamification XP
-                    let currentXP = parseInt(localStorage.getItem(currentUser.uid + "_TOTAL_XP") || "0");
-                    localStorage.setItem(currentUser.uid + "_TOTAL_XP", currentXP + 50);
-                    if (typeof window.updateGamificationUI === "function") window.updateGamificationUI();
-                    
-                    // Show unobtrusive success popup
-                    const toast = document.createElement("div");
-                    toast.style.cssText = "position:fixed; top:20px; right:20px; background:#22c55e; color:white; padding:15px; border-radius:8px; z-index:999999; font-weight:bold; box-shadow:0 4px 10px rgba(0,0,0,0.5); border: 2px solid #166534;";
-                    toast.innerText = "✅ Video Target Reached! Marked as DONE.";
-                    document.body.appendChild(toast);
-                    setTimeout(() => toast.remove(), 4000);
-                }
+               if (
+    dur > 0 &&
+    (cTime / dur) >= 0.90 &&
+    !window.currentVideoRewarded
+) {
+
+    window.currentVideoRewarded = true;
+
+    updates.rewardGiven = true;
+
+    // Save final MCQ score before cleanup
+    updates.mcqScore =
+        window.currentMcqSession
+            ? window.currentMcqSession.marks
+            : 0;
+
+    updates.mcqTotal =
+        window.currentMcqSession
+            ? window.currentMcqSession.total
+            : 0;
+
+    // Save normal progress first
+    await update(
+        ref(
+            db,
+            `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
+        ),
+        updates
+    );
+
+    // Then remove everything except name + marks
+    await window.completeYouTubeVideo();
+
+    // Continue your existing XP/reward code here
+}
                 
                 // Save to database instantly
                 if(currentUser) {
