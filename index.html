@@ -3118,44 +3118,204 @@ window.hubPauseVideo = function() {
 };
 
 // STEP 2: SUBMIT AND SAVE MARKS EXPLICITLY TO FIREBASE
-window.hubSaveProgress = function() {
-    if (!window.currentPlayingVideoKey || !currentUser) {
-        return alert("No active video session to save.");
+window.hubSaveProgress = async function() {
+
+    if (
+        !window.currentPlayingVideoKey ||
+        !currentUser
+    ) {
+        return alert(
+            "No active video session to save."
+        );
     }
-    
+
     let cTime = 0;
     let dur = 0;
-    try {
-        if (window.ytPlayer && typeof window.ytPlayer.getCurrentTime === 'function') {
-            cTime = window.ytPlayer.getCurrentTime();
-            dur = window.ytPlayer.getDuration();
-        }
-    } catch(e) {}
 
-    update(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`), { 
-        progress: cTime, 
-        duration: dur,
-        mcqScore: window.currentMcqSession ? window.currentMcqSession.marks : 0,
-        mcqTotal: window.currentMcqSession ? window.currentMcqSession.total : 0
-    }).then(() => {
-        alert("💾 Progress and Cumulative MCQ Scores Saved Successfully!");
-    }).catch((err) => {
-        alert("Save failed: " + err.message);
-    });
+    try {
+
+        if (
+            window.ytPlayer &&
+            typeof window.ytPlayer.getCurrentTime ===
+                "function"
+        ) {
+            cTime =
+                window.ytPlayer.getCurrentTime();
+
+            dur =
+                window.ytPlayer.getDuration();
+        }
+
+    } catch (e) {}
+
+    try {
+
+        await update(
+            ref(
+                db,
+                `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
+            ),
+            {
+                progress: cTime,
+                duration: dur,
+
+                mcqScore:
+                    window.currentMcqSession
+                        ? window.currentMcqSession.marks
+                        : 0,
+
+                mcqTotal:
+                    window.currentMcqSession
+                        ? window.currentMcqSession.total
+                        : 0
+            }
+        );
+
+        console.log(
+            "Video progress saved:",
+            cTime
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Video save error:",
+            error
+        );
+    }
 };
 
-// STEP 3: CLOSE/EXIT HUB SAFELY
-window.hubExitModal = function() {
-    if (window.ytPlayer && typeof window.ytPlayer.stopVideo === 'function') {
-        try { window.ytPlayer.stopVideo(); } catch(e){}
+window.hubExitModal = async function() {
+
+    // =========================================
+    // SAVE EXACT CURRENT POSITION FIRST
+    // =========================================
+
+    await window.hubSaveProgress();
+
+    // =========================================
+    // STOP VIDEO
+    // =========================================
+
+    if (
+        window.ytPlayer &&
+        typeof window.ytPlayer.stopVideo ===
+            "function"
+    ) {
+
+        try {
+            window.ytPlayer.stopVideo();
+        } catch (e) {}
     }
-    if (window.videoSaveInterval) clearInterval(window.videoSaveInterval);
-    if (window.mcqInterval) clearInterval(window.mcqInterval);
+
+    // =========================================
+    // STOP SAVE TIMER
+    // =========================================
+
+    if (window.videoSaveInterval) {
+
+        clearInterval(
+            window.videoSaveInterval
+        );
+
+        window.videoSaveInterval = null;
+    }
+
+    if (window.mcqInterval) {
+
+        clearInterval(
+            window.mcqInterval
+        );
+
+        window.mcqInterval = null;
+    }
+
+    // =========================================
+    // CLOSE MODAL
+    // =========================================
 
     try {
-        const modal = document.getElementById("videoModal");
-        if (modal) modal.classList.add("hidden");
-    } catch(e){}
+
+        const modal =
+            document.getElementById(
+                "videoModal"
+            );
+
+        if (modal) {
+            modal.classList.add("hidden");
+        }
+
+    } catch (e) {}
+
+};
+  window.completeYouTubeVideo = async function() {
+
+    if (
+        !currentUser ||
+        !window.currentPlayingVideoKey
+    ) {
+        return;
+    }
+
+    const videoRef = ref(
+        db,
+        `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
+    );
+
+    try {
+
+        const snap =
+            await get(videoRef);
+
+        if (!snap.exists()) {
+            return;
+        }
+
+        const video =
+            snap.val() || {};
+
+        // =========================================
+        // KEEP ONLY VIDEO NAME + MCQ SCORE
+        // =========================================
+
+        const videoName =
+            video.videoName ||
+            video.name ||
+            video.title ||
+            video.id ||
+            "YouTube Video";
+
+        const finalScore =
+            window.currentMcqSession
+                ? Number(
+                    window.currentMcqSession.marks
+                )
+                : Number(
+                    video.mcqScore || 0
+                );
+
+        await set(
+            videoRef,
+            {
+                videoName:
+                    videoName,
+
+                mcqScore:
+                    finalScore
+            }
+        );
+
+        console.log(
+            "✅ Video completed. Old progress data removed."
+        );
+
+    } catch (error) {
+
+        console.error(
+            "Video completion cleanup error:",
+            error
+        );
+    }
 };
 // 3. TRACK PROGRESS EVERY 5 SECONDS
 function onPlayerStateChange(event) {
@@ -7002,13 +7162,21 @@ window.submitCustomVideo = async function() {
     const videoId = match[2];
     const videoKey = "vid_" + Date.now(); 
     
-    const videoPayload = { 
-        id: videoId, 
-        progress: 0, 
-        duration: 0, 
-        deadline: deadline,
-        addedAt: Date.now()
-    };
+    const videoPayload = {
+    id: videoId,
+
+    // Saved name
+    videoName: videoId,
+
+    progress: 0,
+    duration: 0,
+    deadline: deadline,
+
+    mcqScore: 0,
+    mcqTotal: 0,
+
+    addedAt: Date.now()
+};
 
     try {
         await update(ref(db, `users/${window.pendingVideoAssignUid}/ASSIGNED_VIDEOS/${videoKey}`), videoPayload);
