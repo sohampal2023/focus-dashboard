@@ -966,11 +966,22 @@ const FIXED_SUBJECTS = [
 let authStartupCheck = true;
   onAuthStateChanged(auth, async (user) => {
 
-    const lockedReport =
-        localStorage.getItem("LOCKED_REPORT_VIEW");
+    const lockedReport = localStorage.getItem("LOCKED_REPORT_VIEW");
 
     if (lockedReport) {
-        // your existing locked report code
+        document.body.innerHTML = `
+            <div style="min-height:100vh; display:flex; justify-content:center; align-items:center; background:#020617; padding:20px;">
+                <div style="width:100%;max-width:520px">
+                    ${lockedReport}
+                    <div style="margin-top:15px;text-align:center">
+                        <button onclick="dismissReportLock()"
+                            style="padding:12px 20px; background:#0ea5e9; border:none; border-radius:8px; color:white; font-size:14px; cursor:pointer;">
+                            Login & Start New Day
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
         return;
     }
 
@@ -981,34 +992,39 @@ let authStartupCheck = true;
         document.getElementById("syncStatus").innerText =
             "Session Restored";
 
-        // your existing forceLogoutTrigger listener
-        onValue(
-            ref(db, `users/${user.uid}/forceLogoutTrigger`),
-            (snap) => {
-
-                if (
-                    snap.exists() &&
-                    snap.val() !== null
-                ) {
-
-                    localStorage.clear();
-                    sessionStorage.clear();
-
-                    signOut(auth).then(() => {
-                        location.reload();
-                    });
-                }
-            }
-        );
+        /*
+         * IMPORTANT:
+         * Do NOT automatically sign out here.
+         *
+         * forceLogoutTrigger is handled only by explicit
+         * Day End / termination logic.
+         */
 
         if (user.email === ADMIN_EMAIL) {
 
-            initAdminDashboard();
+            await initAdminDashboard();
 
         } else {
 
-            initializeShift();
-            initStudentDashboard();
+            try {
+                await initializeShift();
+                await initStudentDashboard();
+
+            } catch (error) {
+
+                console.error(
+                    "Dashboard initialization error:",
+                    error
+                );
+
+                document.getElementById("syncStatus").innerText =
+                    "Dashboard Load Error";
+
+                alert(
+                    "Login successful, but dashboard initialization failed:\n" +
+                    error.message
+                );
+            }
         }
 
     } else {
@@ -1060,6 +1076,7 @@ const now = () => new Date().toLocaleString();
 const key = k => (currentUser ? currentUser.uid : "GUEST") + "_" + k;
 
 async function handleLoginFlow() {
+
     const email = prompt("Enter Authorized Email:");
     if (!email) return;
 
@@ -1072,10 +1089,16 @@ async function handleLoginFlow() {
     if (!password) return;
 
     try {
-        document.getElementById("syncStatus").innerText = "Authenticating...";
+
+        document.getElementById("syncStatus").innerText =
+            "Authenticating...";
 
         const userCredential =
-            await signInWithEmailAndPassword(auth, email, password);
+            await signInWithEmailAndPassword(
+                auth,
+                email.trim().toLowerCase(),
+                password
+            );
 
         currentUser = userCredential.user;
 
@@ -1092,7 +1115,10 @@ async function handleLoginFlow() {
 
     } catch (error) {
 
-        console.error("LOGIN / INITIALIZATION ERROR:", error);
+        console.error(
+            "LOGIN / INITIALIZATION ERROR:",
+            error
+        );
 
         alert("Login Failed: " + error.message);
 
