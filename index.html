@@ -500,7 +500,134 @@ th,td{border:1px solid #334155;padding:6px;text-align:center}
                 <button id="mcqOptC" class="mcq-btn" onclick="window.selectMcqOption('C')" style="padding:15px; font-size:24px; font-weight:bold; background:#0f172a; border:2px solid #334155; color:white; border-radius:12px; cursor:pointer;">C</button>
                 <button id="mcqOptD" class="mcq-btn" onclick="window.selectMcqOption('D')" style="padding:15px; font-size:24px; font-weight:bold; background:#0f172a; border:2px solid #334155; color:white; border-radius:12px; cursor:pointer;">D</button>
             </div>
+            <div style="text-align:center; margin-bottom: 20px;">
 
+    <div id="mcqTimerDisplay"
+         style="font-family:monospace; font-size:40px; font-weight:900; color:#facc15;">
+        00:00
+    </div>
+
+    <button
+        onclick="window.startMcqTimer()"
+        style="
+            background:#0ea5e9;
+            border:none;
+            color:white;
+            font-weight:bold;
+            padding:8px 20px;
+            border-radius:6px;
+            margin-top:10px;
+            cursor:pointer;
+            text-transform:uppercase;
+            letter-spacing:1px;
+            box-shadow:0 4px 10px rgba(14,165,233,0.4);
+        "
+    >
+        Start Timer
+    </button>
+
+</div>
+
+
+<!-- ADD THIS HERE -->
+<div
+    id="mcqCorrectInstruction"
+    style="
+        display:none;
+        margin:8px 0;
+        padding:8px;
+        border-radius:6px;
+        background:#422006;
+        color:#facc15;
+        text-align:center;
+        font-size:12px;
+        font-weight:bold;
+    "
+>
+</div>
+
+
+<!-- Options Grid -->
+<div style="
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:15px;
+    margin-bottom:15px;
+">
+
+    <button
+        id="mcqOptA"
+        class="mcq-btn"
+        onclick="window.selectMcqOption('A')"
+        style="
+            padding:15px;
+            font-size:24px;
+            font-weight:bold;
+            background:#0f172a;
+            border:2px solid #334155;
+            color:white;
+            border-radius:12px;
+            cursor:pointer;
+        "
+    >
+        A
+    </button>
+
+    <button
+        id="mcqOptB"
+        class="mcq-btn"
+        onclick="window.selectMcqOption('B')"
+        style="
+            padding:15px;
+            font-size:24px;
+            font-weight:bold;
+            background:#0f172a;
+            border:2px solid #334155;
+            color:white;
+            border-radius:12px;
+            cursor:pointer;
+        "
+    >
+        B
+    </button>
+
+    <button
+        id="mcqOptC"
+        class="mcq-btn"
+        onclick="window.selectMcqOption('C')"
+        style="
+            padding:15px;
+            font-size:24px;
+            font-weight:bold;
+            background:#0f172a;
+            border:2px solid #334155;
+            color:white;
+            border-radius:12px;
+            cursor:pointer;
+        "
+    >
+        C
+    </button>
+
+    <button
+        id="mcqOptD"
+        class="mcq-btn"
+        onclick="window.selectMcqOption('D')"
+        style="
+            padding:15px;
+            font-size:24px;
+            font-weight:bold;
+            background:#0f172a;
+            border:2px solid #334155;
+            color:white;
+            border-radius:12px;
+            cursor:pointer;
+        "
+    >
+        D
+    </button>
+
+</div>
             <button onclick="window.submitMcqAnswer()" style="background:#22c55e; border:none; color:white; font-weight:bold; font-size:18px; padding:15px; border-radius:8px; cursor:pointer; width:100%; box-shadow: 0 4px 10px rgba(34, 197, 94, 0.3);">Submit & Grade</button>
             
             <!-- NEW: Live Result List Box -->
@@ -2645,68 +2772,338 @@ window.startMcqTimer = function() {
 };
 
 window.selectMcqOption = function(opt) {
-    if (!window.mcqTimerActive) {
-        alert("⏱️ Please press 'START TIMER' before picking an answer!");
+
+    if (
+        !window.mcqTimerActive &&
+        !window.mcqSelectingCorrect
+    ) {
         return;
     }
-    
+
+    // ============================================
+    // CORRECT ANSWER MODE
+    // ============================================
+
+    if (window.mcqSelectingCorrect) {
+
+        window.mcqCorrectAnswer = opt;
+
+        document
+            .querySelectorAll(".mcq-btn")
+            .forEach(btn => {
+
+                btn.style.background =
+                    "#0f172a";
+
+                btn.style.borderColor =
+                    "#facc15";
+
+                btn.style.color =
+                    "white";
+            });
+
+        const correctBtn =
+            document.getElementById(
+                "mcqOpt" + opt
+            );
+
+        if (correctBtn) {
+
+            correctBtn.style.background =
+                "#22c55e";
+
+            correctBtn.style.borderColor =
+                "#ffffff";
+
+            correctBtn.style.color =
+                "white";
+
+            correctBtn.innerHTML =
+                correctBtn.innerHTML +
+                " ✓ CORRECT";
+        }
+
+        // Finish the question
+        finishMcqQuestion();
+
+        return;
+    }
+
+    // ============================================
+    // STUDENT ANSWER MODE
+    // ============================================
+
     window.mcqSelected = opt;
-    document.querySelectorAll(".mcq-btn").forEach(btn => {
-        btn.style.background = "#0f172a";
-        btn.style.borderColor = "#38bdf8";
-    });
-    const selectedBtn = document.getElementById("mcqOpt" + opt);
-    selectedBtn.style.background = "#3b82f6";
-    selectedBtn.style.borderColor = "#fff";
+
+    document
+        .querySelectorAll(".mcq-btn")
+        .forEach(btn => {
+
+            btn.style.background =
+                "#0f172a";
+
+            btn.style.borderColor =
+                "#38bdf8";
+        });
+
+    const selectedBtn =
+        document.getElementById(
+            "mcqOpt" + opt
+        );
+
+    if (selectedBtn) {
+
+        selectedBtn.style.background =
+            "#3b82f6";
+
+        selectedBtn.style.borderColor =
+            "#ffffff";
+    }
 };
+  window.finishMcqQuestion = function() {
+
+    if (
+        !window.mcqAnswerSubmitted ||
+        !window.mcqSelected ||
+        !window.mcqCorrectAnswer
+    ) {
+        return;
+    }
+
+    const selected =
+        window.mcqSelected;
+
+    const correct =
+        window.mcqCorrectAnswer;
+
+    const timeTaken =
+        window.mcqTimeTaken || "00:00";
+
+    const isCorrect =
+        selected === correct;
+
+    // ============================================
+    // SCORE
+    // ============================================
+
+    window.currentMcqSession.total++;
+
+    if (isCorrect) {
+
+        window.currentMcqSession.marks += 1;
+
+    } else {
+
+        window.currentMcqSession.marks -= 0.33;
+    }
+
+    // ============================================
+    // RESULT
+    // ============================================
+
+    const resultList =
+        document.getElementById(
+            "mcqResultList"
+        );
+
+    if (resultList) {
+
+        if (
+            resultList.innerHTML.includes(
+                "Results will appear here"
+            )
+        ) {
+            resultList.innerHTML = "";
+        }
+
+        if (isCorrect) {
+
+            resultList.innerHTML += `
+                <div style="
+                    background:rgba(34,197,94,.1);
+                    border-left:3px solid #22c55e;
+                    padding:8px;
+                    margin-bottom:5px;
+                    color:#4ade80;
+                ">
+                    Q${window.currentMcqSession.total}:
+                    CORRECT (+1.00)
+                    <br>
+                    Answer: ${selected}
+                    <br>
+                    Time: ${timeTaken}
+                </div>
+            `;
+
+        } else {
+
+            resultList.innerHTML += `
+                <div style="
+                    background:rgba(239,68,68,.1);
+                    border-left:3px solid #ef4444;
+                    padding:8px;
+                    margin-bottom:5px;
+                    color:#fca5a5;
+                ">
+                    Q${window.currentMcqSession.total}:
+                    WRONG (-0.33)
+                    <br>
+                    Your answer: ${selected}
+                    <br>
+                    Correct answer: ${correct}
+                    <br>
+                    Time: ${timeTaken}
+                </div>
+            `;
+        }
+
+        resultList.scrollTop =
+            resultList.scrollHeight;
+    }
+
+    // ============================================
+    // SCORE DISPLAY
+    // ============================================
+
+    const scoreDisplay =
+        document.getElementById(
+            "mcqScoreDisplay"
+        );
+
+    if (scoreDisplay) {
+
+        scoreDisplay.innerText =
+            `${window.currentMcqSession.marks.toFixed(2)} / ` +
+            `${window.currentMcqSession.total}`;
+    }
+
+    // ============================================
+    // SHOW COMPLETED STATE
+    // ============================================
+
+    const instruction =
+        document.getElementById(
+            "mcqCorrectInstruction"
+        );
+
+    if (instruction) {
+
+        instruction.innerText =
+            `✓ QUESTION COMPLETED | ` +
+            `YOUR: ${selected} | ` +
+            `CORRECT: ${correct}`;
+
+        instruction.style.color =
+            isCorrect
+                ? "#4ade80"
+                : "#f87171";
+    }
+
+    // ============================================
+    // ENABLE NEXT QUESTION
+    // ============================================
+
+    const nextBtn =
+        document.getElementById(
+            "mcqNextBtn"
+        );
+
+    if (nextBtn) {
+
+        nextBtn.disabled = false;
+
+        nextBtn.style.opacity = "1";
+        nextBtn.style.cursor = "pointer";
+
+        nextBtn.innerText =
+            "NEXT QUESTION →";
+    }
+
+    // ============================================
+    // RESET STATE FOR CURRENT QUESTION
+    // ============================================
+
+    window.mcqSelectingCorrect = false;
+
+};
+window.mcqAnswerSubmitted = false;
+window.mcqCorrectAnswer = null;
+window.mcqSelectingCorrect = false;
+
 window.submitMcqAnswer = function() {
-    if (!window.mcqTimerActive) return alert("⏱️ Timer is not running. Press 'Start Timer' first.");
-    if (!window.mcqSelected) return alert("Please select an option (A/B/C/D) first!");
-    
+
+    if (!window.mcqTimerActive) {
+        alert("⏱️ Timer is not running.");
+        return;
+    }
+
+    if (!window.mcqSelected) {
+        alert("Please select your answer first!");
+        return;
+    }
+
+    // Stop answer timer
     clearInterval(window.mcqInterval);
     window.mcqTimerActive = false;
-    const timeTaken = document.getElementById("mcqTimerDisplay").innerText;
-    
-    let actualCorrect = prompt(`You selected [ ${window.mcqSelected} ] in ${timeTaken}.\n\nWhat was the CORRECT answer shown in the video? (A/B/C/D)`);
-    
-    if(!actualCorrect) return; 
-    actualCorrect = actualCorrect.toUpperCase().trim();
-    
-    if(!['A','B','C','D'].includes(actualCorrect)) {
-        return alert("Invalid input. Must be A, B, C, or D.");
-    }
-    
-    window.currentMcqSession.total++;
-    const resultList = document.getElementById("mcqResultList");
-    
-    if (resultList.innerHTML.includes("Results will appear here") || resultList.innerHTML.includes("Past Cumulative Score")) {
-        resultList.innerHTML = "";
-    }
-    
-    let isCorrect = (window.mcqSelected === actualCorrect);
-    
-    // --- MATHEMATICS APPLIED HERE ---
-    if (isCorrect) {
-        window.currentMcqSession.marks += 1;
-        alert(`✅ CORRECT! (+1 Point)\nTime taken: ${timeTaken}`);
-        resultList.innerHTML += `<div style="background:rgba(34, 197, 94, 0.1); border-left:3px solid #22c55e; padding:8px; margin-bottom:5px; color:#4ade80;">Q${window.currentMcqSession.total}: Correct! (+1.00)</div>`;
-    } else {
-        window.currentMcqSession.marks -= 0.33;
-        alert(`❌ INCORRECT (-0.33 Points).\nYou chose: ${window.mcqSelected}\nCorrect was: ${actualCorrect}`);
-        resultList.innerHTML += `<div style="background:rgba(239, 68, 68, 0.1); border-left:3px solid #ef4444; padding:8px; margin-bottom:5px; color:#fca5a5;">Q${window.currentMcqSession.total}: Wrong (-0.33) [Was ${actualCorrect}]</div>`;
-    }
-    
-    resultList.scrollTop = resultList.scrollHeight;
-    
-    // Update Score UI to show 2 decimal places
-    document.getElementById("mcqScoreDisplay").innerText = `${window.currentMcqSession.marks.toFixed(2)} / ${window.currentMcqSession.total}`;
-    
-    document.getElementById("mcqTimerDisplay").innerText = "00:00";
-    window.mcqSelected = null;
+
+    const timeTaken =
+        document.getElementById("mcqTimerDisplay").innerText;
+
+    window.mcqAnswerSubmitted = true;
+
+    // Now ask for correct answer using SAME MCQ PALETTE
+    window.mcqSelectingCorrect = true;
+
     document.querySelectorAll(".mcq-btn").forEach(btn => {
+
         btn.style.background = "#0f172a";
-        btn.style.borderColor = "#334155";
+        btn.style.borderColor = "#facc15";
+
+        btn.innerHTML =
+            btn.innerHTML.replace(
+                "✓ CORRECT",
+                ""
+            );
+
     });
+
+    const instruction =
+        document.getElementById("mcqCorrectInstruction");
+
+    if (instruction) {
+
+        instruction.innerText =
+            "SELECT THE CORRECT ANSWER FROM THE SAME A/B/C/D PALETTE";
+
+        instruction.style.display = "block";
+        instruction.style.color = "#facc15";
+    }
+
+    const submitBtn =
+        document.getElementById("mcqSubmitBtn");
+
+    if (submitBtn) {
+
+        submitBtn.disabled = true;
+
+        submitBtn.innerText =
+            "SELECT CORRECT ANSWER";
+    }
+
+    // Disable Next Question
+    const nextBtn =
+        document.getElementById("mcqNextBtn");
+
+    if (nextBtn) {
+
+        nextBtn.disabled = true;
+
+        nextBtn.style.opacity = "0.4";
+        nextBtn.style.cursor = "not-allowed";
+    }
+
+    // Store time
+    window.mcqTimeTaken = timeTaken;
 };
   // STEP 1: PAUSE THE VIDEO EXPLICITLY
 window.hubPauseVideo = function() {
