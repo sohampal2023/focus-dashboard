@@ -1440,7 +1440,10 @@ window.sendNotice = async function (uid) {
   alert("Notice published successfully.");
 };
 window.adminSetShiftTime = async function(uid) {
-    const hrsInput = document.getElementById(`shift_hrs_${uid}`);
+
+    const hrsInput =
+        document.getElementById(`shift_hrs_${uid}`);
+
     const hrs = hrsInput.value;
 
     if (!hrs || isNaN(hrs) || hrs <= 0) {
@@ -1448,22 +1451,62 @@ window.adminSetShiftTime = async function(uid) {
         return;
     }
 
-    const totalMillis = parseFloat(hrs) * 60 * 60 * 1000;
+    const totalMillis =
+        parseFloat(hrs) * 60 * 60 * 1000;
 
-    if (!confirm(`Set study time to ${hrs} hours for this student? This will activate their dashboard.`)) return;
+    if (!confirm(
+        `Set study time to ${hrs} hours for this student?\n\n` +
+        `This will start a NEW shift.`
+    )) return;
 
     try {
-        await update(ref(db, `users/${uid}`), {
-            SHIFT_TOTAL_TIME: totalMillis,
-            SHIFT_REMAINING_TIME: totalMillis,
-            SHIFT_ACTIVE: true,
-            SHIFT_START_TS: Date.now(),
-            TIME_CONSUMED: 0
-        });
-        alert("✅ Time set! Student shift is now LIVE.");
-        hrsInput.value = ""; // Clear input
+
+        const now = Date.now();
+
+        await update(
+            ref(db, `users/${uid}`),
+            {
+                SHIFT_TOTAL_TIME: totalMillis,
+
+                SHIFT_REMAINING_TIME: totalMillis,
+
+                SHIFT_ACTIVE: true,
+
+                SHIFT_PAUSED: false,
+
+                BIO_ACTIVE: false,
+
+                SHIFT_START_TS: now,
+
+                // IMPORTANT:
+                // Remove old absolute timer
+                SHIFT_END_TS: null,
+
+                TIME_CONSUMED: 0,
+
+                // New shift marker
+                SHIFT_SESSION_ID: String(now)
+            }
+        );
+
+        alert(
+            `✅ ${hrs} hours assigned.\n\n` +
+            `Student can now start the shift.`
+        );
+
+        hrsInput.value = "";
+
     } catch (e) {
-        alert("Error: " + e.message);
+
+        console.error(
+            "Set shift time error:",
+            e
+        );
+
+        alert(
+            "Error: " +
+            e.message
+        );
     }
 };
 // --- NEW ADMIN FUNCTION: CLEAR SUBJECT PROGRESS ---
@@ -3711,165 +3754,186 @@ window.totalShiftTimeMs = 7200000; // Default 2 hours
 window.initializeShift = async function () {
 
     if (!currentUser) {
-        console.error("initializeShift: currentUser is null");
+        console.error(
+            "initializeShift: currentUser is null"
+        );
         return;
     }
 
-    const userRef = ref(
-        db,
-        `users/${currentUser.uid}`
-    );
+    const userRef =
+        ref(db, `users/${currentUser.uid}`);
 
-    const snap = await get(userRef);
-    const data = snap.val() || {};
+    try {
 
-    document
-        .getElementById("playerHudBox")
-        ?.classList.remove("hidden");
+        const snap =
+            await get(userRef);
 
-    if (typeof updateGamificationUI === "function") {
-        updateGamificationUI();
-    }
+        const data =
+            snap.val() || {};
 
-    // =============================================
-    // EXISTING ACTIVE SHIFT
-    // =============================================
-    if (data.SHIFT_ACTIVE === true) {
+        document
+            .getElementById("playerHudBox")
+            ?.classList.remove("hidden");
 
-        window.totalShiftTimeMs =
-            Number(data.SHIFT_TOTAL_TIME) || 7200000;
-
-        // -----------------------------------------
-        // BIO BREAK / PAUSED
-        // -----------------------------------------
         if (
-            data.BIO_ACTIVE === true ||
-            data.SHIFT_PAUSED === true
+            typeof updateGamificationUI ===
+            "function"
         ) {
+            updateGamificationUI();
+        }
+
+        // =================================================
+        // EXISTING ACTIVE SHIFT
+        // =================================================
+
+        if (data.SHIFT_ACTIVE === true) {
+
+            window.totalShiftTimeMs =
+                Number(
+                    data.SHIFT_TOTAL_TIME
+                ) || 7200000;
+
+            /*
+             * IMPORTANT:
+             *
+             * NEVER calculate the shift from
+             * SHIFT_END_TS.
+             *
+             * The shift counts ONLY while the
+             * student is actually logged in.
+             */
 
             localShiftRemaining =
-                Number(data.SHIFT_REMAINING_TIME) || 0;
+                Math.max(
+                    0,
+                    Number(
+                        data.SHIFT_REMAINING_TIME
+                    ) || 0
+                );
 
-            window.shiftEndTimestamp = null;
+            // ---------------------------------------------
+            // BIO BREAK / PAUSED
+            // ---------------------------------------------
 
-        }
+            if (
+                data.BIO_ACTIVE === true ||
+                data.SHIFT_PAUSED === true
+            ) {
 
-        // -----------------------------------------
-        // NORMAL ACTIVE SHIFT
-        // -----------------------------------------
-        else {
+                console.log(
+                    "Shift is paused."
+                );
 
-            if (data.SHIFT_END_TS) {
+                if (
+                    typeof window.updateShiftDisplay ===
+                    "function"
+                ) {
+                    window.updateShiftDisplay();
+                }
 
-                // Use Firebase absolute end time
-                window.shiftEndTimestamp =
-                    Number(data.SHIFT_END_TS);
-
+                return;
             }
 
-            else {
+            // ---------------------------------------------
+            // SHIFT FINISHED
+            // ---------------------------------------------
 
-                // ---------------------------------
-                // OLD SHIFT DATA
-                // Create missing end timestamp
-                // ---------------------------------
+            if (localShiftRemaining <= 0) {
 
-                localShiftRemaining =
-                    Number(data.SHIFT_REMAINING_TIME) || 0;
+                localShiftRemaining = 0;
 
-                window.shiftEndTimestamp =
-                    Date.now() + localShiftRemaining;
+                await update(
+                    userRef,
+                    {
+                        SHIFT_REMAINING_TIME: 0,
+                        SHIFT_ACTIVE: false
+                    }
+                );
 
-                await update(userRef, {
-                    SHIFT_END_TS:
-                        window.shiftEndTimestamp
-                });
+                return;
             }
 
-            // Calculate remaining time immediately
-            localShiftRemaining = Math.max(
-                0,
-                window.shiftEndTimestamp - Date.now()
+            // ---------------------------------------------
+            // RESUME TIMER
+            // ---------------------------------------------
+
+            startMasterClock();
+
+        } else {
+
+            // =================================================
+            // NO ACTIVE SHIFT
+            // =================================================
+            //
+            // Do NOT automatically create a new 2-hour shift.
+            //
+            // Admin must assign the shift.
+            // =================================================
+
+            localShiftRemaining = 0;
+
+            window.totalShiftTimeMs = 0;
+
+            const disp =
+                document.getElementById(
+                    "masterClockDisplay"
+                );
+
+            if (disp) {
+
+                disp.innerText =
+                    "00:00:00";
+
+                disp.style.color =
+                    "#94a3b8";
+            }
+
+            const tracker =
+                document.getElementById(
+                    "hudShiftTracker"
+                );
+
+            if (tracker) {
+
+                tracker.innerText =
+                    "SHIFTS: 0 DONE | 0 LEFT";
+            }
+
+            console.log(
+                "No active shift assigned."
             );
         }
-    }
 
-    // =============================================
-    // NEW SHIFT
-    // =============================================
-    else {
+        // ---------------------------------------------
+        // RESTORE INITIAL GOAL
+        // ---------------------------------------------
 
-        const shiftDuration =
-            2 * 60 * 60 * 1000; // 2 HOURS
+        if (data.INITIAL_SHIFT_GOAL) {
 
-        localShiftRemaining =
-            shiftDuration;
+            localStorage.setItem(
+                key("INITIAL_SHIFT_GOAL"),
+                data.INITIAL_SHIFT_GOAL
+            );
+        }
 
-        window.totalShiftTimeMs =
-            shiftDuration;
+        // ---------------------------------------------
+        // RECALCULATE ALLOCATED TIME
+        // ---------------------------------------------
 
-        window.shiftEndTimestamp =
-            Date.now() + shiftDuration;
+        if (
+            typeof window.recalculateAllocatedTime ===
+            "function"
+        ) {
 
-        await update(userRef, {
+            await window.recalculateAllocatedTime();
+        }
 
-            SHIFT_TOTAL_TIME:
-                shiftDuration,
+    } catch (error) {
 
-            SHIFT_REMAINING_TIME:
-                shiftDuration,
-
-            SHIFT_ACTIVE:
-                true,
-
-            SHIFT_PAUSED:
-                false,
-
-            BIO_ACTIVE:
-                false,
-
-            SHIFT_START_TS:
-                Date.now(),
-
-            SHIFT_END_TS:
-                window.shiftEndTimestamp,
-
-            TIME_CONSUMED:
-                0
-        });
-    }
-
-    // =============================================
-    // START MASTER TIMER
-    // =============================================
-    if (
-        data.BIO_ACTIVE !== true &&
-        data.SHIFT_PAUSED !== true
-    ) {
-
-        startMasterClock();
-    }
-
-    // =============================================
-    // INITIAL SHIFT GOAL
-    // =============================================
-    if (data.INITIAL_SHIFT_GOAL) {
-
-        localStorage.setItem(
-            key("INITIAL_SHIFT_GOAL"),
-            data.INITIAL_SHIFT_GOAL
+        console.error(
+            "initializeShift error:",
+            error
         );
-    }
-
-    // =============================================
-    // RECALCULATE ALLOCATED TIME
-    // =============================================
-    if (
-        typeof window.recalculateAllocatedTime ===
-        "function"
-    ) {
-
-        await window.recalculateAllocatedTime();
     }
 };
 window.continuousStudyTime = 0;
@@ -3878,34 +3942,32 @@ function startMasterClock() {
 
     if (masterClockInterval) {
         clearInterval(masterClockInterval);
-        masterClockInterval = null;
     }
 
-    // -----------------------------------------
-    // MASTER TIMER SOURCE
-    // -----------------------------------------
-    if (!window.shiftEndTimestamp && currentUser) {
-        console.warn("SHIFT_END_TS not loaded yet.");
-        return;
-    }
-
-    // -----------------------------------------
-    // SHIFT TRACKER
-    // -----------------------------------------
     let shiftTracker =
-        document.getElementById("hudShiftTracker");
+        document.getElementById(
+            "hudShiftTracker"
+        );
 
     if (
         !shiftTracker &&
-        document.getElementById("masterClockDisplay")
+        document.getElementById(
+            "masterClockDisplay"
+        )
     ) {
 
         const clockParent =
-            document.getElementById("masterClockDisplay").parentNode;
+            document
+                .getElementById(
+                    "masterClockDisplay"
+                )
+                .parentNode;
 
-        shiftTracker = document.createElement("div");
+        shiftTracker =
+            document.createElement("div");
 
-        shiftTracker.id = "hudShiftTracker";
+        shiftTracker.id =
+            "hudShiftTracker";
 
         shiftTracker.style.cssText =
             "font-size:11px;" +
@@ -3916,120 +3978,157 @@ function startMasterClock() {
             "text-align:right;" +
             "letter-spacing:1px;";
 
-        clockParent.appendChild(shiftTracker);
+        clockParent.appendChild(
+            shiftTracker
+        );
     }
 
-    // -----------------------------------------
-    // TIMER UPDATE FUNCTION
-    // -----------------------------------------
-    function updateMasterTimer() {
+    masterClockInterval =
+        setInterval(async () => {
 
-        // ALWAYS calculate from absolute end time
-        localShiftRemaining = Math.max(
-            0,
-            Number(window.shiftEndTimestamp) - Date.now()
-        );
+        // =============================================
+        // STOP IF USER IS NO LONGER LOGGED IN
+        // =============================================
 
-        // -------------------------------------
-        // SHIFT FINISHED
-        // -------------------------------------
-        if (localShiftRemaining <= 0) {
+        if (!currentUser) {
 
-            localShiftRemaining = 0;
-
-            const disp =
-                document.getElementById("masterClockDisplay");
-
-            if (disp) {
-                disp.innerText = "00:00:00";
-                disp.style.color = "#ef4444";
-            }
-
-            if (shiftTracker) {
-                shiftTracker.innerText =
-                    "SHIFTS: " +
-                    Math.ceil(
-                        (Number(window.totalShiftTimeMs) || 7200000) /
-                        (2 * 60 * 60 * 1000)
-                    ) +
-                    " DONE | 0 LEFT";
-            }
-
-            clearInterval(masterClockInterval);
-            masterClockInterval = null;
-
-            update(
-                ref(db, `users/${currentUser.uid}`),
-                {
-                    SHIFT_REMAINING_TIME: 0,
-                    SHIFT_ACTIVE: false
-                }
+            clearInterval(
+                masterClockInterval
             );
+
+            masterClockInterval = null;
 
             return;
         }
 
-        // -------------------------------------
-        // CLOCK DISPLAY
-        // -------------------------------------
-        const h = Math.floor(
-            localShiftRemaining / 3600000
-        );
+        // =============================================
+        // STOP DURING BIO BREAK / PAUSE
+        // =============================================
 
-        const m = Math.floor(
-            (localShiftRemaining % 3600000) / 60000
-        );
+        const bioOverlay =
+            document.getElementById(
+                "bioOverlay"
+            );
 
-        const s = Math.floor(
-            (localShiftRemaining % 60000) / 1000
-        );
+        const breakOverlay =
+            document.getElementById(
+                "mandatoryBreakOverlay"
+            );
 
-        const disp =
-            document.getElementById("masterClockDisplay");
+        const breakActive =
+            breakOverlay &&
+            !breakOverlay.classList.contains(
+                "hidden"
+            );
 
-        if (disp) {
-
-            disp.innerText =
-                `${String(h).padStart(2, "0")}:` +
-                `${String(m).padStart(2, "0")}:` +
-                `${String(s).padStart(2, "0")}`;
-
-            disp.style.color = "";
+        if (
+            bioOverlay ||
+            breakActive
+        ) {
+            return;
         }
 
-        // -------------------------------------
-        // 2-HOUR SHIFT COUNTER
-        // -------------------------------------
-        const SHIFT_BLOCK_MS =
+        // =============================================
+        // COUNT ONLY LOGGED-IN ACTIVE TIME
+        // =============================================
+
+        if (localShiftRemaining > 0) {
+
+            localShiftRemaining =
+                Math.max(
+                    0,
+                    localShiftRemaining - 1000
+                );
+        }
+
+        // =============================================
+        // SHIFT FINISHED
+        // =============================================
+
+        if (localShiftRemaining <= 0) {
+
+            localShiftRemaining = 0;
+
+            clearInterval(
+                masterClockInterval
+            );
+
+            masterClockInterval = null;
+
+            const disp =
+                document.getElementById(
+                    "masterClockDisplay"
+                );
+
+            if (disp) {
+
+                disp.innerText =
+                    "00:00:00";
+
+                disp.style.color =
+                    "#ef4444";
+            }
+
+            if (currentUser) {
+
+                await update(
+                    ref(
+                        db,
+                        `users/${currentUser.uid}`
+                    ),
+                    {
+                        SHIFT_REMAINING_TIME: 0,
+                        SHIFT_ACTIVE: false,
+                        TIME_CONSUMED:
+                            Number(
+                                window.totalShiftTimeMs
+                            ) || 0
+                    }
+                );
+            }
+
+            return;
+        }
+
+        // =============================================
+        // SHIFT BLOCK CALCULATION
+        // =============================================
+
+        const chunkMs =
             2 * 60 * 60 * 1000;
 
-        const totalAssignedMs =
-            Number(window.totalShiftTimeMs) ||
-            SHIFT_BLOCK_MS;
+        const totalShift =
+            Number(
+                window.totalShiftTimeMs
+            ) || chunkMs;
 
         const consumedMs =
             Math.max(
                 0,
-                totalAssignedMs - localShiftRemaining
+                totalShift -
+                localShiftRemaining
             );
 
         const totalShifts =
             Math.ceil(
-                totalAssignedMs / SHIFT_BLOCK_MS
+                totalShift /
+                chunkMs
             );
 
         const completedShifts =
             Math.min(
                 totalShifts,
                 Math.floor(
-                    consumedMs / SHIFT_BLOCK_MS
+                    consumedMs /
+                    chunkMs
                 )
             );
 
         const shiftsLeft =
             Math.max(
                 0,
-                totalShifts - completedShifts
+                totalShifts -
+                completedShifts
             );
 
         if (shiftTracker) {
@@ -4037,14 +4136,75 @@ function startMasterClock() {
             shiftTracker.innerText =
                 `SHIFTS: ${completedShifts} DONE | ${shiftsLeft} LEFT`;
         }
-    }
 
-    // Update immediately
-    updateMasterTimer();
+        // =============================================
+        // DISPLAY CLOCK
+        // =============================================
 
-    // Then update every second
-    masterClockInterval =
-        setInterval(updateMasterTimer, 1000);
+        const h =
+            Math.floor(
+                localShiftRemaining /
+                3600000
+            );
+
+        const m =
+            Math.floor(
+                (
+                    localShiftRemaining %
+                    3600000
+                ) / 60000
+            );
+
+        const s =
+            Math.floor(
+                (
+                    localShiftRemaining %
+                    60000
+                ) / 1000
+            );
+
+        const disp =
+            document.getElementById(
+                "masterClockDisplay"
+            );
+
+        if (disp) {
+
+            disp.innerText =
+                `${String(h).padStart(2, "0")}:` +
+                `${String(m).padStart(2, "0")}:` +
+                `${String(s).padStart(2, "0")}`;
+        }
+
+        // =============================================
+        // SAVE REMAINING TIME
+        // =============================================
+
+        if (
+            s % 10 === 0 &&
+            currentUser
+        ) {
+
+            await update(
+                ref(
+                    db,
+                    `users/${currentUser.uid}`
+                ),
+                {
+                    SHIFT_REMAINING_TIME:
+                        localShiftRemaining,
+
+                    TIME_CONSUMED:
+                        Math.max(
+                            0,
+                            totalShift -
+                            localShiftRemaining
+                        )
+                }
+            );
+        }
+
+    }, 1000);
 }
   // --- EXISTING WATCHDOG / IDLE INTEGRATION ---
 
