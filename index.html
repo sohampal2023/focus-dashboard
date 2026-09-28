@@ -3373,28 +3373,58 @@ function autoLogout() {
   uploadData(); 
   setTimeout(() => location.reload(), 500);
 }
+window.bioBreak = async function () {
+    if (!currentUser) return;
 
-window.bioBreak = async function() {
-    if(idleTimer) clearInterval(idleTimer);
+    try {
+        // Stop the master shift timer locally
+        if (masterClockInterval) {
+            clearInterval(masterClockInterval);
+            masterClockInterval = null;
+        }
 
-    await update(ref(db, `users/${currentUser.uid}`), {
-        SHIFT_ACTIVE: true, 
-        BIO_PAUSE_TS: Date.now()
-    });
+        // Calculate EXACT remaining shift time
+        const remaining = Math.max(
+            0,
+            Number(localShiftRemaining) || 0
+        );
 
-    const logs = JSON.parse(localStorage.getItem(key("LOGS")) || "[]");
-    if (logs.length) {
-        const last = logs[logs.length - 1];
-        last.reason = "Bio Break (Hard Logout)";
-        localStorage.setItem(key("LOGS"), JSON.stringify(logs));
+        // Save the remaining time and mark shift as paused
+        await update(ref(db, `users/${currentUser.uid}`), {
+            SHIFT_REMAINING_TIME: remaining,
+            SHIFT_PAUSED: true,
+            BIO_ACTIVE: true,
+            BIO_PAUSE_TS: Date.now()
+        });
+
+        // Pause watchdog
+        if (typeof idleTimer !== "undefined" && idleTimer) {
+            clearInterval(idleTimer);
+            idleTimer = null;
+        }
+
+        // Stop YouTube if playing
+        if (
+            window.ytPlayer &&
+            typeof window.ytPlayer.pauseVideo === "function"
+        ) {
+            try {
+                window.ytPlayer.pauseVideo();
+            } catch (e) {}
+        }
+
+        // Show bio-break state
+        alert(
+            "☕ BIO BREAK ACTIVE\n\n" +
+            "Your shift has NOT ended.\n" +
+            "Your remaining shift time is preserved.\n\n" +
+            "Click RESUME ALL DEVICES when you are ready."
+        );
+
+    } catch (err) {
+        console.error("Bio Break Error:", err);
+        alert("Unable to start Bio Break: " + err.message);
     }
-
-    uploadData();
-    alert("BIO BREAK: You are being logged out for security. Login again to resume.");
-    
-    signOut(auth).then(() => {
-        location.reload();
-    });
 };
 // --- MOCK TEST LOGIC ---
 function startMockTestSetup() {
@@ -3617,34 +3647,101 @@ let localShiftRemaining = 0;
 // --- SHIFT SYSTEM LOGIC ---
 window.totalShiftTimeMs = 7200000; // Default 2 hours
 
-window.initializeShift = async function() {
+window.initializeShift = async function () {
+
     const userRef = ref(db, `users/${currentUser.uid}`);
     const snap = await get(userRef);
     const data = snap.val() || {};
 
-    document.getElementById("playerHudBox").classList.remove("hidden");
-    if (typeof updateGamificationUI === "function") updateGamificationUI();
+    document.getElementById("playerHudBox")?.classList.remove("hidden");
 
+    if (typeof updateGamificationUI === "function") {
+        updateGamificationUI();
+    }
+
+    // ---------------------------------------------
+    // EXISTING SHIFT
+    // ---------------------------------------------
     if (data.SHIFT_ACTIVE === true) {
-        localShiftRemaining = parseFloat(data.SHIFT_REMAINING_TIME) || 7200000;
-        window.totalShiftTimeMs = parseFloat(data.SHIFT_TOTAL_TIME) || 7200000;
+
+        window.totalShiftTimeMs =
+            Number(data.SHIFT_TOTAL_TIME) || 7200000;
+
+        // Bio break currently active
+        if (data.BIO_ACTIVE === true || data.SHIFT_PAUSED === true) {
+
+            localShiftRemaining =
+                Number(data.SHIFT_REMAINING_TIME) || 0;
+
+        } else {
+
+            // Calculate from absolute end time
+            if (data.SHIFT_END_TS) {
+
+                localShiftRemaining = Math.max(
+                    0,
+                    Number(data.SHIFT_END_TS) - Date.now()
+                );
+
+            } else {
+
+                // Upgrade old shift data
+                localShiftRemaining =
+                    Number(data.SHIFT_REMAINING_TIME) || 0;
+
+                await update(userRef, {
+                    SHIFT_END_TS:
+                        Date.now() + localShiftRemaining
+                });
+            }
+        }
+
     } else {
-        localShiftRemaining = 7200000; 
-        window.totalShiftTimeMs = 7200000;
+
+        // ---------------------------------------------
+        // NEW SHIFT
+        // ---------------------------------------------
+        const shiftDuration = 7200000;
+
+        localShiftRemaining = shiftDuration;
+        window.totalShiftTimeMs = shiftDuration;
+
         await update(userRef, {
-            SHIFT_TOTAL_TIME: 7200000,
-            SHIFT_REMAINING_TIME: 7200000,
+
+            SHIFT_TOTAL_TIME: shiftDuration,
+
+            SHIFT_REMAINING_TIME: shiftDuration,
+
             SHIFT_ACTIVE: true,
+
+            SHIFT_PAUSED: false,
+
+            BIO_ACTIVE: false,
+
             SHIFT_START_TS: Date.now(),
+
+            SHIFT_END_TS:
+                Date.now() + shiftDuration,
+
             TIME_CONSUMED: 0
         });
     }
 
-    startMasterClock();
+    // Start timer only when Bio Break is NOT active
+    if (
+        data.BIO_ACTIVE !== true &&
+        data.SHIFT_PAUSED !== true
+    ) {
+        startMasterClock();
+    }
 
     if (data.INITIAL_SHIFT_GOAL) {
-        localStorage.setItem(key("INITIAL_SHIFT_GOAL"), data.INITIAL_SHIFT_GOAL);
+        localStorage.setItem(
+            key("INITIAL_SHIFT_GOAL"),
+            data.INITIAL_SHIFT_GOAL
+        );
     }
+
     if (typeof window.recalculateAllocatedTime === "function") {
         await window.recalculateAllocatedTime();
     }
@@ -3684,17 +3781,40 @@ function startMasterClock() {
     }
 
     masterClockInterval = setInterval(() => {
-        if(localShiftRemaining <= 0) {
-            clearInterval(masterClockInterval);
-            const disp = document.getElementById("masterClockDisplay");
-            if(disp) {
-                disp.innerText = "EXHAUSTED";
-                disp.style.color = "#ef4444";
-            }
-            return;
+
+    if (
+        window.shiftEndTimestamp &&
+        !document.getElementById("bioOverlay")
+    ) {
+        localShiftRemaining = Math.max(
+            0,
+            window.shiftEndTimestamp - Date.now()
+        );
+    }
+
+    if (localShiftRemaining <= 0) {
+
+        localShiftRemaining = 0;
+
+        clearInterval(masterClockInterval);
+        masterClockInterval = null;
+
+        const disp =
+            document.getElementById("masterClockDisplay");
+
+        if (disp) {
+            disp.innerText = "00:00:00";
+            disp.style.color = "#ef4444";
         }
 
-        localShiftRemaining -= 1000;
+        // REAL SHIFT END ONLY
+        update(ref(db, `users/${currentUser.uid}`), {
+            SHIFT_REMAINING_TIME: 0,
+            SHIFT_ACTIVE: false
+        });
+
+        return;
+    }
         
         // Check if break overlay is currently hidden
         const breakOverlay = document.getElementById("mandatoryBreakOverlay");
@@ -5203,6 +5323,7 @@ window.toggleNoticeBoard = function () {
     }
 };
 window.softRefresh = function () {
+    if (!currentUser) return;
     location.reload();
 };
 
@@ -5955,18 +6076,44 @@ window.closeCanvasBox = function() {
     box.classList.add("hidden");
     if(taskBox) taskBox.classList.remove("hidden");
 };
-
-// --- FIX FOR MISSING BIO BREAK RESUME FUNCTION ---
-window.resumeFromBio = async function() {
+window.resumeFromBio = async function () {
     if (!currentUser) return;
+
     try {
-        // Removes the active bio break flag from the database
-        await remove(ref(db, `users/${currentUser.uid}/BIO_ACTIVE`));
-        
-        // Note: The existing Firebase listener will automatically detect this change,
-        // remove the black overlay, and restart your watchdog timer.
-    } catch (e) {
-        alert("Error resuming session: " + e.message);
+        const snap = await get(
+            ref(db, `users/${currentUser.uid}`)
+        );
+
+        const data = snap.val() || {};
+
+        const remaining = Math.max(
+            0,
+            Number(data.SHIFT_REMAINING_TIME) || 0
+        );
+
+        // Remove bio-break state
+        await update(ref(db, `users/${currentUser.uid}`), {
+            BIO_ACTIVE: false,
+            SHIFT_PAUSED: false,
+            BIO_PAUSE_TS: null,
+            SHIFT_REMAINING_TIME: remaining,
+            SHIFT_END_TS: Date.now() + remaining
+        });
+
+        // Restore local timer
+        localShiftRemaining = remaining;
+
+        // Restart master shift clock
+        startMasterClock();
+
+        // Restart watchdog
+        if (typeof startIdle === "function") {
+            startIdle(125);
+        }
+
+    } catch (err) {
+        console.error("Resume Bio Error:", err);
+        alert("Unable to resume shift: " + err.message);
     }
 };
 // ==========================================
