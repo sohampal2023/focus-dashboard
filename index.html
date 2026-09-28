@@ -4051,35 +4051,102 @@ function startMasterClock() {
 window.resetIdleTimer = function() {
     window.idleInactivityCounter = 0;
 };
-window.handleIdleTimeoutPenalty = function() {
+window.handleIdleTimeoutPenalty = async function () {
+
     if (!currentUser) return;
 
-    const userRef = ref(db, `users/${currentUser.uid}`);
+    const userRef = ref(
+        db,
+        `users/${currentUser.uid}`
+    );
 
-    get(userRef).then((snap) => {
+    try {
+
+        const snap = await get(userRef);
         const data = snap.val() || {};
 
-        let strikes = parseInt(data.IDLE_STRIKES || 0);
-        let penalty = parseInt(data.PENALTY || 0);
+        let strikes =
+            parseInt(data.IDLE_STRIKES || 0);
 
+        let penalty =
+            parseInt(data.PENALTY || 0);
+
+        // -----------------------------------------
+        // ONE WATCHDOG MISS
+        // -----------------------------------------
         strikes++;
 
-        // Penalty ONLY after 2 actual watchdog misses
+        let penaltyCreated = false;
+        let penaltyId = null;
+
+        // -----------------------------------------
+        // TWO MISSES = -10 PENALTY
+        // -----------------------------------------
         if (strikes >= 2) {
+
             penalty += 10;
+
             strikes = 0;
 
-            console.warn("⚠️ 2 watchdog misses = +10 penalty");
+            penaltyCreated = true;
+
+            penaltyId =
+                "PEN_" +
+                Date.now();
+
+            const reason =
+                "2 Watchdog Timeouts";
+
+            await update(
+                ref(
+                    db,
+                    `users/${currentUser.uid}/PENALTY_HISTORY/${penaltyId}`
+                ),
+                {
+                    amount: 10,
+                    reason: reason,
+                    createdAt: Date.now(),
+                    createdBy: "SYSTEM",
+                    status: "ACTIVE",
+                    revokedAt: null,
+                    revokedBy: null,
+                    revokedReason: null
+                }
+            );
+
+            console.warn(
+                "WATCHDOG: 2 misses = +10 penalty"
+            );
         }
 
-        return update(userRef, {
-            IDLE_STRIKES: strikes,
-            PENALTY: penalty
+        // -----------------------------------------
+        // UPDATE CURRENT VALUES
+        // -----------------------------------------
+        await update(userRef, {
+
+            IDLE_STRIKES:
+                strikes,
+
+            PENALTY:
+                penalty
         });
 
-    }).catch((err) => {
-        console.error("Idle penalty sync error:", err);
-    });
+        if (penaltyCreated) {
+
+            alert(
+                "WATCHDOG PENALTY\n\n" +
+                "2 watchdog misses detected.\n" +
+                "Penalty: -10"
+            );
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Penalty processing error:",
+            error
+        );
+    }
 };
 window.breakWarningAudio = null;
 window.breakWarningOsc = null;
@@ -5558,6 +5625,278 @@ window.requestSubjectDelete = async function(subject, rowId) {
     alert("Failed to send delete request: " + e.message);
   }
 };
+  window.revokePenalty = async function (
+    studentUid,
+    penaltyId
+) {
+
+    if (!currentUser) {
+        alert("Admin session not found.");
+        return;
+    }
+
+    if (currentUser.email !== ADMIN_EMAIL) {
+        alert("ACCESS DENIED");
+        return;
+    }
+
+    const reason = prompt(
+        "Reason for revoking this penalty:"
+    );
+
+    if (!reason || !reason.trim()) {
+        alert("Revocation cancelled. Reason is required.");
+        return;
+    }
+
+    try {
+
+        const penaltyRef = ref(
+            db,
+            `users/${studentUid}/PENALTY_HISTORY/${penaltyId}`
+        );
+
+        const penaltySnap =
+            await get(penaltyRef);
+
+        if (!penaltySnap.exists()) {
+            alert("Penalty record not found.");
+            return;
+        }
+
+        const penaltyData =
+            penaltySnap.val();
+
+        if (penaltyData.status === "REVOKED") {
+            alert("This penalty has already been revoked.");
+            return;
+        }
+
+        const studentRef =
+            ref(db, `users/${studentUid}`);
+
+        const studentSnap =
+            await get(studentRef);
+
+        const studentData =
+            studentSnap.val() || {};
+
+        let currentPenalty =
+            parseInt(
+                studentData.PENALTY || 0
+            );
+
+        const penaltyAmount =
+            parseInt(
+                penaltyData.amount || 0
+            );
+
+        currentPenalty =
+            Math.max(
+                0,
+                currentPenalty - penaltyAmount
+            );
+
+        // -----------------------------------------
+        // UPDATE PENALTY HISTORY
+        // -----------------------------------------
+        await update(penaltyRef, {
+
+            status: "REVOKED",
+
+            revokedAt:
+                Date.now(),
+
+            revokedBy:
+                currentUser.email,
+
+            revokedReason:
+                reason.trim()
+        });
+
+        // -----------------------------------------
+        // REDUCE CURRENT PENALTY
+        // -----------------------------------------
+        await update(studentRef, {
+
+            PENALTY:
+                currentPenalty
+        });
+
+        alert(
+            "Penalty revoked successfully.\n\n" +
+            "Penalty removed: -" +
+            penaltyAmount +
+            "\n" +
+            "Reason: " +
+            reason.trim()
+        );
+
+        // Refresh Admin dashboard
+        if (
+            typeof initAdminDashboard ===
+            "function"
+        ) {
+            await initAdminDashboard();
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Penalty revoke error:",
+            error
+        );
+
+        alert(
+            "Failed to revoke penalty:\n" +
+            error.message
+        );
+    }
+};
+  async function renderPenaltyHistory(studentUid) {
+
+    const historyRef = ref(
+        db,
+        `users/${studentUid}/PENALTY_HISTORY`
+    );
+
+    const snap =
+        await get(historyRef);
+
+    const history =
+        snap.val() || {};
+
+    const entries =
+        Object.entries(history)
+        .sort(
+            (a, b) =>
+                (b[1].createdAt || 0) -
+                (a[1].createdAt || 0)
+        );
+
+    if (!entries.length) {
+
+        return `
+            <div style="
+                padding:15px;
+                color:#94a3b8;
+            ">
+                No penalty history.
+            </div>
+        `;
+    }
+
+    return entries.map(
+        ([penaltyId, p]) => {
+
+            const date =
+                p.createdAt
+                    ? new Date(
+                        p.createdAt
+                    ).toLocaleString()
+                    : "-";
+
+            const revoked =
+                p.status === "REVOKED";
+
+            return `
+                <div style="
+                    margin:10px 0;
+                    padding:14px;
+                    border:1px solid
+                        ${revoked
+                            ? "#334155"
+                            : "#ef4444"};
+                    border-radius:10px;
+                    background:#0f172a;
+                ">
+
+                    <div style="
+                        display:flex;
+                        justify-content:space-between;
+                        align-items:center;
+                    ">
+
+                        <strong>
+                            Penalty: -${p.amount}
+                        </strong>
+
+                        <span style="
+                            color:${revoked
+                                ? "#94a3b8"
+                                : "#ef4444"};
+                            font-weight:bold;
+                        ">
+                            ${revoked
+                                ? "REVOKED"
+                                : "ACTIVE"}
+                        </span>
+
+                    </div>
+
+                    <div style="
+                        margin-top:8px;
+                        font-size:13px;
+                        color:#cbd5e1;
+                    ">
+                        <b>Reason:</b>
+                        ${p.reason || "-"}
+                    </div>
+
+                    <div style="
+                        margin-top:5px;
+                        font-size:12px;
+                        color:#64748b;
+                    ">
+                        Created:
+                        ${date}
+                    </div>
+
+                    ${
+                        revoked
+                        ? `
+                            <div style="
+                                margin-top:8px;
+                                font-size:12px;
+                                color:#94a3b8;
+                            ">
+                                Revoked by:
+                                ${p.revokedBy || "-"}<br>
+
+                                Revocation reason:
+                                ${p.revokedReason || "-"}
+                            </div>
+                        `
+                        : `
+                            <button
+                                onclick="
+                                    revokePenalty(
+                                        '${studentUid}',
+                                        '${penaltyId}'
+                                    )
+                                "
+                                style="
+                                    margin-top:12px;
+                                    padding:8px 14px;
+                                    border:none;
+                                    border-radius:7px;
+                                    background:#ef4444;
+                                    color:white;
+                                    cursor:pointer;
+                                    font-weight:bold;
+                                "
+                            >
+                                REVOKE PENALTY
+                            </button>
+                        `
+                    }
+
+                </div>
+            `;
+        }
+    ).join("");
+}
+  
 window.adminAssignTasks = async function(uid) {
     const roadmapWin = window.open("", "AssignTasks", "width=500,height=650");
     roadmapWin.document.write(`
@@ -6587,6 +6926,8 @@ window.handleExtraRequest = handleExtraRequest;
 window.enterDeepFocus = enterDeepFocus;
 window.exitDeepFocus = exitDeepFocus;
 window.renderAnalyticsChart = renderAnalyticsChart;
+  window.revokePenalty = revokePenalty;
+window.renderPenaltyHistory = renderPenaltyHistory;
   // --- 🎥 NEW: VIDEO HUB & MCQ SYSTEM ---
 if (typeof loadAssignedVideos !== 'undefined') window.loadAssignedVideos = loadAssignedVideos;
 if (typeof playSpecificVideo !== 'undefined') window.playSpecificVideo = playSpecificVideo;
