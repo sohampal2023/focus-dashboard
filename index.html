@@ -3707,117 +3707,170 @@ let localShiftRemaining = 0;
 
 // --- SHIFT SYSTEM LOGIC ---
 window.totalShiftTimeMs = 7200000; // Default 2 hours
-
 window.initializeShift = async function () {
 
-     if (!currentUser) {
+    if (!currentUser) {
         console.error("initializeShift: currentUser is null");
         return;
     }
 
-    const userRef =
-        ref(db, `users/${currentUser.uid}`);
+    const userRef = ref(
+        db,
+        `users/${currentUser.uid}`
+    );
 
     const snap = await get(userRef);
-
     const data = snap.val() || {};
 
-    document.getElementById("playerHudBox")?.classList.remove("hidden");
+    document
+        .getElementById("playerHudBox")
+        ?.classList.remove("hidden");
 
     if (typeof updateGamificationUI === "function") {
         updateGamificationUI();
     }
 
-    // ---------------------------------------------
-    // EXISTING SHIFT
-    // ---------------------------------------------
+    // =============================================
+    // EXISTING ACTIVE SHIFT
+    // =============================================
     if (data.SHIFT_ACTIVE === true) {
 
         window.totalShiftTimeMs =
             Number(data.SHIFT_TOTAL_TIME) || 7200000;
 
-        // Bio break currently active
-        if (data.BIO_ACTIVE === true || data.SHIFT_PAUSED === true) {
+        // -----------------------------------------
+        // BIO BREAK / PAUSED
+        // -----------------------------------------
+        if (
+            data.BIO_ACTIVE === true ||
+            data.SHIFT_PAUSED === true
+        ) {
 
             localShiftRemaining =
                 Number(data.SHIFT_REMAINING_TIME) || 0;
 
-        } else {
+            window.shiftEndTimestamp = null;
 
-            // Calculate from absolute end time
-           if (data.SHIFT_END_TS) {
-
-    window.shiftEndTimestamp = Number(data.SHIFT_END_TS);
-
-    localShiftRemaining = Math.max(
-        0,
-        window.shiftEndTimestamp - Date.now()
-    );
-
-}
-}else {
-
-    localShiftRemaining =
-        Number(data.SHIFT_REMAINING_TIME) || 0;
-
-    window.shiftEndTimestamp =
-        Date.now() + localShiftRemaining;
-
-    await update(userRef, {
-        SHIFT_END_TS: window.shiftEndTimestamp
-    });
         }
-     else {
 
-        // ---------------------------------------------
-        // NEW SHIFT
-        // ---------------------------------------------
-        const shiftDuration = 7200000;
+        // -----------------------------------------
+        // NORMAL ACTIVE SHIFT
+        // -----------------------------------------
+        else {
 
-        localShiftRemaining = shiftDuration;
-        window.totalShiftTimeMs = shiftDuration;
+            if (data.SHIFT_END_TS) {
+
+                // Use Firebase absolute end time
+                window.shiftEndTimestamp =
+                    Number(data.SHIFT_END_TS);
+
+            }
+
+            else {
+
+                // ---------------------------------
+                // OLD SHIFT DATA
+                // Create missing end timestamp
+                // ---------------------------------
+
+                localShiftRemaining =
+                    Number(data.SHIFT_REMAINING_TIME) || 0;
+
+                window.shiftEndTimestamp =
+                    Date.now() + localShiftRemaining;
+
+                await update(userRef, {
+                    SHIFT_END_TS:
+                        window.shiftEndTimestamp
+                });
+            }
+
+            // Calculate remaining time immediately
+            localShiftRemaining = Math.max(
+                0,
+                window.shiftEndTimestamp - Date.now()
+            );
+        }
+    }
+
+    // =============================================
+    // NEW SHIFT
+    // =============================================
+    else {
+
+        const shiftDuration =
+            2 * 60 * 60 * 1000; // 2 HOURS
+
+        localShiftRemaining =
+            shiftDuration;
+
+        window.totalShiftTimeMs =
+            shiftDuration;
+
+        window.shiftEndTimestamp =
+            Date.now() + shiftDuration;
 
         await update(userRef, {
 
-            SHIFT_TOTAL_TIME: shiftDuration,
+            SHIFT_TOTAL_TIME:
+                shiftDuration,
 
-            SHIFT_REMAINING_TIME: shiftDuration,
+            SHIFT_REMAINING_TIME:
+                shiftDuration,
 
-            SHIFT_ACTIVE: true,
+            SHIFT_ACTIVE:
+                true,
 
-            SHIFT_PAUSED: false,
+            SHIFT_PAUSED:
+                false,
 
-            BIO_ACTIVE: false,
+            BIO_ACTIVE:
+                false,
 
-            SHIFT_START_TS: Date.now(),
+            SHIFT_START_TS:
+                Date.now(),
 
             SHIFT_END_TS:
-                Date.now() + shiftDuration,
+                window.shiftEndTimestamp,
 
-            TIME_CONSUMED: 0
+            TIME_CONSUMED:
+                0
         });
     }
 
-    // Start timer only when Bio Break is NOT active
+    // =============================================
+    // START MASTER TIMER
+    // =============================================
     if (
         data.BIO_ACTIVE !== true &&
         data.SHIFT_PAUSED !== true
     ) {
+
         startMasterClock();
     }
 
+    // =============================================
+    // INITIAL SHIFT GOAL
+    // =============================================
     if (data.INITIAL_SHIFT_GOAL) {
+
         localStorage.setItem(
             key("INITIAL_SHIFT_GOAL"),
             data.INITIAL_SHIFT_GOAL
         );
     }
 
-    if (typeof window.recalculateAllocatedTime === "function") {
+    // =============================================
+    // RECALCULATE ALLOCATED TIME
+    // =============================================
+    if (
+        typeof window.recalculateAllocatedTime ===
+        "function"
+    ) {
+
         await window.recalculateAllocatedTime();
     }
 };
-
 window.continuousStudyTime = 0;
 window.idleInactivityCounter = 0;
 function startMasterClock() {
