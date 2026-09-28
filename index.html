@@ -920,9 +920,7 @@ import {
     signInWithEmailAndPassword,
     createUserWithEmailAndPassword,
     signOut,
-    onAuthStateChanged,
-    setPersistence,
-    browserLocalPersistence
+    onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
 
 
@@ -972,35 +970,65 @@ const FIXED_SUBJECTS = [
 let authStartupCheck = true;
   onAuthStateChanged(auth, async (user) => {
 
-    const appButtonRefresh =
-        sessionStorage.getItem("APP_BUTTON_REFRESH") === "true";
+    const lockedReport =
+        localStorage.getItem("LOCKED_REPORT_VIEW");
 
-    if (appButtonRefresh) {
-        sessionStorage.removeItem("APP_BUTTON_REFRESH");
-    }
-
-    if (user && !appButtonRefresh) {
-        await signOut(auth);
+    if (lockedReport) {
+        // your existing locked report code
         return;
     }
 
     if (user) {
+
         currentUser = user;
 
+        document.getElementById("syncStatus").innerText =
+            "Session Restored";
+
+        // your existing forceLogoutTrigger listener
+        onValue(
+            ref(db, `users/${user.uid}/forceLogoutTrigger`),
+            (snap) => {
+
+                if (
+                    snap.exists() &&
+                    snap.val() !== null
+                ) {
+
+                    localStorage.clear();
+                    sessionStorage.clear();
+
+                    signOut(auth).then(() => {
+                        location.reload();
+                    });
+                }
+            }
+        );
+
         if (user.email === ADMIN_EMAIL) {
+
             initAdminDashboard();
+
         } else {
+
             initializeShift();
             initStudentDashboard();
         }
 
     } else {
+
         currentUser = null;
+
+        document.getElementById("statusBox").innerText =
+            "Logged out";
 
         document.getElementById("loginBtn")
             .classList.remove("hidden");
 
         document.getElementById("logoutBtn")
+            .classList.add("hidden");
+
+        document.getElementById("studentView")
             .classList.add("hidden");
     }
 });
@@ -1035,7 +1063,6 @@ const ALLOWED_EMAILS = [
 const now = () => new Date().toLocaleString();
 const key = k => (currentUser ? currentUser.uid : "GUEST") + "_" + k;
 
-// --- AUTHENTICATION FLOW ---
 async function handleLoginFlow() {
     const email = prompt("Enter Authorized Email:");
     if (!email) return;
@@ -1050,21 +1077,31 @@ async function handleLoginFlow() {
 
     try {
         document.getElementById("syncStatus").innerText = "Authenticating...";
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        currentUser = userCredential.user;  
+
+        const userCredential =
+            await signInWithEmailAndPassword(auth, email, password);
+
+        currentUser = userCredential.user;
 
         if (currentUser.email === ADMIN_EMAIL) {
-            initAdminDashboard();
+
+            await initAdminDashboard();
+
         } else {
-            // ✅ We no longer wipe data here.
-            // initializeShift will now check the DB and resume the session.
-            initializeShift(); 
-            initStudentDashboard();
+
+            await initializeShift();
+            await initStudentDashboard();
+
         }
-        
+
     } catch (error) {
+
+        console.error("LOGIN / INITIALIZATION ERROR:", error);
+
         alert("Login Failed: " + error.message);
-        document.getElementById("syncStatus").innerText = "Auth Failed";
+
+        document.getElementById("syncStatus").innerText =
+            "Auth Failed";
     }
 }
 function showMockResultPopup(resultText) {
@@ -3638,8 +3675,16 @@ window.totalShiftTimeMs = 7200000; // Default 2 hours
 
 window.initializeShift = async function () {
 
-    const userRef = ref(db, `users/${currentUser.uid}`);
+     if (!currentUser) {
+        console.error("initializeShift: currentUser is null");
+        return;
+    }
+
+    const userRef =
+        ref(db, `users/${currentUser.uid}`);
+
     const snap = await get(userRef);
+
     const data = snap.val() || {};
 
     document.getElementById("playerHudBox")?.classList.remove("hidden");
@@ -5312,10 +5357,12 @@ window.toggleNoticeBoard = function () {
     }
 };
 window.softRefresh = function () {
-    // Mark that the reload was requested by the dashboard Refresh button
-    sessionStorage.setItem("APP_BUTTON_REFRESH", "true");
 
-    // Normal page reload
+    sessionStorage.setItem(
+        "APP_BUTTON_REFRESH",
+        "true"
+    );
+
     location.reload();
 };
 
