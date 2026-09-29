@@ -2634,6 +2634,11 @@ window.mcqInterval = null;
 window.mcqSeconds = 0;
 window.mcqSelected = null;
 window.currentMcqSession = { correct: 0, total: 0 };
+  window.mcqAnswerSubmitted = false;
+window.mcqSelectingCorrect = false;
+window.mcqCorrectAnswer = null;
+window.mcqTimeTaken = "00:00";
+window.mcqSaving = false;
   const mcqHistoryRef = ref(
     db,
     `users/${currentUser.uid}/ASSIGNED_VIDEOS/${videoKey}/MCQ_HISTORY`
