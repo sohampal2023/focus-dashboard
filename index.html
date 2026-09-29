@@ -2634,6 +2634,57 @@ window.mcqInterval = null;
 window.mcqSeconds = 0;
 window.mcqSelected = null;
 window.currentMcqSession = { correct: 0, total: 0 };
+  const mcqHistoryRef = ref(
+    db,
+    `users/${currentUser.uid}/ASSIGNED_VIDEOS/${videoKey}/MCQ_HISTORY`
+);
+
+try {
+
+    const historySnap =
+        await get(mcqHistoryRef);
+
+    if (historySnap.exists()) {
+
+        const history =
+            historySnap.val() || {};
+
+        const numbers =
+            Object.keys(history)
+                .map(key =>
+                    parseInt(
+                        key.replace("Q", "")
+                    )
+                )
+                .filter(n => !isNaN(n));
+
+        if (numbers.length > 0) {
+
+            const lastQuestion =
+                Math.max(...numbers);
+
+            window.currentMcqSession.total =
+                lastQuestion;
+
+            console.log(
+                "📚 Last saved MCQ:",
+                lastQuestion
+            );
+
+            console.log(
+                "➡️ Next MCQ:",
+                lastQuestion + 1
+            );
+        }
+    }
+
+} catch (error) {
+
+    console.error(
+        "MCQ history load error:",
+        error
+    );
+}
 // =====================================================
 // SAVE CURRENT MCQ SCORE TO FIREBASE
 // =====================================================
@@ -2674,7 +2725,7 @@ window.currentVideoRewarded = false;
 // =====================================================
 // PLAY / RESUME YOUTUBE VIDEO
 // =====================================================
-window.playSpecificVideo = function(
+window.playSpecificVideo = async function(
     videoKey,
     ytId,
     startAt,
@@ -3151,7 +3202,7 @@ window.selectMcqOption = function(opt) {
             "#ffffff";
     }
 };
-  window.finishMcqQuestion = function() {
+ window.finishMcqQuestion = async function() {
 
     if (
         !window.mcqAnswerSubmitted ||
@@ -3173,35 +3224,49 @@ window.selectMcqOption = function(opt) {
     const isCorrect =
         selected === correct;
 
-    // ============================================
-    // SCORE
-    // ============================================
+    // ==========================================
+    // NEXT QUESTION NUMBER
+    // ==========================================
 
     window.currentMcqSession.total++;
 
+    const questionNumber =
+        window.currentMcqSession.total;
+
+    // ==========================================
+    // SCORE
+    // ==========================================
+
+    let marksChange = 0;
+
     if (isCorrect) {
+
+        marksChange = 1;
 
         window.currentMcqSession.marks += 1;
 
     } else {
 
+        marksChange = -0.33;
+
         window.currentMcqSession.marks -= 0.33;
     }
 
-    // ============================================
-    // RESULT
-    // ============================================
+    // ==========================================
+    // SHOW RESULT
+    // ==========================================
 
     const resultList =
-        document.getElementById(
-            "mcqResultList"
-        );
+        document.getElementById("mcqResultList");
 
     if (resultList) {
 
         if (
             resultList.innerHTML.includes(
                 "Results will appear here"
+            ) ||
+            resultList.innerHTML.includes(
+                "Past Cumulative Score"
             )
         ) {
             resultList.innerHTML = "";
@@ -3217,8 +3282,7 @@ window.selectMcqOption = function(opt) {
                     margin-bottom:5px;
                     color:#4ade80;
                 ">
-                    Q${window.currentMcqSession.total}:
-                    CORRECT (+1.00)
+                    Q${questionNumber}: CORRECT (+1.00)
                     <br>
                     Answer: ${selected}
                     <br>
@@ -3236,8 +3300,7 @@ window.selectMcqOption = function(opt) {
                     margin-bottom:5px;
                     color:#fca5a5;
                 ">
-                    Q${window.currentMcqSession.total}:
-                    WRONG (-0.33)
+                    Q${questionNumber}: WRONG (-0.33)
                     <br>
                     Your answer: ${selected}
                     <br>
@@ -3252,9 +3315,9 @@ window.selectMcqOption = function(opt) {
             resultList.scrollHeight;
     }
 
-    // ============================================
-    // SCORE DISPLAY
-    // ============================================
+    // ==========================================
+    // UPDATE SCORE UI
+    // ==========================================
 
     const scoreDisplay =
         document.getElementById(
@@ -3264,35 +3327,89 @@ window.selectMcqOption = function(opt) {
     if (scoreDisplay) {
 
         scoreDisplay.innerText =
-            `${window.currentMcqSession.marks.toFixed(2)} / ` +
-            `${window.currentMcqSession.total}`;
+            `${window.currentMcqSession.marks.toFixed(2)} / ${questionNumber}`;
     }
 
-    // ============================================
-    // SHOW COMPLETED STATE
-    // ============================================
+    // ==========================================
+    // 🔥 SAVE THIS QUESTION IMMEDIATELY
+    // ==========================================
 
-    const instruction =
-        document.getElementById(
-            "mcqCorrectInstruction"
-        );
+    if (
+        currentUser &&
+        window.currentPlayingVideoKey
+    ) {
 
-    if (instruction) {
+        try {
 
-        instruction.innerText =
-            `✓ QUESTION COMPLETED | ` +
-            `YOUR: ${selected} | ` +
-            `CORRECT: ${correct}`;
+            const questionRef = ref(
+                db,
+                `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}/MCQ_HISTORY/Q${questionNumber}`
+            );
 
-        instruction.style.color =
-            isCorrect
-                ? "#4ade80"
-                : "#f87171";
+            await set(
+                questionRef,
+                {
+                    questionNumber:
+                        questionNumber,
+
+                    selectedAnswer:
+                        selected,
+
+                    correctAnswer:
+                        correct,
+
+                    result:
+                        isCorrect
+                            ? "CORRECT"
+                            : "WRONG",
+
+                    marks:
+                        marksChange,
+
+                    time:
+                        timeTaken,
+
+                    timestamp:
+                        Date.now()
+                }
+            );
+
+            // Also save cumulative values
+            await update(
+                ref(
+                    db,
+                    `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
+                ),
+                {
+                    mcqScore:
+                        window.currentMcqSession.marks,
+
+                    mcqTotal:
+                        questionNumber
+                }
+            );
+
+            console.log(
+                `✅ Q${questionNumber} AUTO-SAVED`
+            );
+
+        } catch (error) {
+
+            console.error(
+                `❌ Q${questionNumber} SAVE FAILED:`,
+                error
+            );
+
+            alert(
+                `Q${questionNumber} could not be saved.\n\n` +
+                error.message
+            );
+        }
     }
 
-    // ============================================
+    // ==========================================
     // ENABLE NEXT QUESTION
-    // ============================================
+    // ==========================================
 
     const nextBtn =
         document.getElementById(
@@ -3302,7 +3419,6 @@ window.selectMcqOption = function(opt) {
     if (nextBtn) {
 
         nextBtn.disabled = false;
-
         nextBtn.style.opacity = "1";
         nextBtn.style.cursor = "pointer";
 
@@ -3310,12 +3426,19 @@ window.selectMcqOption = function(opt) {
             "NEXT QUESTION →";
     }
 
-    // ============================================
-    // RESET STATE FOR CURRENT QUESTION
-    // ============================================
+    // ==========================================
+    // RESET CURRENT QUESTION
+    // ==========================================
 
     window.mcqSelectingCorrect = false;
+    window.mcqAnswerSubmitted = false;
+    window.mcqCorrectAnswer = null;
+    window.mcqTimeTaken = null;
+    window.mcqSelected = null;
 
+    document.getElementById(
+        "mcqTimerDisplay"
+    ).innerText = "00:00";
 };
 window.mcqAnswerSubmitted = false;
 window.mcqCorrectAnswer = null;
