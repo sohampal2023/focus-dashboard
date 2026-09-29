@@ -2571,166 +2571,184 @@ window.dismissFeedback = async function() {
         await remove(ref(db, `users/${currentUser.uid}/newFeedback`));
     }
 };
-// Global Variables
+  // =====================================================
+// VIDEO / YOUTUBE GLOBAL VARIABLES
+// =====================================================
 window.ytPlayer = null;
 window.currentPlayingVideoKey = null;
 window.currentVideoData = null;
 window.videoSaveInterval = null;
 
-// Required by YouTube API, but we leave it empty to prevent early-load crashes
-window.onYouTubeIframeAPIReady = function() {
+// Required by YouTube API
+window.onYouTubeIframeAPIReady = function () {
     console.log("YT API Ready");
 };
-// 1. SAFELY LOAD VIDEOS TO SIDEBAR (AUTO-INJECTS HTML)
-window.loadAssignedVideos = function() {
-    if (!currentUser) return; 
-    
-    // Auto-create the container if it's missing from the HTML
-    let videoListDiv = document.getElementById("studentVideoList");
+
+
+// =====================================================
+// LOAD ASSIGNED VIDEOS
+// =====================================================
+window.loadAssignedVideos = function () {
+
+    if (!currentUser) return;
+
+    let videoListDiv =
+        document.getElementById("studentVideoList");
+
     if (!videoListDiv) {
+
         videoListDiv = document.createElement("div");
+
         videoListDiv.id = "studentVideoList";
-        videoListDiv.style.cssText = "display:flex; flex-direction:column; gap:8px; margin: 10px 0; width: 100%;";
-        
-        // Inject it directly above the "Digital Notes Canvas" button
-        const notesBtn = document.querySelector("button[onclick='toggleNotesCanvas()']");
+
+        videoListDiv.style.cssText =
+            "display:flex;" +
+            "flex-direction:column;" +
+            "gap:8px;" +
+            "margin:10px 0;" +
+            "width:100%;";
+
+        const notesBtn =
+            document.querySelector(
+                "button[onclick='toggleNotesCanvas()']"
+            );
+
         if (notesBtn && notesBtn.parentNode) {
-            notesBtn.parentNode.insertBefore(videoListDiv, notesBtn);
+
+            notesBtn.parentNode.insertBefore(
+                videoListDiv,
+                notesBtn
+            );
+
         } else {
-            console.error("Could not find Notes button to inject video list.");
+
+            console.error(
+                "Could not find Notes button to inject video list."
+            );
+
             return;
         }
     }
 
-    // Fetch from Database
-    onValue(ref(db, `users/${currentUser.uid}/ASSIGNED_VIDEOS`), (snap) => {
-        if(!snap.exists()) {
-            videoListDiv.innerHTML = ""; // Hide if empty
-            if(window.ytPlayer && typeof window.ytPlayer.stopVideo === 'function') window.ytPlayer.stopVideo();
-            return;
-        }
+    onValue(
+        ref(
+            db,
+            `users/${currentUser.uid}/ASSIGNED_VIDEOS`
+        ),
+        (snap) => {
 
-        const videos = snap.val();
-        let html = `<div style="font-size:11px; color:#facc15; font-weight:bold; margin-bottom:5px; text-transform:uppercase; text-align:center; background:rgba(250, 204, 21, 0.1); border:1px solid #facc15; padding:6px; border-radius:6px; letter-spacing:1px;">🎥 Assigned Videos</div>`;
-        
-        Object.keys(videos).forEach(key => {
-            const v = videos[key];
-            let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
-            let color = p > 90 ? "#4ade80" : "#38bdf8";
-            
-            html += `
-                <button onclick="window.playSpecificVideo('${key}', '${v.id}', ${v.progress}, '${v.mcqScore || 0}', '${v.mcqTotal || 0}', ${v.rewardGiven || false})"
+            if (!snap.exists()) {
+
+                videoListDiv.innerHTML = "";
+
+                if (
+                    window.ytPlayer &&
+                    typeof window.ytPlayer.stopVideo === "function"
+                ) {
+                    window.ytPlayer.stopVideo();
+                }
+
+                return;
+            }
+
+            const videos = snap.val();
+
+            let html = `
+                <div style="
+                    font-size:11px;
+                    color:#facc15;
+                    font-weight:bold;
+                    margin-bottom:5px;
+                    text-transform:uppercase;
+                    text-align:center;
+                    background:rgba(250,204,21,0.1);
+                    border:1px solid #facc15;
+                    padding:6px;
+                    border-radius:6px;
+                    letter-spacing:1px;
+                ">
+                    🎥 Assigned Videos
+                </div>
             `;
-        });
-        videoListDiv.innerHTML = html;
-        
-        if (window.currentPlayingVideoKey && videos[window.currentPlayingVideoKey]) {
-            window.currentVideoData = videos[window.currentPlayingVideoKey];
+
+            Object.keys(videos).forEach(key => {
+
+                const v = videos[key];
+
+                const progress =
+                    Number(v.progress) || 0;
+
+                const duration =
+                    Number(v.duration) || 0;
+
+                const p =
+                    duration > 0
+                        ? Math.floor(
+                            (progress / duration) * 100
+                        )
+                        : 0;
+
+                html += `
+                    <button
+                        onclick="
+                            window.playSpecificVideo(
+                                '${key}',
+                                '${v.id}',
+                                ${progress},
+                                '${v.mcqScore || 0}',
+                                '${v.mcqTotal || 0}',
+                                ${v.rewardGiven || false}
+                            )
+                        "
+                    >
+                `;
+            });
+
+            videoListDiv.innerHTML = html;
+
+            if (
+                window.currentPlayingVideoKey &&
+                videos[window.currentPlayingVideoKey]
+            ) {
+                window.currentVideoData =
+                    videos[
+                        window.currentPlayingVideoKey
+                    ];
+            }
         }
-    });
+    );
 };
-// --- MCQ SYSTEM VARIABLES ---
+
+
+// =====================================================
+// MCQ SYSTEM VARIABLES
+// =====================================================
 window.mcqInterval = null;
 window.mcqSeconds = 0;
 window.mcqSelected = null;
-window.currentMcqSession = { correct: 0, total: 0 };
-  window.mcqAnswerSubmitted = false;
+
+window.currentMcqSession = {
+    marks: 0,
+    total: 0
+};
+
+window.mcqAnswerSubmitted = false;
 window.mcqSelectingCorrect = false;
 window.mcqCorrectAnswer = null;
 window.mcqTimeTaken = "00:00";
 window.mcqSaving = false;
-  const mcqHistoryRef = ref(
-    db,
-    `users/${currentUser.uid}/ASSIGNED_VIDEOS/${videoKey}/MCQ_HISTORY`
-);
 
-try {
 
-    const historySnap =
-        await get(mcqHistoryRef);
-
-    if (historySnap.exists()) {
-
-        const history =
-            historySnap.val() || {};
-
-        const numbers =
-            Object.keys(history)
-                .map(key =>
-                    parseInt(
-                        key.replace("Q", "")
-                    )
-                )
-                .filter(n => !isNaN(n));
-
-        if (numbers.length > 0) {
-
-            const lastQuestion =
-                Math.max(...numbers);
-
-            window.currentMcqSession.total =
-                lastQuestion;
-
-            console.log(
-                "📚 Last saved MCQ:",
-                lastQuestion
-            );
-
-            console.log(
-                "➡️ Next MCQ:",
-                lastQuestion + 1
-            );
-        }
-    }
-
-} catch (error) {
-
-    console.error(
-        "MCQ history load error:",
-        error
-    );
-}
 // =====================================================
-// SAVE CURRENT MCQ SCORE TO FIREBASE
+// VIDEO REWARD STATE
 // =====================================================
-
-if (currentUser && window.currentPlayingVideoKey) {
-
-    update(
-        ref(
-            db,
-            `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
-        ),
-        {
-            mcqScore: window.currentMcqSession.marks,
-            mcqTotal: window.currentMcqSession.total
-        }
-    )
-    .then(() => {
-
-        console.log(
-            "✅ MCQ score saved:",
-            window.currentMcqSession.marks,
-            "/",
-            window.currentMcqSession.total
-        );
-
-    })
-    .catch(error => {
-
-        console.error(
-            "MCQ score save error:",
-            error
-        );
-
-    });
-}
 window.currentVideoRewarded = false;
-// 1. PLAY OR RESUME THE VIDEO IN THE HUB
+
+
 // =====================================================
 // PLAY / RESUME YOUTUBE VIDEO
 // =====================================================
-window.playSpecificVideo = async function(
+window.playSpecificVideo = async function (
     videoKey,
     ytId,
     startAt,
@@ -2738,81 +2756,247 @@ window.playSpecificVideo = async function(
     oldTotal,
     rewardGiven
 ) {
-    const resultList = document.getElementById("mcqResultList");
 
-    // -----------------------------------------
-    // LOAD PREVIOUS MCQ SCORE
-    // -----------------------------------------
-    if (window.currentPlayingVideoKey !== videoKey) {
+    // -------------------------------------------------
+    // SAFETY CHECK
+    // -------------------------------------------------
+    if (!currentUser) {
+
+        console.error(
+            "Cannot open video: user is not authenticated."
+        );
+
+        return;
+    }
+
+    if (!videoKey || !ytId) {
+
+        console.error(
+            "Invalid video information.",
+            {
+                videoKey,
+                ytId
+            }
+        );
+
+        return;
+    }
+
+
+    // -------------------------------------------------
+    // RESULT LIST
+    // -------------------------------------------------
+    const resultList =
+        document.getElementById(
+            "mcqResultList"
+        );
+
+
+    // -------------------------------------------------
+    // LOAD PREVIOUS SCORE
+    // -------------------------------------------------
+    if (
+        window.currentPlayingVideoKey !==
+        videoKey
+    ) {
+
         if (resultList) {
+
+            const previousScore =
+                Number(oldScore) || 0;
+
+            const previousTotal =
+                Number(oldTotal) || 0;
+
             const pastScoreText =
-                oldTotal > 0
-                    ? `Past Cumulative Score: ${parseFloat(oldScore || 0).toFixed(2)}`
+                previousTotal > 0
+                    ? `Past Cumulative Score: ${previousScore.toFixed(2)}`
                     : "Results will appear here...";
 
-            resultList.innerHTML =
-                `<div style="color:#64748b;text-align:center;font-style:italic;padding-top:10px;">
+            resultList.innerHTML = `
+                <div style="
+                    color:#64748b;
+                    text-align:center;
+                    font-style:italic;
+                    padding-top:10px;
+                ">
                     ${pastScoreText}
-                </div>`;
+                </div>
+            `;
         }
     }
 
-    window.currentPlayingVideoKey = videoKey;
+
+    // -------------------------------------------------
+    // SET ACTIVE VIDEO
+    // -------------------------------------------------
+    window.currentPlayingVideoKey =
+        videoKey;
 
     window.currentVideoRewarded =
         rewardGiven === true ||
         rewardGiven === "true";
 
+
+    // -------------------------------------------------
+    // INITIAL SCORE
+    // -------------------------------------------------
     window.currentMcqSession = {
-        marks: oldScore ? parseFloat(oldScore) : 0,
-        total: oldTotal ? parseInt(oldTotal) : 0
+
+        marks:
+            Number(oldScore) || 0,
+
+        total:
+            Number(oldTotal) || 0
     };
 
+
+    // =================================================
+    // RESTORE MCQ HISTORY FROM FIREBASE
+    // =================================================
+    try {
+
+        const mcqHistoryRef =
+            ref(
+                db,
+                `users/${currentUser.uid}/ASSIGNED_VIDEOS/${videoKey}/MCQ_HISTORY`
+            );
+
+        const historySnap =
+            await get(mcqHistoryRef);
+
+
+        if (historySnap.exists()) {
+
+            const history =
+                historySnap.val() || {};
+
+            const numbers =
+                Object.keys(history)
+                    .map(key => {
+
+                        const match =
+                            key.match(/^Q(\d+)$/);
+
+                        return match
+                            ? parseInt(
+                                match[1],
+                                10
+                            )
+                            : NaN;
+                    })
+                    .filter(
+                        n => Number.isFinite(n)
+                    );
+
+
+            if (numbers.length > 0) {
+
+                const lastQuestion =
+                    Math.max(...numbers);
+
+                // IMPORTANT:
+                // Firebase history is the source
+                // for the next question number.
+                window.currentMcqSession.total =
+                    lastQuestion;
+
+                console.log(
+                    "📚 MCQ history restored"
+                );
+
+                console.log(
+                    "Last saved question:",
+                    lastQuestion
+                );
+
+                console.log(
+                    "Next question:",
+                    lastQuestion + 1
+                );
+            }
+        }
+
+    } catch (error) {
+
+        console.error(
+            "MCQ history load error:",
+            error
+        );
+    }
+
+
+    // =================================================
+    // UPDATE SCORE DISPLAY AFTER HISTORY LOAD
+    // =================================================
     const mcqScoreDisp =
-        document.getElementById("mcqScoreDisplay");
+        document.getElementById(
+            "mcqScoreDisplay"
+        );
 
     if (mcqScoreDisp) {
+
         mcqScoreDisp.innerText =
             `${window.currentMcqSession.marks.toFixed(2)} / ${window.currentMcqSession.total}`;
     }
 
-    // -----------------------------------------
+
+    // =================================================
     // OPEN VIDEO MODAL
-    // -----------------------------------------
-    const modal = document.getElementById("videoModal");
+    // =================================================
+    const modal =
+        document.getElementById(
+            "videoModal"
+        );
 
     if (!modal) {
-        alert("Error: Video modal missing from HTML!");
+
+        alert(
+            "Error: Video modal missing from HTML!"
+        );
+
         return;
     }
 
     modal.classList.remove("hidden");
 
+
     const rightPane =
-        document.getElementById("videoSplitRight");
+        document.getElementById(
+            "videoSplitRight"
+        );
 
     if (rightPane) {
-        rightPane.style.display = "none";
+
+        rightPane.style.display =
+            "none";
     }
 
-    // -----------------------------------------
+
+    // =================================================
     // CHECK YOUTUBE API
-    // -----------------------------------------
-    if (typeof YT === "undefined" || !YT.Player) {
+    // =================================================
+    if (
+        typeof YT === "undefined" ||
+        !YT.Player
+    ) {
+
         alert(
             "YouTube API is connecting... Please click Play again in 2 seconds."
         );
+
         return;
     }
 
-    // -----------------------------------------
-    // IMPORTANT:
-    // CLEAN RESUME POSITION
-    // -----------------------------------------
-    const resumeAt = Math.max(
-        0,
-        Number(startAt) || 0
-    );
+
+    // =================================================
+    // RESUME POSITION
+    // =================================================
+    const resumeAt =
+        Math.max(
+            0,
+            Number(startAt) || 0
+        );
 
     console.log(
         "▶️ Opening video:",
@@ -2822,51 +3006,67 @@ window.playSpecificVideo = async function(
         "seconds"
     );
 
-    // -----------------------------------------
+
+    // =================================================
     // CREATE PLAYER FIRST TIME
-    // -----------------------------------------
+    // =================================================
     if (!window.ytPlayer) {
 
-        window.ytPlayer = new YT.Player(
-            "ytPlayer",
-            {
-                height: "100%",
-                width: "100%",
-                videoId: ytId,
+        window.ytPlayer =
+            new YT.Player(
+                "ytPlayer",
+                {
 
-                playerVars: {
-                    start: Math.floor(resumeAt),
-                    rel: 0,
-                    autoplay: 1
-                },
+                    height: "100%",
 
-                events: {
-                    onStateChange:
-                        window.onPlayerStateChange
+                    width: "100%",
+
+                    videoId: ytId,
+
+                    playerVars: {
+
+                        start:
+                            Math.floor(
+                                resumeAt
+                            ),
+
+                        rel: 0,
+
+                        autoplay: 1
+                    },
+
+                    events: {
+
+                        onStateChange:
+                            window.onPlayerStateChange
+                    }
                 }
-            }
-        );
+            );
 
     } else {
 
         let currentLoadedId = "";
 
         try {
+
             currentLoadedId =
                 window.ytPlayer
                     .getVideoData()
-                    .video_id;
+                    .video_id || "";
+
         } catch (e) {
+
             currentLoadedId = "";
         }
 
-        // -----------------------------------------
-        // SAME VIDEO
-        // -----------------------------------------
-        if (currentLoadedId === ytId) {
 
-            // DO NOT JUST playVideo()
-            // Explicitly jump to saved position
+        // =================================================
+        // SAME VIDEO
+        // =================================================
+        if (
+            currentLoadedId === ytId
+        ) {
+
             try {
 
                 window.ytPlayer.seekTo(
@@ -2882,21 +3082,19 @@ window.playSpecificVideo = async function(
 
                 window.ytPlayer.playVideo();
 
-            } catch (e) {
+            } catch (error) {
 
                 console.error(
                     "Resume seek error:",
-                    e
+                    error
                 );
-
             }
 
-        }
 
-        // -----------------------------------------
+        // =================================================
         // DIFFERENT VIDEO
-        // -----------------------------------------
-        else {
+        // =================================================
+        } else {
 
             try {
 
@@ -2911,13 +3109,12 @@ window.playSpecificVideo = async function(
                     "seconds"
                 );
 
-            } catch (e) {
+            } catch (error) {
 
                 console.error(
                     "Video load error:",
-                    e
+                    error
                 );
-
             }
         }
     }
