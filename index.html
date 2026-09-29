@@ -3119,11 +3119,21 @@ window.playSpecificVideo = async function (
         }
     }
 };
-window.onPlayerStateChange = function(event) {
+// =====================================================
+// YOUTUBE VIDEO PROGRESS + COMPLETION + SAME REWARD SYSTEM
+// =====================================================
+window.onPlayerStateChange = async function(event) {
 
-    // =====================================================
+    if (
+        typeof YT === "undefined" ||
+        !window.ytPlayer
+    ) {
+        return;
+    }
+
+    // =================================================
     // VIDEO PLAYING
-    // =====================================================
+    // =================================================
     if (event.data === YT.PlayerState.PLAYING) {
 
         // Prevent duplicate save intervals
@@ -3134,34 +3144,34 @@ window.onPlayerStateChange = function(event) {
         window.videoSaveInterval = setInterval(async () => {
 
             if (
+                !currentUser ||
                 !window.ytPlayer ||
-                !window.currentPlayingVideoKey ||
-                !currentUser
+                !window.currentPlayingVideoKey
             ) {
                 return;
             }
 
             try {
 
-                const cTime = window.ytPlayer.getCurrentTime();
-                const dur = window.ytPlayer.getDuration();
+                const currentTime =
+                    window.ytPlayer.getCurrentTime();
 
-                // -----------------------------------------
-                // ONLY SAVE CURRENT POSITION
-                // -----------------------------------------
+                const duration =
+                    window.ytPlayer.getDuration();
+
+                if (!duration || duration <= 0) {
+                    return;
+                }
+
                 await update(
                     ref(
                         db,
                         `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
                     ),
                     {
-                        progress: cTime,
-                        duration: dur
+                        progress: currentTime,
+                        duration: duration
                     }
-                );
-
-                console.log(
-                    `💾 Video progress saved: ${cTime.toFixed(1)} / ${dur.toFixed(1)} sec`
                 );
 
             } catch (error) {
@@ -3170,49 +3180,49 @@ window.onPlayerStateChange = function(event) {
                     "Video progress save error:",
                     error
                 );
-
             }
 
         }, 5000);
-
     }
 
 
-    // =====================================================
+    // =================================================
     // VIDEO PAUSED
-    // =====================================================
+    // =================================================
     else if (event.data === YT.PlayerState.PAUSED) {
 
         if (window.videoSaveInterval) {
-            clearInterval(window.videoSaveInterval);
+
+            clearInterval(
+                window.videoSaveInterval
+            );
+
             window.videoSaveInterval = null;
         }
 
-        // Save immediately when paused
         if (
+            currentUser &&
             window.ytPlayer &&
-            window.currentPlayingVideoKey &&
-            currentUser
+            window.currentPlayingVideoKey
         ) {
 
             try {
 
-                const cTime = window.ytPlayer.getCurrentTime();
-                const dur = window.ytPlayer.getDuration();
+                const currentTime =
+                    window.ytPlayer.getCurrentTime();
 
-                update(
+                const duration =
+                    window.ytPlayer.getDuration();
+
+                await update(
                     ref(
                         db,
                         `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
                     ),
                     {
-                        progress: cTime,
-                        duration: dur
+                        progress: currentTime,
+                        duration: duration
                     }
-                );
-
-                console.log(
-                    `⏸️ Pause position saved: ${cTime.toFixed(1)} sec`
                 );
 
             } catch (error) {
@@ -3221,69 +3231,243 @@ window.onPlayerStateChange = function(event) {
                     "Pause save error:",
                     error
                 );
-
             }
         }
     }
 
 
-    // =====================================================
-    // VIDEO ACTUALLY ENDED
-    // =====================================================
+    // =================================================
+    // VIDEO COMPLETELY FINISHED
+    // =================================================
     else if (event.data === YT.PlayerState.ENDED) {
 
-        console.log("🎬 VIDEO ACTUALLY ENDED");
+        console.log(
+            "🎬 YT VIDEO COMPLETED"
+        );
 
+        // Stop progress timer
         if (window.videoSaveInterval) {
-            clearInterval(window.videoSaveInterval);
+
+            clearInterval(
+                window.videoSaveInterval
+            );
+
             window.videoSaveInterval = null;
         }
 
-        // Mark video as actually completed,
-        // BUT DO NOT DELETE DATABASE DATA YET.
         if (
-            window.currentPlayingVideoKey &&
-            currentUser
+            !currentUser ||
+            !window.currentPlayingVideoKey
         ) {
+            return;
+        }
 
-            update(
-                ref(
-                    db,
-                    `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
-                ),
-                {
-                    progress: window.ytPlayer.getDuration(),
-                    duration: window.ytPlayer.getDuration(),
-                    videoCompleted: true
-                }
-            )
-            .then(() => {
-                console.log(
-                    "✅ Video completion recorded. Waiting for MCQ submission."
-                );
-            })
-            .catch(error => {
+        const videoRef = ref(
+            db,
+            `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
+        );
+
+        try {
+
+            // -----------------------------------------
+            // GET CURRENT VIDEO DATA
+            // -----------------------------------------
+            const snap = await get(videoRef);
+
+            if (!snap.exists()) {
+
                 console.error(
-                    "Video completion save error:",
-                    error
+                    "Video record not found."
                 );
-            });
+
+                return;
+            }
+
+            const videoData =
+                snap.val() || {};
+
+            const duration =
+                Number(
+                    window.ytPlayer.getDuration()
+                ) ||
+                Number(videoData.duration) ||
+                0;
+
+
+            // -----------------------------------------
+            // MARK VIDEO COMPLETED
+            // -----------------------------------------
+            await update(
+                videoRef,
+                {
+                    progress: duration,
+                    duration: duration,
+                    videoCompleted: true,
+                    completedAt: Date.now()
+                }
+            );
+
+
+            // -----------------------------------------
+            // SAME REWARD RULE AS NORMAL TASK
+            // +50 XP ONLY ONCE
+            // -----------------------------------------
+            if (videoData.rewardGiven !== true) {
+
+                console.log(
+                    "🎁 Awarding same completion reward: +50 XP"
+                );
+
+                // Mark reward as already given
+                await update(
+                    videoRef,
+                    {
+                        rewardGiven: true,
+                        rewardXP: 50
+                    }
+                );
+
+
+                // -------------------------------------
+                // SAME XP LOGIC AS OTHER SUBJECTS
+                // -------------------------------------
+                let currentXP =
+                    parseInt(
+                        localStorage.getItem(
+                            key("TOTAL_XP")
+                        ) || "0",
+                        10
+                    );
+
+                currentXP += 50;
+
+                localStorage.setItem(
+                    key("TOTAL_XP"),
+                    currentXP
+                );
+
+
+                // -------------------------------------
+                // UPDATE SAME DASHBOARD XP UI
+                // -------------------------------------
+                if (
+                    typeof updateGamificationUI ===
+                    "function"
+                ) {
+                    updateGamificationUI();
+                }
+
+
+                if (
+                    typeof updateProgress ===
+                    "function"
+                ) {
+                    updateProgress();
+                }
+
+
+                // -------------------------------------
+                // SAME COMPLETION EFFECT
+                // -------------------------------------
+                if (
+                    typeof confetti ===
+                    "function"
+                ) {
+
+                    confetti({
+                        particleCount: 200,
+                        spread: 80,
+                        origin: {
+                            y: 0.5
+                        }
+                    });
+                }
+
+
+                // -------------------------------------
+                // SUCCESS MESSAGE
+                // -------------------------------------
+                const toast =
+                    document.createElement("div");
+
+                toast.style.cssText = `
+                    position:fixed;
+                    top:25px;
+                    right:25px;
+                    z-index:999999;
+                    background:#16a34a;
+                    color:white;
+                    padding:18px 25px;
+                    border-radius:12px;
+                    font-weight:800;
+                    font-size:16px;
+                    border:2px solid #86efac;
+                    box-shadow:0 10px 30px rgba(0,0,0,0.45);
+                    text-align:center;
+                `;
+
+                toast.innerHTML = `
+                    🎬 VIDEO COMPLETED<br>
+                    <span style="font-size:20px;">
+                        +50 XP
+                    </span>
+                `;
+
+                document.body.appendChild(toast);
+
+                setTimeout(() => {
+                    toast.remove();
+                }, 5000);
+
+
+                console.log(
+                    "✅ Video reward given: +50 XP"
+                );
+
+            } else {
+
+                console.log(
+                    "ℹ️ Video already rewarded. No duplicate XP."
+                );
+            }
+
+
+            // -----------------------------------------
+            // REFRESH TASK DISPLAY
+            // -----------------------------------------
+            if (
+                typeof window.loadTasks ===
+                "function"
+            ) {
+                window.loadTasks();
+            }
+
+
+        } catch (error) {
+
+            console.error(
+                "❌ Video completion error:",
+                error
+            );
         }
     }
 
 
-    // =====================================================
+    // =================================================
     // OTHER STATES
-    // =====================================================
+    // =================================================
     else {
 
         if (window.videoSaveInterval) {
-            clearInterval(window.videoSaveInterval);
+
+            clearInterval(
+                window.videoSaveInterval
+            );
+
             window.videoSaveInterval = null;
         }
     }
 };
-
 // 2. TOGGLE MCQ PANEL
 window.toggleHubMCQ = function() {
     const rightPane = document.getElementById("videoSplitRight");
