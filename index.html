@@ -3239,218 +3239,239 @@ window.onPlayerStateChange = async function(event) {
     // =================================================
     // VIDEO COMPLETELY FINISHED
     // =================================================
-    else if (event.data === YT.PlayerState.ENDED) {
+    else if (event.data === YT.PlayerState.ENDED) {// =================================================
+// VIDEO COMPLETELY FINISHED
+// =================================================
+else if (event.data === YT.PlayerState.ENDED) {
 
-        console.log(
-            "🎬 YT VIDEO COMPLETED"
-        );
+    console.log("🎬 YT VIDEO COMPLETED");
 
-        // Stop progress timer
-        if (window.videoSaveInterval) {
+    // Stop progress saving
+    if (window.videoSaveInterval) {
+        clearInterval(window.videoSaveInterval);
+        window.videoSaveInterval = null;
+    }
 
-            clearInterval(
-                window.videoSaveInterval
+    if (
+        !currentUser ||
+        !window.currentPlayingVideoKey
+    ) {
+        return;
+    }
+
+    const completedVideoKey =
+        window.currentPlayingVideoKey;
+
+    const videoRef = ref(
+        db,
+        `users/${currentUser.uid}/ASSIGNED_VIDEOS/${completedVideoKey}`
+    );
+
+    try {
+
+        // =================================================
+        // READ VIDEO DATA BEFORE DELETING IT
+        // =================================================
+        const snap = await get(videoRef);
+
+        if (!snap.exists()) {
+            console.log(
+                "Video already removed from Firebase."
             );
-
-            window.videoSaveInterval = null;
-        }
-
-        if (
-            !currentUser ||
-            !window.currentPlayingVideoKey
-        ) {
             return;
         }
 
-        const videoRef = ref(
-            db,
-            `users/${currentUser.uid}/ASSIGNED_VIDEOS/${window.currentPlayingVideoKey}`
-        );
+        const videoData = snap.val() || {};
 
-        try {
 
-            // -----------------------------------------
-            // GET CURRENT VIDEO DATA
-            // -----------------------------------------
-            const snap = await get(videoRef);
+        // =================================================
+        // GIVE +50 XP ONLY ONCE
+        // =================================================
+        if (videoData.rewardGiven !== true) {
 
-            if (!snap.exists()) {
-
-                console.error(
-                    "Video record not found."
+            let currentXP =
+                parseInt(
+                    localStorage.getItem(
+                        key("TOTAL_XP")
+                    ) || "0",
+                    10
                 );
 
-                return;
-            }
+            currentXP += 50;
 
-            const videoData =
-                snap.val() || {};
-
-            const duration =
-                Number(
-                    window.ytPlayer.getDuration()
-                ) ||
-                Number(videoData.duration) ||
-                0;
-
-
-            // -----------------------------------------
-            // MARK VIDEO COMPLETED
-            // -----------------------------------------
-            await update(
-                videoRef,
-                {
-                    progress: duration,
-                    duration: duration,
-                    videoCompleted: true,
-                    completedAt: Date.now()
-                }
+            localStorage.setItem(
+                key("TOTAL_XP"),
+                currentXP
             );
 
+            console.log(
+                "🏆 YT VIDEO REWARD: +50 XP"
+            );
 
-            // -----------------------------------------
-            // SAME REWARD RULE AS NORMAL TASK
-            // +50 XP ONLY ONCE
-            // -----------------------------------------
-            if (videoData.rewardGiven !== true) {
-
-                console.log(
-                    "🎁 Awarding same completion reward: +50 XP"
-                );
-
-                // Mark reward as already given
-                await update(
-                    videoRef,
-                    {
-                        rewardGiven: true,
-                        rewardXP: 50
-                    }
-                );
-
-
-                // -------------------------------------
-                // SAME XP LOGIC AS OTHER SUBJECTS
-                // -------------------------------------
-                let currentXP =
-                    parseInt(
-                        localStorage.getItem(
-                            key("TOTAL_XP")
-                        ) || "0",
-                        10
-                    );
-
-                currentXP += 50;
-
-                localStorage.setItem(
-                    key("TOTAL_XP"),
-                    currentXP
-                );
-
-
-                // -------------------------------------
-                // UPDATE SAME DASHBOARD XP UI
-                // -------------------------------------
-                if (
-                    typeof updateGamificationUI ===
-                    "function"
-                ) {
-                    updateGamificationUI();
-                }
-
-
-                if (
-                    typeof updateProgress ===
-                    "function"
-                ) {
-                    updateProgress();
-                }
-
-
-                // -------------------------------------
-                // SAME COMPLETION EFFECT
-                // -------------------------------------
-                if (
-                    typeof confetti ===
-                    "function"
-                ) {
-
-                    confetti({
-                        particleCount: 200,
-                        spread: 80,
-                        origin: {
-                            y: 0.5
-                        }
-                    });
-                }
-
-
-                // -------------------------------------
-                // SUCCESS MESSAGE
-                // -------------------------------------
-                const toast =
-                    document.createElement("div");
-
-                toast.style.cssText = `
-                    position:fixed;
-                    top:25px;
-                    right:25px;
-                    z-index:999999;
-                    background:#16a34a;
-                    color:white;
-                    padding:18px 25px;
-                    border-radius:12px;
-                    font-weight:800;
-                    font-size:16px;
-                    border:2px solid #86efac;
-                    box-shadow:0 10px 30px rgba(0,0,0,0.45);
-                    text-align:center;
-                `;
-
-                toast.innerHTML = `
-                    🎬 VIDEO COMPLETED<br>
-                    <span style="font-size:20px;">
-                        +50 XP
-                    </span>
-                `;
-
-                document.body.appendChild(toast);
-
-                setTimeout(() => {
-                    toast.remove();
-                }, 5000);
-
-
-                console.log(
-                    "✅ Video reward given: +50 XP"
-                );
-
-            } else {
-
-                console.log(
-                    "ℹ️ Video already rewarded. No duplicate XP."
-                );
-            }
-
-
-            // -----------------------------------------
-            // REFRESH TASK DISPLAY
-            // -----------------------------------------
+            // Update same UI as normal tasks
             if (
-                typeof window.loadTasks ===
+                typeof updateGamificationUI ===
                 "function"
             ) {
-                window.loadTasks();
+                updateGamificationUI();
             }
 
+            if (
+                typeof updateProgress ===
+                "function"
+            ) {
+                updateProgress();
+            }
 
-        } catch (error) {
+            // Same completion effect
+            if (
+                typeof confetti ===
+                "function"
+            ) {
+                confetti({
+                    particleCount: 200,
+                    spread: 80,
+                    origin: {
+                        y: 0.5
+                    }
+                });
+            }
 
-            console.error(
-                "❌ Video completion error:",
-                error
+            // Success notification
+            const toast =
+                document.createElement("div");
+
+            toast.style.cssText = `
+                position:fixed;
+                top:25px;
+                right:25px;
+                z-index:999999;
+                background:#16a34a;
+                color:white;
+                padding:18px 25px;
+                border-radius:12px;
+                font-weight:800;
+                font-size:16px;
+                border:2px solid #86efac;
+                box-shadow:0 10px 30px rgba(0,0,0,0.45);
+                text-align:center;
+            `;
+
+            toast.innerHTML = `
+                🎬 VIDEO COMPLETED<br>
+                <span style="font-size:20px;">
+                    +50 XP AWARDED
+                </span>
+            `;
+
+            document.body.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, 5000);
+        }
+
+
+        // =================================================
+        // DELETE ENTIRE VIDEO RECORD
+        // =================================================
+        console.log(
+            "🗑️ Removing completed YT video from Firebase..."
+        );
+
+        await set(
+            videoRef,
+            null
+        );
+
+
+        // =================================================
+        // CLEAR LOCAL VIDEO STATE
+        // =================================================
+        window.currentPlayingVideoKey = null;
+        window.currentVideoData = null;
+        window.currentVideoRewarded = false;
+
+        window.currentMcqSession = {
+            marks: 0,
+            total: 0
+        };
+
+        window.mcqSelected = null;
+        window.mcqCorrectAnswer = null;
+        window.mcqAnswerSubmitted = false;
+        window.mcqSelectingCorrect = false;
+
+
+        // =================================================
+        // STOP YOUTUBE PLAYER
+        // =================================================
+        try {
+
+            if (
+                window.ytPlayer &&
+                typeof window.ytPlayer.stopVideo ===
+                "function"
+            ) {
+                window.ytPlayer.stopVideo();
+            }
+
+        } catch (e) {
+
+            console.log(
+                "YouTube player stop error:",
+                e
             );
         }
+
+
+        // =================================================
+        // CLOSE VIDEO MODAL
+        // =================================================
+        const modal =
+            document.getElementById(
+                "videoModal"
+            );
+
+        if (modal) {
+            modal.classList.add("hidden");
+        }
+
+
+        // =================================================
+        // REFRESH MAP / TASK LIST
+        // =================================================
+        if (
+            typeof window.loadTasks ===
+            "function"
+        ) {
+            window.loadTasks();
+        }
+
+
+        // =================================================
+        // REFRESH ASSIGNED VIDEO LIST
+        // =================================================
+        if (
+            typeof window.loadAssignedVideos ===
+            "function"
+        ) {
+            window.loadAssignedVideos();
+        }
+
+
+        console.log(
+            "✅ Completed YT video completely removed."
+        );
+
+    } catch (error) {
+
+        console.error(
+            "❌ YT completion cleanup error:",
+            error
+        );
     }
+}
 
 
     // =================================================
