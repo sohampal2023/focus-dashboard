@@ -6668,95 +6668,378 @@ function renderMapNodes(win, roadmap) {
     });
 }
 window.loadTasks = function() {
+
     const tList = document.getElementById("taskList");
-    if(!tList) return;
+
+    if (!tList) return;
+
+    if (!currentUser) {
+        tList.innerHTML =
+            "<div style='color:#64748b; padding:20px; text-align:center;'>Waiting for login...</div>";
+        return;
+    }
+
     tList.innerHTML = "";
 
-    get(ref(db, `users/${currentUser.uid}`)).then((snap) => {
-        if(!snap.exists()) {
-            tList.innerHTML = "<div style='color:#64748b; padding:20px; text-align:center;'>Waiting for Admin Assignment...</div>";
+    get(
+        ref(
+            db,
+            `users/${currentUser.uid}`
+        )
+    ).then((snap) => {
+
+        if (!snap.exists()) {
+
+            tList.innerHTML =
+                "<div style='color:#64748b; padding:20px; text-align:center;'>Waiting for Admin Assignment...</div>";
+
             return;
         }
+
 
         const data = snap.val();
-        const roadmap = JSON.parse(data.ROADMAP || "[]");
-        
+
+        const roadmap =
+            JSON.parse(
+                data.ROADMAP || "[]"
+            );
+
+
         let uniqueGroups = {};
-        
-        // 1. Group Standard Subjects
+
+
+        // =====================================================
+        // 1. NORMAL SUBJECTS
+        // =====================================================
         roadmap.forEach(t => {
-            const groupKey = `${t.subject} - ${t.module}`;
-            if(!uniqueGroups[groupKey]) {
+
+            const groupKey =
+                `${t.subject} - ${t.module}`;
+
+
+            if (!uniqueGroups[groupKey]) {
+
                 uniqueGroups[groupKey] = {
+
                     subject: t.subject,
+
                     module: t.module,
+
                     total: 0,
+
                     done: 0,
-                    type: 'task'
+
+                    type: "task"
                 };
             }
+
+
             uniqueGroups[groupKey].total++;
-            if(t.status === 'DONE') uniqueGroups[groupKey].done++;
+
+
+            if (
+                t.status === "DONE"
+            ) {
+
+                uniqueGroups[groupKey].done++;
+            }
         });
 
-        // 2. Group Assigned Videos into "YT Video" Subject Card
+
+
+        // =====================================================
+        // 2. EACH YT VIDEO AS ITS OWN TASK
+        // =====================================================
         if (data.ASSIGNED_VIDEOS) {
-            const vids = Object.keys(data.ASSIGNED_VIDEOS);
-            if (vids.length > 0) {
-                let doneVids = 0;
-                vids.forEach(k => {
-                    let v = data.ASSIGNED_VIDEOS[k];
-                    if (v.duration > 0 && (v.progress / v.duration) > 0.9) doneVids++;
-                });
-                
-                uniqueGroups["YT Video - Assigned Videos"] = {
+
+            const videos =
+                data.ASSIGNED_VIDEOS;
+
+
+            Object.keys(videos).forEach(videoKey => {
+
+                const v =
+                    videos[videoKey] || {};
+
+
+                // Use a unique key for every video
+                const groupKey =
+                    `YT Video - ${videoKey}`;
+
+
+                // Video title/name
+                const videoName =
+                    v.videoName ||
+                    v.name ||
+                    v.title ||
+                    `Video ${videoKey}`;
+
+
+                // Video is completed only when
+                // YouTube completion flag is true
+                const isDone =
+                    v.videoCompleted === true;
+
+
+                uniqueGroups[groupKey] = {
+
                     subject: "YT Video",
-                    module: "Assigned Videos",
-                    total: vids.length,
-                    done: doneVids,
-                    type: 'video'
+
+                    module: videoName,
+
+                    total: 1,
+
+                    done: isDone ? 1 : 0,
+
+                    type: "video",
+
+                    videoKey: videoKey,
+
+                    videoData: v
                 };
-            }
+
+            });
         }
 
-        if (Object.keys(uniqueGroups).length === 0) {
-            tList.innerHTML = "<div style='color:#64748b; padding:20px; text-align:center;'>No tasks or videos assigned.</div>";
+
+
+        // =====================================================
+        // 3. NOTHING ASSIGNED
+        // =====================================================
+        if (
+            Object.keys(uniqueGroups).length === 0
+        ) {
+
+            tList.innerHTML =
+                "<div style='color:#64748b; padding:20px; text-align:center;'>No tasks or videos assigned.</div>";
+
             return;
         }
 
-        // 3. Render the List UI
-        Object.keys(uniqueGroups).forEach(groupKey => {
-            const gData = uniqueGroups[groupKey];
-            const container = document.createElement("div");
-            
-            let borderColor = gData.type === 'video' ? '#eab308' : '#38bdf8';
-            let titleColor = gData.type === 'video' ? '#facc15' : '#7dd3fc';
-            let icon = gData.type === 'video' ? '🎥' : '📘';
 
-            container.style.cssText = `
-                padding: 18px; border: 1px solid #334155; border-radius: 12px; 
-                margin-bottom: 15px; background: #0f172a; cursor: pointer;
-                border-left: 6px solid ${borderColor}; transition: 0.2s;
-            `;
-            
-            container.onclick = () => window.openRoadmapWindow(groupKey); 
 
-            container.innerHTML = `
-                <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <div style="font-weight:bold; color:${titleColor}; font-size:16px;">${icon} ${gData.subject}</div>
-                        <div style="font-size:12px; color:#94a3b8; margin-top:4px;">${gData.module}</div>
+        // =====================================================
+        // 4. RENDER ALL TASKS
+        // =====================================================
+        Object.keys(uniqueGroups).forEach(
+            groupKey => {
+
+                const gData =
+                    uniqueGroups[groupKey];
+
+
+                const container =
+                    document.createElement("div");
+
+
+                // ---------------------------------------------
+                // COLORS
+                // ---------------------------------------------
+                const borderColor =
+                    gData.type === "video"
+                        ? "#eab308"
+                        : "#38bdf8";
+
+
+                const titleColor =
+                    gData.type === "video"
+                        ? "#facc15"
+                        : "#7dd3fc";
+
+
+                const icon =
+                    gData.type === "video"
+                        ? "🎥"
+                        : "📘";
+
+
+
+                // ---------------------------------------------
+                // CARD STYLE
+                // ---------------------------------------------
+                container.style.cssText = `
+                    padding:18px;
+                    border:1px solid #334155;
+                    border-radius:12px;
+                    margin-bottom:15px;
+                    background:#0f172a;
+                    cursor:pointer;
+                    border-left:6px solid ${borderColor};
+                    transition:0.2s;
+                `;
+
+
+
+                // ---------------------------------------------
+                // CLICK HANDLER
+                // ---------------------------------------------
+                if (
+                    gData.type === "video"
+                ) {
+
+                    // Open the actual assigned video
+                    container.onclick = () => {
+
+                        const v =
+                            gData.videoData;
+
+
+                        window.playSpecificVideo(
+                            gData.videoKey,
+
+                            v.id,
+
+                            Number(v.progress) || 0,
+
+                            v.mcqScore || 0,
+
+                            v.mcqTotal || 0,
+
+                            v.rewardGiven || false
+                        );
+                    };
+
+                } else {
+
+                    // Existing normal subject logic
+                    container.onclick = () =>
+                        window.openRoadmapWindow(
+                            groupKey
+                        );
+                }
+
+
+
+                // ---------------------------------------------
+                // STATUS
+                // ---------------------------------------------
+                const statusText =
+                    gData.done === gData.total
+                        ? "DONE"
+                        : "PENDING";
+
+
+                const statusColor =
+                    gData.done === gData.total
+                        ? "#4ade80"
+                        : "#facc15";
+
+
+
+                // ---------------------------------------------
+                // CARD HTML
+                // ---------------------------------------------
+                container.innerHTML = `
+
+                    <div style="
+                        display:flex;
+                        justify-content:space-between;
+                        align-items:center;
+                        gap:15px;
+                    ">
+
+                        <div>
+
+                            <div style="
+                                font-weight:bold;
+                                color:${titleColor};
+                                font-size:16px;
+                            ">
+                                ${icon} ${gData.subject}
+                            </div>
+
+
+                            <div style="
+                                font-size:12px;
+                                color:#94a3b8;
+                                margin-top:4px;
+                            ">
+                                ${gData.module}
+                            </div>
+
+                        </div>
+
+
+                        <div style="
+                            text-align:right;
+                        ">
+
+                            <div style="
+                                font-size:12px;
+                                color:${statusColor};
+                                font-weight:800;
+                            ">
+                                ${gData.done} / ${gData.total} ${statusText}
+                            </div>
+
+
+                            <div style="
+                                font-size:10px;
+                                color:${borderColor};
+                                margin-top:5px;
+                                text-transform:uppercase;
+                            ">
+                                ${
+                                    gData.type === "video"
+                                        ? "OPEN VIDEO →"
+                                        : "OPEN STUDY MAP →"
+                                }
+                            </div>
+
+                        </div>
+
                     </div>
-                    <div style="text-align:right">
-                        <div style="font-size:12px; color:#4ade80; font-weight:800;">${gData.done} / ${gData.total} DONE</div>
-                        <div style="font-size:10px; color:${borderColor}; margin-top:5px; text-transform:uppercase;">OPEN STUDY MAP →</div>
-                    </div>
-                </div>
-            `;
-            tList.append(container);
-        });
+
+                `;
+
+
+                // ---------------------------------------------
+                // HOVER EFFECT
+                // ---------------------------------------------
+                container.addEventListener(
+                    "mouseenter",
+                    () => {
+
+                        container.style.transform =
+                            "translateY(-2px)";
+
+                        container.style.borderColor =
+                            borderColor;
+                    }
+                );
+
+
+                container.addEventListener(
+                    "mouseleave",
+                    () => {
+
+                        container.style.transform =
+                            "translateY(0)";
+
+                        container.style.borderColor =
+                            "#334155";
+                    }
+                );
+
+
+                tList.appendChild(
+                    container
+                );
+
+            }
+        );
+
+    }).catch(error => {
+
+        console.error(
+            "loadTasks error:",
+            error
+        );
+
+        tList.innerHTML =
+            "<div style='color:#ef4444; padding:20px; text-align:center;'>Unable to load tasks.</div>";
     });
-}
+};
 function addExtra() {
   // 1. Build a numbered menu string
   let menu = "Select Subject for Extra Work (Enter Number):\n\n";
