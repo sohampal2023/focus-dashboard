@@ -6316,220 +6316,6 @@ window.startRoadmapTask = async function(taskId) {
     return allocations;
 };
 let roadmapInterval = null;
-window.openRoadmapWindow = function(subjectFilter) {
-    const modal = document.getElementById("inPageMapModal");
-    modal.classList.remove("hidden");
-    
-    // Simple translucent dark background
-    modal.style.background = "rgba(2, 6, 23, 0.95)";
-    modal.style.backgroundImage = "none"; 
-
-    onValue(ref(db, `users/${currentUser.uid}`), (snap) => {
-        const data = snap.val();
-        if(!data) return;
-        
-        const isVideoMap = (subjectFilter === "YT Video - Assigned Videos");
-        
-        const roadmap = JSON.parse(data.ROADMAP || "[]");
-        const filteredTasks = roadmap.filter(t => `${t.subject} - ${t.module}` === subjectFilter);
-        const activeNode = filteredTasks.find(t => t.status === 'RUNNING');
-        const consumed = data.TIME_CONSUMED || 0;
-        
-        // Fetch Video Data
-        const vData = data.ASSIGNED_VIDEOS;
-        
-        let totalItems = 0;
-        let doneItems = 0;
-        
-        if (isVideoMap && vData) {
-            totalItems = Object.keys(vData).length;
-            doneItems = Object.values(vData).filter(v => v.duration > 0 && (v.progress / v.duration) > 0.9).length;
-        } else {
-            totalItems = filteredTasks.length;
-            doneItems = filteredTasks.filter(t => t.status === 'DONE').length;
-        }
-        
-        let html = `
-            <style>
-                .simple-header {
-                    position: sticky; top: 0; background: #0f172a; padding: 20px 40px; 
-                    border-bottom: 1px solid #334155; z-index: 100;
-                    display: flex; justify-content: space-between; align-items: center;
-                }
-                .simple-map-container { display: flex; flex-direction: column; align-items: center; padding: 40px; }
-                .simple-node-wrapper { display: flex; flex-direction: column; align-items: center; width: 100%; position: relative; }
-                .simple-node {
-                    width: 400px; padding: 20px; background: transparent;
-                    border: 1px solid #334155; border-radius: 8px; position: relative; margin-left: 50px;
-                }
-                .simple-node.done { border-color: #22c55e; background: rgba(34, 197, 94, 0.05); }
-                .simple-node.active { border-color: #38bdf8; background: rgba(56, 189, 248, 0.05); }
-                .simple-badge {
-                    width: 40px; height: 40px; border-radius: 50%; background: #0f172a; border: 2px solid #334155;
-                    position: absolute; left: -70px; top: 50%; transform: translateY(-50%);
-                    display: flex; align-items: center; justify-content: center; font-weight: bold; color: #94a3b8;
-                }
-                .simple-node.done .simple-badge { border-color: #22c55e; color: #22c55e; }
-                .simple-node.active .simple-badge { border-color: #38bdf8; color: #38bdf8; }
-                .simple-connector { width: 2px; height: 40px; background: #334155; margin-left: -50px; }
-                .btn-simple {
-                    background: #1e293b; border: 1px solid #334155; padding: 10px; border-radius: 4px;
-                    color: white; font-weight: bold; cursor: pointer; width: 100%; margin-top:10px;
-                }
-                .btn-simple:hover { background: #334155; }
-                .btn-simple.start { background: #0ea5e9; border-color: #0ea5e9; }
-                .btn-simple.finish { background: #22c55e; border-color: #22c55e; width: 48%; }
-                .btn-simple.abort { background: #ef4444; border-color: #ef4444; width: 48%; margin-left: 4%; }
-            </style>
-            
-            <div class="simple-header">
-                <div>
-                    <div style="font-size:12px; color:#94a3b8;">TIME CONSUMED</div>
-                    <div style="font-size:16px; color:#cbd5e1; font-weight:bold;">${Math.floor(consumed/60000)}m</div>
-                </div>
-                <div style="text-align:center;">
-                    <div style="font-weight: bold; font-size: 18px; color: ${isVideoMap ? '#eab308' : '#38bdf8'};">${subjectFilter}</div>
-                    <button onclick="closeInPageMap()" style="margin-top:8px; background:#334155; border:none; color:white; padding:6px 15px; border-radius:4px; font-size:12px; cursor:pointer;">Close Map</button>
-                </div>
-                <div style="text-align:right;">
-                    <div style="font-size:12px; color:#94a3b8;">${isVideoMap ? 'VIDEOS' : 'TASKS'}</div>
-                    <div style="font-size:16px; color:#cbd5e1; font-weight:bold;">${doneItems} / ${totalItems} DONE</div>
-                </div>
-            </div>
-            
-            <div class="simple-map-container">
-        `;
-
-        let nodesArray = [];
-
-        // 1. GENERATE ROADMAP TASKS
-        if (!isVideoMap) {
-            filteredTasks.forEach((task, i) => {
-                const isDone = task.status === 'DONE';
-                const isActive = task.status === 'RUNNING';
-
-                nodesArray.push(`
-                    <div class="simple-node ${isDone ? 'done' : ''} ${isActive ? 'active' : ''}">
-                        <div class="simple-badge">${isDone ? '✔' : i + 1}</div>
-                        <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#e5e7eb;">${task.topic}</div>
-                        
-                        ${isActive ? 
-                            `<div style="display:flex; justify-content:space-between; align-items:center;">
-                                <span style="font-size:12px; color:#38bdf8;">Active Session</span>
-                                <span id="activeTimer_${task.id}" style="font-family:monospace; font-size:18px; font-weight:bold; color:#38bdf8;">--:--</span>
-                            </div>` 
-                            : `<div style="font-size:12px; color:#94a3b8;">Allocated Time: ${Math.floor(task.allocatedTime/60000)}m</div>`
-                        }
-                        
-                        <div style="display:flex; margin-top:5px; flex-wrap:wrap;">
-                            ${!isDone ? (!isActive ? 
-                                `<button class="btn-simple start" onclick="startRoadmapTask(${task.id})">Start</button>` :
-                                `<button class="btn-simple finish" onclick="completeRoadmapTask(${task.id})">Finish</button>
-                                 <button class="btn-simple abort" onclick="abortRoadmapTask(${task.id})">Abort</button>`) 
-                            : `<div style="width:100%; text-align:left; padding:8px 0; background:transparent; color:#22c55e; font-size:12px; font-weight:bold;">Completed @ ${task.doneTime}</div>`}
-                        </div>
-                    </div>
-                `);
-            });
-        }
-
-        if (isVideoMap && vData) {
-            const shiftRemainingMins = data.SHIFT_REMAINING_TIME ? data.SHIFT_REMAINING_TIME : 7200000;
-            
-            // 🔥 Call the dynamic recalculation engine 🔥
-            const currentAllocations = window.recalculateVideoAllocations(vData, shiftRemainingMins);
-
-            Object.keys(vData).forEach((key, i) => {
-                const v = vData[key];
-                let p = (v.duration > 0) ? Math.floor((v.progress / v.duration) * 100) : 0;
-                const isDone = p >= 90;
-                
-                // Pull the dynamically proportioned time for today
-                // Calculate how much of THIS video should be completed today
-let allocatedToday = isDone
-    ? 0
-    : (currentAllocations[key] || 0);
-
-let videoDurationSec = Number(v.duration) || 0;
-let currentProgressSec = Number(v.progress) || 0;
-
-let remainingVideoSec = Math.max(
-    0,
-    videoDurationSec - currentProgressSec
-);
-
-let portionToday = 0;
-
-if (!isDone && remainingVideoSec > 0 && allocatedToday > 0) {
-    const allocatedSec = allocatedToday * 60;
-
-    portionToday = Math.min(
-        100,
-        Math.round((allocatedSec / remainingVideoSec) * 100)
-    );
-}
-
-let allocatedStr = isDone
-    ? `Completed`
-    : `Today: Watch ${portionToday}% of remaining video`;
-
-                let scoreVal = v.mcqScore !== undefined ? parseFloat(v.mcqScore).toFixed(2) : "0.00";
-                let totalVal = v.mcqTotal !== undefined ? v.mcqTotal : 0;
-                
-                const scoreStr = totalVal > 0 ? `<div style="font-size:14px; font-weight:bold; color:#a855f7; margin-top:5px; background:rgba(168, 85, 247, 0.1); padding:4px 8px; border-radius:4px; display:inline-block;">🎯 Cumulative Score: ${scoreVal} / ${totalVal}</div>` : "";
-
-                nodesArray.push(`
-                    <div class="simple-node ${isDone ? 'done' : ''}" style="border-color:${isDone ? '#22c55e' : '#eab308'};">
-                        <div class="simple-badge" style="border-color:${isDone ? '#22c55e' : '#eab308'}; color:${isDone ? '#22c55e' : '#eab308'}; font-size:18px;">🎥</div>
-                        
-                        <div style="font-weight:bold; font-size:16px; margin-bottom:10px; color:#eab308;">Assigned Video ${i+1}</div>
-                        
-                        <div style="font-size:12px; color:#94a3b8; margin-bottom:5px;">${allocatedStr}</div>
-                        <div style="font-size:12px; color:#94a3b8;">Due: ${v.deadline} | Progress: <span style="color:${isDone ? '#22c55e' : '#eab308'}; font-weight:bold;">${p}%</span></div>
-                        
-                        ${scoreStr}
-                        
-                        <div style="display:flex; margin-top:10px;">
-                            <button class="btn-simple start" style="background:#eab308; border-color:#eab308; color:black;" onclick="window.closeInPageMap(); window.playSpecificVideo('${key}', '${v.id}', ${v.progress}, ${v.mcqScore || 0}, ${v.mcqTotal || 0}, ${v.rewardGiven || false})">▶ Play & Solve</button>
-                        </div>
-                    </div>
-                `);
-            });
-        }
-
-        // 3. JOIN ALL NODES
-        html += nodesArray.map((nodeHtml, idx) => `
-            <div class="simple-node-wrapper">
-                ${nodeHtml}
-                ${idx < nodesArray.length - 1 ? `<div class="simple-connector"></div>` : ''}
-            </div>
-        `).join('');
-
-        html += `</div>`;
-        document.getElementById("mapContentContainer").innerHTML = html;
-
-        // Timer Loop for active roadmap tasks
-        if (activeNode && activeNode.targetEndTime) {
-            if (roadmapInterval) clearInterval(roadmapInterval);
-            roadmapInterval = setInterval(() => {
-                const timeLeft = activeNode.targetEndTime - Date.now();
-                const display = document.getElementById(`activeTimer_${activeNode.id}`);
-                if (display) {
-                    if (timeLeft <= 0) {
-                        const over = Math.abs(timeLeft);
-                        display.innerText = `-${Math.floor(over / 60000)}:${String(Math.floor((over % 60000) / 1000)).padStart(2,'0')}`;
-                        display.style.color = "#ef4444";
-                    } else {
-                        display.innerText = `${Math.floor(timeLeft / 60000)}:${String(Math.floor((timeLeft % 60000) / 1000)).padStart(2,'0')}`;
-                        display.style.color = "#38bdf8";
-                    }
-                }
-            }, 1000);
-        } else {
-            if (roadmapInterval) clearInterval(roadmapInterval);
-        }
-    });
-};
 
 window.closeInPageMap = function() {
     if (roadmapInterval) clearInterval(roadmapInterval);
@@ -6557,7 +6343,919 @@ async function updateProgressiveTiming() {
         });
     }
 }
+window.openRoadmapWindow = function(subjectFilter) {
 
+    const modal = document.getElementById("inPageMapModal");
+    modal.classList.remove("hidden");
+
+    modal.style.background = "rgba(2, 6, 23, 0.95)";
+    modal.style.backgroundImage = "none";
+
+    onValue(ref(db, `users/${currentUser.uid}`), (snap) => {
+
+        const data = snap.val();
+
+        if (!data) return;
+
+        const isVideoMap =
+            subjectFilter === "YT Video - Assigned Videos";
+
+        const roadmap =
+            JSON.parse(data.ROADMAP || "[]");
+
+        const filteredTasks =
+            roadmap.filter(
+                t => `${t.subject} - ${t.module}` === subjectFilter
+            );
+
+        const activeNode =
+            filteredTasks.find(
+                t => t.status === "RUNNING"
+            );
+
+        const consumed =
+            data.TIME_CONSUMED || 0;
+
+        const vData =
+            data.ASSIGNED_VIDEOS || {};
+
+        let totalItems = 0;
+        let doneItems = 0;
+
+
+        // =====================================================
+        // COUNTS
+        // =====================================================
+
+        if (isVideoMap) {
+
+            totalItems =
+                Object.keys(vData).length;
+
+            doneItems =
+                Object.values(vData).filter(
+                    v => v.videoCompleted === true
+                ).length;
+
+        } else {
+
+            totalItems =
+                filteredTasks.length;
+
+            doneItems =
+                filteredTasks.filter(
+                    t => t.status === "DONE"
+                ).length;
+        }
+
+
+        // =====================================================
+        // MAP HTML
+        // =====================================================
+
+        let html = `
+
+            <style>
+
+                .simple-header {
+                    position:sticky;
+                    top:0;
+                    background:#0f172a;
+                    padding:20px 40px;
+                    border-bottom:1px solid #334155;
+                    z-index:100;
+                    display:flex;
+                    justify-content:space-between;
+                    align-items:center;
+                }
+
+                .simple-map-container {
+                    display:flex;
+                    flex-direction:column;
+                    align-items:center;
+                    padding:40px;
+                }
+
+                .simple-node-wrapper {
+                    display:flex;
+                    flex-direction:column;
+                    align-items:center;
+                    width:100%;
+                    position:relative;
+                }
+
+                .simple-node {
+                    width:400px;
+                    padding:20px;
+                    background:transparent;
+                    border:1px solid #334155;
+                    border-radius:8px;
+                    position:relative;
+                    margin-left:50px;
+                }
+
+                .simple-node.done {
+                    border-color:#22c55e;
+                    background:rgba(34,197,94,0.05);
+                }
+
+                .simple-node.active {
+                    border-color:#38bdf8;
+                    background:rgba(56,189,248,0.05);
+                }
+
+                .simple-badge {
+                    width:40px;
+                    height:40px;
+                    border-radius:50%;
+                    background:#0f172a;
+                    border:2px solid #334155;
+                    position:absolute;
+                    left:-70px;
+                    top:50%;
+                    transform:translateY(-50%);
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    font-weight:bold;
+                    color:#94a3b8;
+                }
+
+                .simple-node.done .simple-badge {
+                    border-color:#22c55e;
+                    color:#22c55e;
+                }
+
+                .simple-node.active .simple-badge {
+                    border-color:#38bdf8;
+                    color:#38bdf8;
+                }
+
+                .simple-connector {
+                    width:2px;
+                    height:40px;
+                    background:#334155;
+                    margin-left:-50px;
+                }
+
+                .btn-simple {
+                    background:#1e293b;
+                    border:1px solid #334155;
+                    padding:10px;
+                    border-radius:4px;
+                    color:white;
+                    font-weight:bold;
+                    cursor:pointer;
+                    width:100%;
+                    margin-top:10px;
+                }
+
+                .btn-simple:hover {
+                    background:#334155;
+                }
+
+                .btn-simple.start {
+                    background:#0ea5e9;
+                    border-color:#0ea5e9;
+                }
+
+                .btn-simple.finish {
+                    background:#22c55e;
+                    border-color:#22c55e;
+                    width:48%;
+                }
+
+                .btn-simple.abort {
+                    background:#ef4444;
+                    border-color:#ef4444;
+                    width:48%;
+                    margin-left:4%;
+                }
+
+            </style>
+
+            <div class="simple-header">
+
+                <div>
+                    <div style="
+                        font-size:12px;
+                        color:#94a3b8;
+                    ">
+                        TIME CONSUMED
+                    </div>
+
+                    <div style="
+                        font-size:16px;
+                        color:#cbd5e1;
+                        font-weight:bold;
+                    ">
+                        ${Math.floor(consumed / 60000)}m
+                    </div>
+                </div>
+
+
+                <div style="text-align:center;">
+
+                    <div style="
+                        font-weight:bold;
+                        font-size:18px;
+                        color:${isVideoMap ? "#eab308" : "#38bdf8"};
+                    ">
+                        ${subjectFilter}
+                    </div>
+
+                    <button
+                        onclick="closeInPageMap()"
+                        style="
+                            margin-top:8px;
+                            background:#334155;
+                            border:none;
+                            color:white;
+                            padding:6px 15px;
+                            border-radius:4px;
+                            font-size:12px;
+                            cursor:pointer;
+                        "
+                    >
+                        Close Map
+                    </button>
+
+                </div>
+
+
+                <div style="text-align:right;">
+
+                    <div style="
+                        font-size:12px;
+                        color:#94a3b8;
+                    ">
+                        ${isVideoMap ? "VIDEOS" : "TASKS"}
+                    </div>
+
+                    <div style="
+                        font-size:16px;
+                        color:#cbd5e1;
+                        font-weight:bold;
+                    ">
+                        ${doneItems} / ${totalItems} DONE
+                    </div>
+
+                </div>
+
+            </div>
+
+
+            <div class="simple-map-container">
+
+        `;
+
+
+        let nodesArray = [];
+
+
+        // =====================================================
+        // NORMAL ROADMAP
+        // =====================================================
+
+        if (!isVideoMap) {
+
+            filteredTasks.forEach((task, i) => {
+
+                const isDone =
+                    task.status === "DONE";
+
+                const isActive =
+                    task.status === "RUNNING";
+
+
+                nodesArray.push(`
+
+                    <div class="
+                        simple-node
+                        ${isDone ? "done" : ""}
+                        ${isActive ? "active" : ""}
+                    ">
+
+                        <div class="simple-badge">
+
+                            ${isDone ? "✔" : i + 1}
+
+                        </div>
+
+
+                        <div style="
+                            font-weight:bold;
+                            font-size:16px;
+                            margin-bottom:10px;
+                            color:#e5e7eb;
+                        ">
+                            ${task.topic}
+                        </div>
+
+
+                        ${
+                            isActive
+
+                            ?
+
+                            `
+                            <div style="
+                                display:flex;
+                                justify-content:space-between;
+                                align-items:center;
+                            ">
+
+                                <span style="
+                                    font-size:12px;
+                                    color:#38bdf8;
+                                ">
+                                    Active Session
+                                </span>
+
+                                <span
+                                    id="activeTimer_${task.id}"
+                                    style="
+                                        font-family:monospace;
+                                        font-size:18px;
+                                        font-weight:bold;
+                                        color:#38bdf8;
+                                    "
+                                >
+                                    --:--
+                                </span>
+
+                            </div>
+                            `
+
+                            :
+
+                            `
+                            <div style="
+                                font-size:12px;
+                                color:#94a3b8;
+                            ">
+                                Allocated Time:
+                                ${Math.floor(task.allocatedTime / 60000)}m
+                            </div>
+                            `
+                        }
+
+
+                        <div style="
+                            display:flex;
+                            margin-top:5px;
+                            flex-wrap:wrap;
+                        ">
+
+                            ${
+                                !isDone
+
+                                ?
+
+                                (
+                                    !isActive
+
+                                    ?
+
+                                    `
+                                    <button
+                                        class="btn-simple start"
+                                        onclick="
+                                            startRoadmapTask(${task.id})
+                                        "
+                                    >
+                                        Start
+                                    </button>
+                                    `
+
+                                    :
+
+                                    `
+                                    <button
+                                        class="btn-simple finish"
+                                        onclick="
+                                            completeRoadmapTask(${task.id})
+                                        "
+                                    >
+                                        Finish
+                                    </button>
+
+                                    <button
+                                        class="btn-simple abort"
+                                        onclick="
+                                            abortRoadmapTask(${task.id})
+                                        "
+                                    >
+                                        Abort
+                                    </button>
+                                    `
+                                )
+
+                                :
+
+                                `
+                                <div style="
+                                    width:100%;
+                                    text-align:left;
+                                    padding:8px 0;
+                                    background:transparent;
+                                    color:#22c55e;
+                                    font-size:12px;
+                                    font-weight:bold;
+                                ">
+                                    Completed @ ${task.doneTime}
+                                </div>
+                                `
+                            }
+
+                        </div>
+
+                    </div>
+
+                `);
+
+            });
+
+        }
+
+
+        // =====================================================
+        // YOUTUBE VIDEO ROADMAP
+        // =====================================================
+
+        if (isVideoMap && vData) {
+
+            const shiftRemainingMins =
+                data.SHIFT_REMAINING_TIME
+                    ? data.SHIFT_REMAINING_TIME
+                    : 7200000;
+
+
+            const currentAllocations =
+                window.recalculateVideoAllocations(
+                    vData,
+                    shiftRemainingMins
+                );
+
+
+            Object.keys(vData).forEach((key, i) => {
+
+                const v = vData[key];
+
+
+                // IMPORTANT:
+                // Completion is now based ONLY on
+                // videoCompleted flag.
+                //
+                // Do NOT use 90% progress here.
+                //
+                const isDone =
+                    v.videoCompleted === true;
+
+
+                let allocatedToday =
+                    isDone
+                        ? 0
+                        : (currentAllocations[key] || 0);
+
+
+                const videoDurationSec =
+                    Number(v.duration) || 0;
+
+                const currentProgressSec =
+                    Number(v.progress) || 0;
+
+
+                const remainingVideoSec =
+                    Math.max(
+                        0,
+                        videoDurationSec -
+                        currentProgressSec
+                    );
+
+
+                let portionToday = 0;
+
+
+                if (
+                    !isDone &&
+                    remainingVideoSec > 0 &&
+                    allocatedToday > 0
+                ) {
+
+                    const allocatedSec =
+                        allocatedToday * 60;
+
+
+                    portionToday =
+                        Math.min(
+                            100,
+                            Math.round(
+                                (
+                                    allocatedSec /
+                                    remainingVideoSec
+                                ) * 100
+                            )
+                        );
+
+                }
+
+
+                const allocatedStr =
+                    isDone
+                        ? "Completed"
+                        : `Today: Watch ${portionToday}% of remaining video`;
+
+
+                const progressPercent =
+                    videoDurationSec > 0
+                        ? Math.min(
+                            100,
+                            Math.floor(
+                                (
+                                    currentProgressSec /
+                                    videoDurationSec
+                                ) * 100
+                            )
+                        )
+                        : 0;
+
+
+                const scoreVal =
+                    v.mcqScore !== undefined
+                        ? parseFloat(v.mcqScore).toFixed(2)
+                        : "0.00";
+
+
+                const totalVal =
+                    v.mcqTotal !== undefined
+                        ? v.mcqTotal
+                        : 0;
+
+
+                const scoreStr =
+                    totalVal > 0
+
+                        ?
+
+                        `
+                        <div style="
+                            font-size:14px;
+                            font-weight:bold;
+                            color:#a855f7;
+                            margin-top:5px;
+                            background:rgba(168,85,247,0.1);
+                            padding:4px 8px;
+                            border-radius:4px;
+                            display:inline-block;
+                        ">
+                            🎯 Cumulative Score:
+                            ${scoreVal} / ${totalVal}
+                        </div>
+                        `
+
+                        : "";
+
+
+                nodesArray.push(`
+
+                    <div
+                        class="
+                            simple-node
+                            ${isDone ? "done" : ""}
+                        "
+                        style="
+                            border-color:
+                            ${isDone ? "#22c55e" : "#eab308"};
+                        "
+                    >
+
+                        <div
+                            class="simple-badge"
+                            style="
+                                border-color:
+                                ${isDone ? "#22c55e" : "#eab308"};
+
+                                color:
+                                ${isDone ? "#22c55e" : "#eab308"};
+
+                                font-size:18px;
+                            "
+                        >
+                            ${isDone ? "✓" : "🎥"}
+                        </div>
+
+
+                        <div style="
+                            font-weight:bold;
+                            font-size:16px;
+                            margin-bottom:10px;
+                            color:${isDone ? "#22c55e" : "#eab308"};
+                        ">
+                            ${v.videoName || v.name || v.title || `Assigned Video ${i + 1}`}
+                        </div>
+
+
+                        <div style="
+                            font-size:12px;
+                            color:#94a3b8;
+                            margin-bottom:5px;
+                        ">
+                            ${allocatedStr}
+                        </div>
+
+
+                        <div style="
+                            font-size:12px;
+                            color:#94a3b8;
+                        ">
+                            ${
+                                v.deadline
+                                    ? `Due: ${v.deadline} | `
+                                    : ""
+                            }
+
+                            Progress:
+
+                            <span style="
+                                color:
+                                ${isDone ? "#22c55e" : "#eab308"};
+                                font-weight:bold;
+                            ">
+                                ${progressPercent}%
+                            </span>
+                        </div>
+
+
+                        ${scoreStr}
+
+
+                        <div style="
+                            display:flex;
+                            margin-top:10px;
+                        ">
+
+                            ${
+                                isDone
+
+                                ?
+
+                                `
+                                <div style="
+                                    width:100%;
+                                    padding:10px;
+                                    text-align:center;
+                                    border-radius:4px;
+                                    background:rgba(34,197,94,0.1);
+                                    color:#22c55e;
+                                    font-size:12px;
+                                    font-weight:bold;
+                                ">
+                                    ✓ VIDEO COMPLETED
+                                    <br>
+                                    <span style="
+                                        color:#94a3b8;
+                                        font-weight:normal;
+                                    ">
+                                        Will be removed at Day End
+                                    </span>
+                                </div>
+                                `
+
+                                :
+
+                                `
+                                <button
+                                    class="btn-simple start"
+                                    style="
+                                        background:#eab308;
+                                        border-color:#eab308;
+                                        color:black;
+                                    "
+                                    onclick="
+                                        window.closeInPageMap();
+
+                                        window.playSpecificVideo(
+                                            '${key}',
+                                            '${v.id || ""}',
+                                            ${Number(v.progress) || 0},
+                                            ${Number(v.mcqScore) || 0},
+                                            ${Number(v.mcqTotal) || 0},
+                                            ${v.rewardGiven === true}
+                                        );
+                                    "
+                                >
+                                    ▶ Play & Solve
+                                </button>
+                                `
+                            }
+
+                        </div>
+
+                    </div>
+
+                `);
+
+            });
+
+        }
+
+
+        // =====================================================
+        // CONNECT NODES
+        // =====================================================
+
+        html += nodesArray.map((nodeHtml, idx) => `
+
+            <div class="simple-node-wrapper">
+
+                ${nodeHtml}
+
+                ${
+                    idx < nodesArray.length - 1
+
+                        ?
+
+                        `<div class="simple-connector"></div>`
+
+                        :
+
+                        ""
+                }
+
+            </div>
+
+        `).join("");
+
+
+        html += `</div>`;
+
+
+        document.getElementById(
+            "mapContentContainer"
+        ).innerHTML = html;
+
+
+        // =====================================================
+        // NORMAL TASK TIMER
+        // =====================================================
+
+        if (
+            activeNode &&
+            activeNode.targetEndTime
+        ) {
+
+            if (roadmapInterval) {
+                clearInterval(roadmapInterval);
+            }
+
+
+            roadmapInterval =
+                setInterval(() => {
+
+                    const timeLeft =
+                        activeNode.targetEndTime -
+                        Date.now();
+
+
+                    const display =
+                        document.getElementById(
+                            `activeTimer_${activeNode.id}`
+                        );
+
+
+                    if (!display) return;
+
+
+                    if (timeLeft <= 0) {
+
+                        const over =
+                            Math.abs(timeLeft);
+
+
+                        display.innerText =
+                            `-${Math.floor(over / 60000)}:${String(
+                                Math.floor(
+                                    (over % 60000) / 1000
+                                )
+                            ).padStart(2, "0")}`;
+
+
+                        display.style.color =
+                            "#ef4444";
+
+                    } else {
+
+                        display.innerText =
+                            `${Math.floor(
+                                timeLeft / 60000
+                            )}:${String(
+                                Math.floor(
+                                    (timeLeft % 60000) / 1000
+                                )
+                            ).padStart(2, "0")}`;
+
+
+                        display.style.color =
+                            "#38bdf8";
+                    }
+
+                }, 1000);
+
+        } else {
+
+            if (roadmapInterval) {
+                clearInterval(roadmapInterval);
+            }
+
+        }
+
+    });
+
+};
+  window.deleteCompletedYouTubeVideosAtDayEnd = async function() {
+
+    if (!currentUser) return;
+
+    try {
+
+        const videosRef = ref(
+            db,
+            `users/${currentUser.uid}/ASSIGNED_VIDEOS`
+        );
+
+        const snap = await get(videosRef);
+
+        if (!snap.exists()) {
+            return;
+        }
+
+        const videos = snap.val();
+
+        let deletedCount = 0;
+
+        for (const videoKey of Object.keys(videos)) {
+
+            const video = videos[videoKey];
+
+            if (
+                video &&
+                video.videoCompleted === true
+            ) {
+
+                await set(
+                    ref(
+                        db,
+                        `users/${currentUser.uid}/ASSIGNED_VIDEOS/${videoKey}`
+                    ),
+                    null
+                );
+
+                deletedCount++;
+
+            }
+
+        }
+
+        console.log(
+            `🗑️ Day End: ${deletedCount} completed YouTube video(s) deleted.`
+        );
+
+
+        // Refresh main subject list
+        if (typeof window.loadTasks === "function") {
+            window.loadTasks();
+        }
+
+
+        // Refresh assigned-video listener
+        if (
+            typeof window.loadAssignedVideos === "function"
+        ) {
+            window.loadAssignedVideos();
+        }
+
+
+        // Close map if it is open
+        const modal =
+            document.getElementById(
+                "inPageMapModal"
+            );
+
+        if (modal) {
+            modal.classList.add("hidden");
+        }
+
+    } catch (error) {
+
+        console.error(
+            "❌ Day End YouTube cleanup failed:",
+            error
+        );
+
+    }
+
+};
 window.abortRoadmapTask = async function(taskId) {
     const snap = await get(ref(db, `users/${currentUser.uid}`));
     let roadmap = JSON.parse(snap.val().ROADMAP);
@@ -6668,6 +7366,7 @@ function renderMapNodes(win, roadmap) {
     });
 }
 window.loadTasks = function() {
+
     const tList = document.getElementById("taskList");
     if (!tList || !currentUser) return;
 
@@ -6677,7 +7376,7 @@ window.loadTasks = function() {
 
         if (!snap.exists()) {
             tList.innerHTML = `
-                <div style="color:#64748b; padding:20px; text-align:center;">
+                <div style="color:#64748b;padding:20px;text-align:center;">
                     Waiting for Admin Assignment...
                 </div>
             `;
@@ -6689,15 +7388,16 @@ window.loadTasks = function() {
 
         let uniqueGroups = {};
 
-        // =========================================================
-        // 1. NORMAL SUBJECTS
-        // =========================================================
+        // =====================================================
+        // NORMAL SUBJECTS
+        // =====================================================
 
         roadmap.forEach(t => {
 
             const groupKey = `${t.subject} - ${t.module}`;
 
             if (!uniqueGroups[groupKey]) {
+
                 uniqueGroups[groupKey] = {
                     subject: t.subject,
                     module: t.module,
@@ -6705,6 +7405,7 @@ window.loadTasks = function() {
                     done: 0,
                     type: "task"
                 };
+
             }
 
             uniqueGroups[groupKey].total++;
@@ -6712,12 +7413,13 @@ window.loadTasks = function() {
             if (t.status === "DONE") {
                 uniqueGroups[groupKey].done++;
             }
+
         });
 
 
-        // =========================================================
-        // 2. YOUTUBE VIDEO SUBJECT
-        // =========================================================
+        // =====================================================
+        // YT VIDEO AS ONE SUBJECT
+        // =====================================================
 
         if (data.ASSIGNED_VIDEOS) {
 
@@ -6726,32 +7428,42 @@ window.loadTasks = function() {
 
             if (videoKeys.length > 0) {
 
-                let completedVideos = 0;
+                let doneVideos = 0;
 
                 videoKeys.forEach(videoKey => {
 
                     const video = videos[videoKey];
 
                     if (video.videoCompleted === true) {
-                        completedVideos++;
+                        doneVideos++;
                     }
 
                 });
 
                 uniqueGroups["YT Video - Assigned Videos"] = {
+
                     subject: "YT Video",
+
                     module: "Assigned Videos",
+
                     total: videoKeys.length,
-                    done: completedVideos,
-                    type: "video"
+
+                    done: doneVideos,
+
+                    type: "video",
+
+                    videos: videos
+
                 };
+
             }
+
         }
 
 
-        // =========================================================
-        // 3. NOTHING ASSIGNED
-        // =========================================================
+        // =====================================================
+        // NOTHING
+        // =====================================================
 
         if (Object.keys(uniqueGroups).length === 0) {
 
@@ -6769,17 +7481,19 @@ window.loadTasks = function() {
         }
 
 
-        // =========================================================
-        // 4. RENDER SUBJECT CARDS
-        // =========================================================
+        // =====================================================
+        // RENDER SUBJECT CARDS
+        // =====================================================
 
         Object.keys(uniqueGroups).forEach(groupKey => {
 
             const gData = uniqueGroups[groupKey];
 
-            const container = document.createElement("div");
+            const container =
+                document.createElement("div");
 
-            const isVideo = gData.type === "video";
+            const isVideo =
+                gData.type === "video";
 
             const borderColor =
                 isVideo ? "#eab308" : "#38bdf8";
@@ -6789,6 +7503,7 @@ window.loadTasks = function() {
 
             const icon =
                 isVideo ? "🎥" : "📘";
+
 
             container.style.cssText = `
                 padding:18px;
@@ -6802,28 +7517,16 @@ window.loadTasks = function() {
             `;
 
 
-            // =====================================================
-            // IMPORTANT
-            // NORMAL SUBJECT -> EXISTING MAP
-            // YT VIDEO -> NEW VIDEO MAP
-            // =====================================================
+            // SAME MAP SYSTEM FOR BOTH
+            container.onclick = () => {
 
-            if (isVideo) {
+                window.openRoadmapWindow(groupKey);
 
-                container.onclick = () => {
-                    window.openYouTubeRoadmapWindow();
-                };
-
-            } else {
-
-                container.onclick = () => {
-                    window.openRoadmapWindow(groupKey);
-                };
-
-            }
+            };
 
 
             container.innerHTML = `
+
                 <div style="
                     display:flex;
                     justify-content:space-between;
@@ -6850,7 +7553,6 @@ window.loadTasks = function() {
 
                     </div>
 
-
                     <div style="text-align:right">
 
                         <div style="
@@ -6867,14 +7569,13 @@ window.loadTasks = function() {
                             margin-top:5px;
                             text-transform:uppercase;
                         ">
-                            ${isVideo
-                                ? "OPEN VIDEO MAP →"
-                                : "OPEN STUDY MAP →"}
+                            OPEN STUDY MAP →
                         </div>
 
                     </div>
 
                 </div>
+
             `;
 
             tList.append(container);
@@ -6886,6 +7587,7 @@ window.loadTasks = function() {
         console.error("loadTasks error:", error);
 
     });
+
 };
   window.openYouTubeRoadmapWindow = async function() {
 
